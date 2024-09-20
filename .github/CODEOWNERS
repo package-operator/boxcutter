@@ -1,0 +1,2 @@
+# Everything that is not owned by somebody defined via patterns below this one.
+* @package-operator/core-maintainers
