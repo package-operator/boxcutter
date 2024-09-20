@@ -7,7 +7,7 @@
 
 ---
 
-Operator for packaging and managing a collection of arbitrary Kubernetes objects to install software on one or multiple clusters.
+Cutting edge library providing the basic tooling to build and reconcile packages on Kubernetes.
 
 ---
 

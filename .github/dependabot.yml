@@ -7,5 +7,5 @@ updates:
   allow:
   - dependency-type: all
     dependency-name: "*"
-  assignees: []
+  assignees: [thetechnick]
   open-pull-requests-limit: 100
