@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
 )
 
-// DivergeDetector detects divergent state between desired and actual
+// Comparator detects divergent state between desired and actual
 // by comparing managed field ownerships.
 // If not all fields from desired are owned by the same field owner in actual,
 // we know that the object has been updated by another actor.
-type DivergeDetector struct {
+type Comparator struct {
 	ownerStrategy   divergeDetectorOwnerStrategy
 	openAPIAccessor openAPIAccessor
 	fieldOwner      string
@@ -42,13 +42,13 @@ type openAPIAccessor interface {
 	Get(gv schema.GroupVersion) (*spec3.OpenAPI, error)
 }
 
-// NewDivergeDetector returns a new DivergeDetector instance.
-func NewDivergeDetector(
+// NewComparator returns a new Comparator instance.
+func NewComparator(
 	ownerStrategy divergeDetectorOwnerStrategy,
 	discoveryClient discoveryClient,
 	fieldOwner string,
-) *DivergeDetector {
-	return &DivergeDetector{
+) *Comparator {
+	return &Comparator{
 		ownerStrategy: ownerStrategy,
 		openAPIAccessor: &defaultOpenAPIAccessor{
 			c: discoveryClient.OpenAPIV3(),
@@ -111,7 +111,7 @@ func (d DivergeResult) Modified() []string {
 }
 
 // HasDiverged checks if a resource has been changed from desired.
-func (d *DivergeDetector) HasDiverged(
+func (d *Comparator) HasDiverged(
 	owner client.Object,
 	desiredObject, actualObject *unstructured.Unstructured,
 ) (res DivergeResult, err error) {
@@ -175,11 +175,6 @@ func (d *DivergeDetector) HasDiverged(
 	// Also limit results to leave nodes to keep resulting diff small.
 	diff := desiredFieldSet.Difference(actualFieldSet).Difference(stripSet).Leaves()
 
-	// Exit early if diff is empty.
-	// if diff.Empty() {
-	// 	return res, nil
-	// }
-
 	// Index diff into something more useful for the caller.
 	managerPaths := map[string]*fieldpath.Set{}
 	for _, mf := range actualObject.GetManagedFields() {
@@ -187,7 +182,7 @@ func (d *DivergeDetector) HasDiverged(
 		if err := fs.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
 			return res, fmt.Errorf("field set for actual: %w", err)
 		}
-		diff.Leaves().Iterate(func(p fieldpath.Path) {
+		diff.Iterate(func(p fieldpath.Path) {
 			if !fs.Has(p) {
 				return
 			}

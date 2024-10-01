@@ -17,7 +17,7 @@ import (
 
 const testFieldOwner = "test.testy"
 
-func TestDivergeDetector(t *testing.T) {
+func TestComparator(t *testing.T) {
 	t.Parallel()
 
 	testOAPISchema, err := os.ReadFile("testdata/secret.json")
@@ -30,7 +30,7 @@ func TestDivergeDetector(t *testing.T) {
 		openAPI: oapi,
 	}
 	n := ownerhandling.NewNative(scheme.Scheme)
-	d := &DivergeDetector{
+	d := &Comparator{
 		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,

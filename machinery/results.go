@@ -7,240 +7,266 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"pkg.package-operator.run/boxcutter/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ObjectIdentity holds information to identify an object.
-type ObjectIdentity struct {
+// Identity holds information to identify an object.
+type Identity struct {
 	schema.GroupVersionKind
 	client.ObjectKey
 }
 
+// IdentityForUnstructured returns an Identity object from unstructured.
+func IdentityForUnstructured(obj *unstructured.Unstructured) Identity {
+	return Identity{
+		GroupVersionKind: obj.GroupVersionKind(),
+		ObjectKey:        client.ObjectKeyFromObject(obj),
+	}
+}
+
 // String returns a string representation.
-func (oid ObjectIdentity) String() string {
+func (oid Identity) String() string {
 	return fmt.Sprintf("%s %s", oid.GroupVersionKind, oid.ObjectKey)
 }
 
 // Result is the common Result interface for multiple result types.
 type Result interface {
 	// Object the reconciliation was performed for.
-	Identity() ObjectIdentity
+	Identity() Identity
 	// Action taken by the reconcile engine.
-	Action() ObjectAction
-	// Returns the probe result.
-	ProbeResult() ProbeResult
-	// Returns violations when Action == RefusedPreflight.
-	PreflightViolations() []validation.Violation
+	Action() Action
 	// Object as last seen on the cluster after creation/update.
 	Object() *unstructured.Unstructured
-	// Fields that had to be updated to reconcile the object.
-	UpdatedFields() []string
-	// Other field managers that have changed fields causing conflicts.
-	ConflictingFieldManagers() []string
-	// List of field conflicts for each other manager.
-	ConflictingFieldsByFieldManager() map[string][]string
-	// Conflicting owner if Action == RefusingConflict.
-	ConflictingOwner() (*metav1.OwnerReference, bool)
-	// Returns a human readable description of the result.
+	// Success returns true when the operation is considered successful.
+	// Operations are considered a success, when the object reflects desired state,
+	// is owned by the right controller and passes the given probe.
+	Success() bool
+	// Probe returns the results from the given object Probe.
+	Probe() ProbeResult
+	// String returns a human readable description of the Result.
 	String() string
 }
 
-var _ Result = (*objectResultRefusedPreflight)(nil)
-
-type objectResultRefusedPreflight struct {
-	id                  ObjectIdentity
-	preflightViolations []validation.Violation
+// ProbeResult records probe results for the object.
+type ProbeResult struct {
+	Success  bool
+	Messages []string
 }
 
-func newObjectResultRefusedPreflight(
-	oid ObjectIdentity,
-	preflightViolations []validation.Violation,
-) Result {
-	return objectResultRefusedPreflight{
-		id:                  oid,
-		preflightViolations: preflightViolations,
-	}
+var (
+	_ Result = (*ResultCreated)(nil)
+	_ Result = (*ResultUpdated)(nil)
+	_ Result = (*ResultIdle)(nil)
+	_ Result = (*ResultProgressed)(nil)
+	_ Result = (*ResultRecovered)(nil)
+	_ Result = (*ResultCollision)(nil)
+)
+
+// ResultCreated is returned when the Object was just created.
+type ResultCreated struct {
+	id          Identity
+	obj         *unstructured.Unstructured
+	probeResult ProbeResult
 }
 
-func (r objectResultRefusedPreflight) Identity() ObjectIdentity {
-	return r.id
-}
-
-func (r objectResultRefusedPreflight) Action() ObjectAction {
-	return ObjectActionRefusedPreflight
-}
-
-func (r objectResultRefusedPreflight) PreflightViolations() []validation.Violation {
-	return r.preflightViolations
-}
-
-func (r objectResultRefusedPreflight) ProbeResult() ProbeResult {
-	panic("RefusedPreflight cannot record probe results")
-}
-
-func (r objectResultRefusedPreflight) Object() *unstructured.Unstructured {
-	panic("RefusedPreflight has no state of object in-cluster")
-}
-
-func (r objectResultRefusedPreflight) UpdatedFields() []string {
-	panic("RefusedPreflight cannot record updated fields")
-}
-
-func (r objectResultRefusedPreflight) ConflictingFieldManagers() []string {
-	panic("RefusedPreflight cannot record conflicting field managers")
-}
-
-func (r objectResultRefusedPreflight) ConflictingFieldsByFieldManager() map[string][]string {
-	panic("RefusedPreflight cannot record conflicting field managers")
-}
-
-func (r objectResultRefusedPreflight) ConflictingOwner() (*metav1.OwnerReference, bool) {
-	panic("RefusedPreflight cannot record conflicting owners")
-}
-
-func (r objectResultRefusedPreflight) String() string {
-	msg := fmt.Sprintf(
-		"Object %s %s\n"+
-			`Action "RefusedPreflight":`+"\n",
-		r.id.GroupVersionKind, r.id.ObjectKey,
-	)
-	for _, v := range r.preflightViolations {
-		msg += fmt.Sprintf("- %s\n", v.String())
-	}
-	return msg
-}
-
-var _ Result = (*objectResultCreated)(nil)
-
-type objectResultCreated struct {
-	id    ObjectIdentity
-	probe ProbeResult
-	obj   *unstructured.Unstructured
-}
-
-func newObjectResultCreated(
-	oid ObjectIdentity,
-	probe ProbeResult,
+func newResultCreated(
+	oid Identity,
 	obj *unstructured.Unstructured,
+	probe prober,
 ) Result {
-	return objectResultCreated{
-		id:    oid,
-		probe: probe,
-		obj:   obj,
+	s, msgs := probe.Probe(obj)
+	return ResultCreated{
+		id:  oid,
+		obj: obj,
+		probeResult: ProbeResult{
+			Success:  s,
+			Messages: msgs,
+		},
 	}
 }
 
-func (r objectResultCreated) Identity() ObjectIdentity {
+// Identity returns object the reconciliation was performed for.
+func (r ResultCreated) Identity() Identity {
 	return r.id
 }
 
-func (r objectResultCreated) Action() ObjectAction {
-	return ObjectActionCreated
+// Action taken by the reconcile engine.
+func (r ResultCreated) Action() Action {
+	return ActionCreated
 }
 
-func (r objectResultCreated) PreflightViolations() []validation.Violation {
-	return nil
-}
-
-func (r objectResultCreated) ProbeResult() ProbeResult {
-	return r.probe
-}
-
-func (r objectResultCreated) Object() *unstructured.Unstructured {
+// Object as last seen on the cluster after creation/update.
+func (r ResultCreated) Object() *unstructured.Unstructured {
 	return r.obj
 }
 
-func (r objectResultCreated) UpdatedFields() []string {
-	// TODO: Actually report all fields?
-	panic("Created does not record updating ALL fields")
+// Success returns true when the operation is considered successful.
+// Operations are considered a success, when the object reflects desired state,
+// is owned by the right controller and passes the given probe.
+func (r ResultCreated) Success() bool {
+	return r.probeResult.Success
 }
 
-func (r objectResultCreated) ConflictingFieldManagers() []string {
-	return nil
+// Probe returns the results from the given object Probe.
+func (r ResultCreated) Probe() ProbeResult {
+	return r.probeResult
 }
 
-func (r objectResultCreated) ConflictingFieldsByFieldManager() map[string][]string {
-	return nil
-}
-
-func (r objectResultCreated) ConflictingOwner() (*metav1.OwnerReference, bool) {
-	panic("Created cannot have conflicting owners")
-}
-
-func (r objectResultCreated) String() string {
+// String returns a human readable description of the Result.
+func (r ResultCreated) String() string {
 	msg := fmt.Sprintf(
-		"Object %s %s\n"+
-			`Action "Created":`+"\n"+
-			"Probe %t: %q\n",
-		r.id.GroupVersionKind, r.id.ObjectKey,
-		r.probe.Success, r.probe.Message,
+		"Object %s\n"+
+			`Action "Created":`+"\n",
+		r.id.String(),
 	)
 	return msg
 }
 
-// ProbeResult holds the output of the Prober, if defined.
-type ProbeResult struct {
-	Success bool
-	Message string
+// ResultUpdated is returned when the object is updated.
+type ResultUpdated struct {
+	normalResult
 }
 
-var _ Result = (*normalResult)(nil)
+func newResultUpdated(
+	oid Identity,
+	obj *unstructured.Unstructured,
+	diverged DivergeResult,
+	probe prober,
+) Result {
+	return ResultUpdated{
+		normalResult: newNormalResult(ActionUpdated, oid, obj, diverged, probe),
+	}
+}
+
+// ResultProgressed is returned when the object has been progressed to a newer revision.
+type ResultProgressed struct {
+	normalResult
+}
+
+func newResultProgressed(
+	oid Identity,
+	obj *unstructured.Unstructured,
+	diverged DivergeResult,
+	probe prober,
+) Result {
+	return ResultProgressed{
+		normalResult: newNormalResult(ActionProgressed, oid, obj, diverged, probe),
+	}
+}
+
+// ResultIdle is returned when nothing was done.
+type ResultIdle struct {
+	normalResult
+}
+
+func newResultIdle(
+	oid Identity,
+	obj *unstructured.Unstructured,
+	diverged DivergeResult,
+	probe prober,
+) Result {
+	return ResultIdle{
+		normalResult: newNormalResult(ActionIdle, oid, obj, diverged, probe),
+	}
+}
+
+// ResultRecovered is returned when the object had to be reset after conflicting with another actor.
+type ResultRecovered struct {
+	normalResult
+}
+
+func newResultRecovered(
+	oid Identity,
+	obj *unstructured.Unstructured,
+	diverged DivergeResult,
+	probe prober,
+) Result {
+	return ResultRecovered{
+		normalResult: newNormalResult(ActionRecovered, oid, obj, diverged, probe),
+	}
+}
 
 type normalResult struct {
-	id                              ObjectIdentity
-	probe                           ProbeResult
+	id                              Identity
+	action                          Action
 	obj                             *unstructured.Unstructured
-	action                          ObjectAction
 	updatedFields                   []string
 	conflictingFieldManagers        []string
 	conflictingFieldsByFieldManager map[string][]string
+	probeResult                     ProbeResult
 }
 
-func (r normalResult) Identity() ObjectIdentity {
+func newNormalResult(
+	action Action,
+	oid Identity,
+	obj *unstructured.Unstructured,
+	diverged DivergeResult,
+	probe prober,
+) normalResult {
+	s, msgs := probe.Probe(obj)
+	return normalResult{
+		id:                              oid,
+		obj:                             obj,
+		action:                          action,
+		updatedFields:                   diverged.Modified(),
+		conflictingFieldManagers:        diverged.ConflictingFieldOwners,
+		conflictingFieldsByFieldManager: diverged.ConflictingPaths(),
+		probeResult: ProbeResult{
+			Success:  s,
+			Messages: msgs,
+		},
+	}
+}
+
+// Identity returns object the reconciliation was performed for.
+func (r normalResult) Identity() Identity {
 	return r.id
 }
 
-func (r normalResult) Action() ObjectAction {
+// Action taken by the reconcile engine.
+func (r normalResult) Action() Action {
 	return r.action
 }
 
-func (r normalResult) PreflightViolations() []validation.Violation {
-	return nil
-}
-
-func (r normalResult) ProbeResult() ProbeResult {
-	return r.probe
-}
-
+// Object as last seen on the cluster after creation/update.
 func (r normalResult) Object() *unstructured.Unstructured {
 	return r.obj
 }
 
+// Fields that had to be updated to reconcile the object.
 func (r normalResult) UpdatedFields() []string {
 	return r.updatedFields
 }
 
+// Other field managers that have changed fields causing conflicts.
 func (r normalResult) ConflictingFieldManagers() []string {
 	return r.conflictingFieldManagers
 }
 
+// List of field conflicts for each other manager.
 func (r normalResult) ConflictingFieldsByFieldManager() map[string][]string {
 	return r.conflictingFieldsByFieldManager
 }
 
-func (r normalResult) ConflictingOwner() (*metav1.OwnerReference, bool) {
-	panic(fmt.Sprintf("%s cannot have conflicting owners", r.action))
+// Probe returns the results from the given object Probe.
+func (r normalResult) Probe() ProbeResult {
+	return r.probeResult
 }
 
+// Success returns true when the operation is considered successful.
+// Operations are considered a success, when the object reflects desired state,
+// is owned by the right controller and passes the given probe.
+func (r normalResult) Success() bool {
+	return r.probeResult.Success
+}
+
+// String returns a human readable description of the Result.
 func (r normalResult) String() string {
 	msg := fmt.Sprintf(
 		"Object %s %s\n"+
-			"Action %q\n"+
-			"Probe %t: %q\n",
+			"Action %q\n",
 		r.id.GroupVersionKind, r.id.ObjectKey,
 		r.action,
-		r.probe.Success, r.probe.Message,
 	)
 	if len(r.updatedFields) > 0 {
 		msg += "Updated Fields:\n"
@@ -260,109 +286,63 @@ func (r normalResult) String() string {
 	return msg
 }
 
-func newObjectResultProgressed(
-	oid ObjectIdentity,
-	probe ProbeResult,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
-) Result {
-	return newNormalResult(ObjectActionProgressed, oid, probe, obj, diverged)
-}
-
-func newObjectResultIdle(
-	oid ObjectIdentity,
-	probe ProbeResult,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
-) Result {
-	return newNormalResult(ObjectActionIdle, oid, probe, obj, diverged)
-}
-
-func newObjectResultUpdated(
-	oid ObjectIdentity,
-	probe ProbeResult,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
-) Result {
-	return newNormalResult(ObjectActionUpdated, oid, probe, obj, diverged)
-}
-
-func newObjectResultRecovered(
-	oid ObjectIdentity,
-	probe ProbeResult,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
-) Result {
-	return newNormalResult(ObjectActionRecovered, oid, probe, obj, diverged)
-}
-
-func newNormalResult(
-	action ObjectAction,
-	oid ObjectIdentity,
-	probe ProbeResult,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
-) normalResult {
-	return normalResult{
-		id:                              oid,
-		probe:                           probe,
-		obj:                             obj,
-		action:                          action,
-		updatedFields:                   diverged.Modified(),
-		conflictingFieldManagers:        diverged.ConflictingFieldOwners,
-		conflictingFieldsByFieldManager: diverged.ConflictingPaths(),
-	}
-}
-
-type objectResultCollision struct {
+// ResultCollision is returned when conflicting with an existing object.
+type ResultCollision struct {
 	normalResult
 	// conflictingOwner is provided when Refusing due to Collision.
 	conflictingOwner *metav1.OwnerReference
 }
 
-func (r objectResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool) {
+// ConflictingOwner Conflicting owner if Action == RefusingConflict.
+func (r ResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool) {
 	return r.conflictingOwner, r.conflictingOwner != nil
 }
 
-func (r objectResultCollision) String() string {
+// Success returns true when the operation is considered successful.
+// Operations are considered a success, when the object reflects desired state,
+// is owned by the right controller and passes the given probe.
+func (r ResultCollision) Success() bool {
+	return false
+}
+
+// String returns a human readable description of the Result.
+func (r ResultCollision) String() string {
 	msg := r.normalResult.String()
 	msg += fmt.Sprintf("Conflicting Owner: %s\n", r.conflictingOwner.String())
 	return msg
 }
 
-func newObjectResultConflict(
-	oid ObjectIdentity,
-	probe ProbeResult,
+func newResultConflict(
+	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	conflictingOwner *metav1.OwnerReference,
+	probe prober,
 ) Result {
-	return objectResultCollision{
+	return ResultCollision{
 		normalResult: newNormalResult(
-			ObjectActionRefusedCollision,
-			oid, probe, obj, diverged,
+			ActionCollision,
+			oid, obj, diverged, probe,
 		),
 		conflictingOwner: conflictingOwner,
 	}
 }
 
-// ObjectAction describes the taken reconciliation action.
-type ObjectAction string
+// Action describes the taken reconciliation action.
+type Action string
 
 const (
-	// ObjectActionCreated indicates that the object has been created to restore desired state.
-	ObjectActionCreated ObjectAction = "Created"
-	// ObjectActionUpdated indicates that the object has been updated to action on a change in desired state.
-	ObjectActionUpdated ObjectAction = "Updated"
-	// ObjectActionRecovered indicates that the object has been updated to recover values to
+	// ActionCreated indicates that the object has been created to restore desired state.
+	ActionCreated Action = "Created"
+	// ActionUpdated indicates that the object has been updated to action on a change in desired state.
+	ActionUpdated Action = "Updated"
+	// ActionRecovered indicates that the object has been updated to recover values to
 	// reflect desired state after interference from another actor of the system.
-	ObjectActionRecovered ObjectAction = "Recovered"
-	// ObjectActionProgressed indicates that the object progressed to newer revision.
-	ObjectActionProgressed ObjectAction = "Progressed"
-	// ObjectActionIdle indicates that no action was necessary. -> NoOp.
-	ObjectActionIdle ObjectAction = "Idle"
-	// ObjectActionRefusedCollision indicates aking actions was refused due to a collision with an existing object.
-	ObjectActionRefusedCollision ObjectAction = "RefusedCollision"
-	// ObjectActionRefusedPreflight indicates Taking actions was refused due failing preflight checks.
-	ObjectActionRefusedPreflight ObjectAction = "RefusedPreflight"
+	ActionRecovered Action = "Recovered"
+	// ActionProgressed indicates that the object progressed to newer revision.
+	ActionProgressed Action = "Progressed"
+	// ActionIdle indicates that no action was necessary. -> NoOp.
+	ActionIdle Action = "Idle"
+	// ActionCollision indicates aking actions was refused due to a collision with an existing object.
+	ActionCollision Action = "Collision"
 )
