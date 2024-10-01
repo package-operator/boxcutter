@@ -9,17 +9,17 @@ import (
 type ObjectOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
+	Probe               prober
 	Paused              bool
-	Prober              Prober
 }
 
-// Default sets empty ObjectOption fields to their default value.
+// Default sets empty Option fields to their default value.
 func (opts *ObjectOptions) Default() {
-	if opts.Prober == nil {
-		opts.Prober = &noopProbe{}
-	}
 	if len(opts.CollisionProtection) == 0 {
 		opts.CollisionProtection = CollisionProtectionPrevent
+	}
+	if opts.Probe == nil {
+		opts.Probe = &noopProbe{}
 	}
 }
 
@@ -27,6 +27,13 @@ func (opts *ObjectOptions) Default() {
 type ObjectOption interface {
 	ApplyToObjectOptions(opts *ObjectOptions)
 }
+
+var (
+	_ ObjectOption = (WithCollisionProtection)("")
+	_ ObjectOption = (WithPaused{})
+	_ ObjectOption = (WithPreviousOwners{})
+	_ ObjectOption = (WithProbe{})
+)
 
 // CollisionProtection specifies how collision with existing objects and
 // other controllers should be handled.
@@ -51,7 +58,7 @@ const (
 // WithCollisionProtection instructs the given CollisionProtection setting to be used.
 type WithCollisionProtection CollisionProtection
 
-// ApplyToObjectOptions implements ObjectOption.
+// ApplyToObjectOptions implements Option.
 func (p WithCollisionProtection) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.CollisionProtection = CollisionProtection(p)
 }
@@ -60,7 +67,7 @@ func (p WithCollisionProtection) ApplyToObjectOptions(opts *ObjectOptions) {
 // Objects from this list will not trigger collision detection and prevention.
 type WithPreviousOwners []client.Object
 
-// ApplyToObjectOptions implements ObjectOption.
+// ApplyToObjectOptions implements Option.
 func (p WithPreviousOwners) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.PreviousOwners = p
 }
@@ -69,26 +76,25 @@ func (p WithPreviousOwners) ApplyToObjectOptions(opts *ObjectOptions) {
 // Can also be described as dry-run, as no modification will occur.
 type WithPaused struct{}
 
-// ApplyToObjectOptions implements ObjectOption.
+// ApplyToObjectOptions implements Option.
 func (p WithPaused) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.Paused = true
 }
 
-// Prober check Kubernetes objects for certain conditions and report success or failure with a failure message.
-type Prober interface {
-	Probe(obj *unstructured.Unstructured) (success bool, message string)
+type prober interface {
+	Probe(obj *unstructured.Unstructured) (success bool, messages []string)
 }
 
-// WithProber adds a probing function executed against the latest state of an object.
-type WithProber struct{ Prober }
+// WithProbe executes the given probe to evaluate the state of the object.
+type WithProbe struct{ Probe prober }
 
-// ApplyToObjectOptions implements ObjectOption.
-func (p WithProber) ApplyToObjectOptions(opts *ObjectOptions) {
-	opts.Prober = p.Prober
+// ApplyToObjectOptions implements Option.
+func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {
+	opts.Probe = p.Probe
 }
 
 type noopProbe struct{}
 
-func (p noopProbe) Probe(_ *unstructured.Unstructured) (success bool, message string) {
-	return true, ""
+func (p *noopProbe) Probe(_ *unstructured.Unstructured) (success bool, messages []string) {
+	return true, nil
 }

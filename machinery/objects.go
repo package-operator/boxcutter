@@ -12,7 +12,6 @@ import (
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
-	"pkg.package-operator.run/boxcutter/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,19 +21,17 @@ type ObjectEngine struct {
 	writer          client.Writer
 	ownerStrategy   objectEngineOwnerStrategy
 	divergeDetector objectEngineDivergeDetector
-	objectValidator objectEngineObjectValidator
 
 	fieldOwner   string
 	systemPrefix string
 }
 
-// NewObjectEngine returns a new ObjectEngine instance.
+// NewObjectEngine returns a new Engine instance.
 func NewObjectEngine(
 	cache objectEngineCache,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
 	divergeDetector objectEngineDivergeDetector,
-	objectValidator objectEngineObjectValidator,
 
 	fieldOwner string,
 	systemPrefix string,
@@ -44,7 +41,6 @@ func NewObjectEngine(
 		writer:          writer,
 		ownerStrategy:   ownerStrategy,
 		divergeDetector: divergeDetector,
-		objectValidator: objectValidator,
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
@@ -77,15 +73,7 @@ type objectEngineDivergeDetector interface {
 	) (res DivergeResult, err error)
 }
 
-type objectEngineObjectValidator interface {
-	Validate(
-		ctx context.Context, obj *unstructured.Unstructured,
-	) ([]validation.Violation, error)
-}
-
 // Reconcile runs actions to bring actual state closer to desired.
-//
-//nolint:gocyclo,maintidx
 func (e *ObjectEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object, // Owner of the object.
@@ -108,21 +96,7 @@ func (e *ObjectEngine) Reconcile(
 	}
 
 	// Capture object identity.
-	objectIdentity := ObjectIdentity{
-		GroupVersionKind: desiredObject.GroupVersionKind(),
-		ObjectKey:        client.ObjectKeyFromObject(desiredObject),
-	}
-
-	// Validate as preflight check.
-	vs, err := e.objectValidator.Validate(ctx, desiredObject)
-	if err != nil {
-		return nil, fmt.Errorf("validating resource: %w", err)
-	}
-	if len(vs) > 0 {
-		return newObjectResultRefusedPreflight(
-			objectIdentity, vs,
-		), nil
-	}
+	objectIdentity := IdentityForUnstructured(desiredObject)
 
 	// Copy because some client actions will modify the object.
 	desiredObject = desiredObject.DeepCopy()
@@ -141,7 +115,7 @@ func (e *ObjectEngine) Reconcile(
 
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopy()
-	err = e.cache.Get(
+	err := e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
 	switch {
@@ -165,12 +139,8 @@ func (e *ObjectEngine) Reconcile(
 		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
-		probeSuccess, probeMessage := options.Prober.Probe(desiredObject)
-		return newObjectResultCreated(
-			objectIdentity, ProbeResult{
-				Success: probeSuccess,
-				Message: probeMessage,
-			}, desiredObject), nil
+		return newResultCreated(
+			objectIdentity, desiredObject, options.Probe), nil
 
 	case err != nil:
 		return nil, fmt.Errorf("getting object: %w", err)
@@ -193,13 +163,8 @@ func (e *ObjectEngine) Reconcile(
 	if actualObjectRevision > revision {
 		// Leave object alone.
 		// It's already owned by a later revision.
-		probeSuccess, probeMessage := options.Prober.Probe(actualObject)
-		return newObjectResultProgressed(
-			objectIdentity,
-			ProbeResult{
-				Success: probeSuccess,
-				Message: probeMessage,
-			}, actualObject, diverged,
+		return newResultProgressed(
+			objectIdentity, actualObject, diverged, options.Probe,
 		), nil
 	}
 
@@ -213,13 +178,8 @@ func (e *ObjectEngine) Reconcile(
 			// No conflict with another field manager
 			// and no modification needed.
 
-			probeSuccess, probeMessage := options.Prober.Probe(actualObject)
-			return newObjectResultIdle(
-				objectIdentity,
-				ProbeResult{
-					Success: probeSuccess,
-					Message: probeMessage,
-				}, actualObject, diverged,
+			return newResultIdle(
+				objectIdentity, actualObject, diverged, options.Probe,
 			), nil
 		}
 		if !diverged.IsConflict() && modified {
@@ -231,13 +191,8 @@ func (e *ObjectEngine) Reconcile(
 				// Might be a Conflict if object already exists.
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
-			probeSuccess, probeMessage := options.Prober.Probe(desiredObject)
-			return newObjectResultUpdated(
-				objectIdentity,
-				ProbeResult{
-					Success: probeSuccess,
-					Message: probeMessage,
-				}, desiredObject, diverged,
+			return newResultUpdated(
+				objectIdentity, desiredObject, diverged, options.Probe,
 			), nil
 		}
 
@@ -267,13 +222,8 @@ func (e *ObjectEngine) Reconcile(
 		if err != nil {
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
-		probeSuccess, probeMessage := options.Prober.Probe(desiredObject)
-		return newObjectResultRecovered(
-			objectIdentity,
-			ProbeResult{
-				Success: probeSuccess,
-				Message: probeMessage,
-			}, desiredObject, diverged,
+		return newResultRecovered(
+			objectIdentity, desiredObject, diverged, options.Probe,
 		), nil
 
 		// Taking control checklist:
@@ -285,27 +235,17 @@ func (e *ObjectEngine) Reconcile(
 
 	case ctrlSituationUnknownController:
 		if options.CollisionProtection != CollisionProtectionNone {
-			probeSuccess, probeMessage := options.Prober.Probe(actualObject)
-			return newObjectResultConflict(
-				objectIdentity,
-				ProbeResult{
-					Success: probeSuccess,
-					Message: probeMessage,
-				}, actualObject, diverged,
-				actualOwner,
+			return newResultConflict(
+				objectIdentity, actualObject, diverged,
+				actualOwner, options.Probe,
 			), nil
 		}
 
 	case ctrlSituationNoController:
 		if options.CollisionProtection == CollisionProtectionPrevent {
-			probeSuccess, probeMessage := options.Prober.Probe(actualObject)
-			return newObjectResultConflict(
-				objectIdentity,
-				ProbeResult{
-					Success: probeSuccess,
-					Message: probeMessage,
-				}, actualObject, diverged,
-				actualOwner,
+			return newResultConflict(
+				objectIdentity, actualObject, diverged,
+				actualOwner, options.Probe,
 			), nil
 		}
 
@@ -338,13 +278,8 @@ func (e *ObjectEngine) Reconcile(
 		// Might be a Conflict if object already exists.
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
-	probeSuccess, probeMessage := options.Prober.Probe(desiredObject)
-	return newObjectResultUpdated(
-		objectIdentity,
-		ProbeResult{
-			Success: probeSuccess,
-			Message: probeMessage,
-		}, desiredObject, diverged,
+	return newResultUpdated(
+		objectIdentity, desiredObject, diverged, options.Probe,
 	), nil
 }
 

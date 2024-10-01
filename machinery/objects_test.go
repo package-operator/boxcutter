@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
-	"pkg.package-operator.run/boxcutter/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
@@ -55,49 +54,12 @@ func TestObjectEngine(t *testing.T) {
 			*cacheMock,
 			*testutil.CtrlClient,
 			*divergeDetectorMock,
-			*objectValidatorMock,
 		)
 
-		expectedIdentity ObjectIdentity
-		expectedAction   ObjectAction
+		expectedIdentity Identity
+		expectedAction   Action
 		expectedObject   *unstructured.Unstructured
 	}{
-		{
-			name:     "RefusedPreflight",
-			revision: 1,
-			desiredObject: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "v1",
-					"kind":       "Secret",
-					"metadata": map[string]interface{}{
-						"name":      "testi",
-						"namespace": "test",
-					},
-				},
-			},
-
-			mockSetup: func(
-				_ *cacheMock, _ *testutil.CtrlClient,
-				_ *divergeDetectorMock, ovm *objectValidatorMock,
-			) {
-				// Mock setup
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return([]validation.Violation{{}}, nil)
-			},
-
-			expectedIdentity: ObjectIdentity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
-			expectedAction: ObjectActionRefusedPreflight,
-		},
 		{
 			name:     "Updated noController CollisionProtectionIfNoController",
 			revision: 1,
@@ -117,7 +79,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -142,9 +104,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				ddm.
 					On("HasDiverged", owner, mock.Anything, mock.Anything).
 					Return(DivergeResult{}, nil)
@@ -154,7 +113,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -164,7 +123,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionUpdated,
+			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -205,7 +164,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				// Mock setup
 				cache.
@@ -218,9 +177,6 @@ func TestObjectEngine(t *testing.T) {
 						mock.Anything, mock.Anything,
 					).
 					Return(errors.NewNotFound(schema.GroupResource{}, ""))
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				ddm.
 					On("HasDiverged", owner, mock.Anything, mock.Anything).
 					Return(DivergeResult{}, nil)
@@ -230,7 +186,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -240,7 +196,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionCreated,
+			expectedAction: ActionCreated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -282,7 +238,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -310,9 +266,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				ddm.
 					On("HasDiverged", owner, mock.Anything, mock.Anything).
 					Return(DivergeResult{}, nil)
@@ -322,7 +275,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -332,7 +285,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionProgressed,
+			expectedAction: ActionProgressed,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -364,7 +317,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -402,9 +355,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				ddm.
 					On("HasDiverged", owner, mock.Anything, mock.Anything).
 					Return(DivergeResult{}, nil)
@@ -414,7 +364,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -424,7 +374,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionIdle,
+			expectedAction: ActionIdle,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -466,7 +416,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -504,9 +454,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -524,7 +471,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -534,7 +481,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionUpdated,
+			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -576,7 +523,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -614,9 +561,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -630,7 +574,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -640,7 +584,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionRecovered,
+			expectedAction: ActionRecovered,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -666,7 +610,7 @@ func TestObjectEngine(t *testing.T) {
 			},
 		},
 		{
-			name:     "RefusedCollision - unknown controller",
+			name:     "Collision - unknown controller",
 			revision: 1,
 			desiredObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -682,7 +626,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -720,9 +664,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -734,7 +675,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -744,7 +685,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionRefusedCollision,
+			expectedAction: ActionCollision,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -788,7 +729,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -826,9 +767,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -840,7 +778,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -850,7 +788,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionUpdated,
+			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -884,7 +822,7 @@ func TestObjectEngine(t *testing.T) {
 			},
 		},
 		{
-			name:     "RefusedCollision - no controller",
+			name:     "Collision - no controller",
 			revision: 1,
 			desiredObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -899,7 +837,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock, ovm *objectValidatorMock,
+				ddm *divergeDetectorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -927,9 +865,6 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				ovm.
-					On("Validate", mock.Anything, mock.Anything).
-					Return(nil, nil)
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -941,7 +876,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: ObjectIdentity{
+			expectedIdentity: Identity{
 				ObjectKey: client.ObjectKey{
 					Name:      "testi",
 					Namespace: "test",
@@ -951,7 +886,7 @@ func TestObjectEngine(t *testing.T) {
 					Kind:    "Secret",
 				},
 			},
-			expectedAction: ObjectActionRefusedCollision,
+			expectedAction: ActionCollision,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -974,12 +909,10 @@ func TestObjectEngine(t *testing.T) {
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &divergeDetectorMock{}
-			objectValidator := &objectValidatorMock{}
 
 			oe := NewObjectEngine(
 				cache, writer,
 				ownerStrategy, divergeDetector,
-				objectValidator,
 				testFieldOwner,
 				testSystemPrefix,
 			)
@@ -988,7 +921,7 @@ func TestObjectEngine(t *testing.T) {
 				On("Watch", mock.Anything, mock.Anything, mock.Anything).
 				Return(nil)
 
-			test.mockSetup(cache, writer, divergeDetector, objectValidator)
+			test.mockSetup(cache, writer, divergeDetector)
 
 			ctx := context.Background()
 			res, err := oe.Reconcile(
@@ -997,8 +930,18 @@ func TestObjectEngine(t *testing.T) {
 			)
 			require.NoError(t, err)
 			assert.Equal(t, test.expectedIdentity, res.Identity())
-			if test.expectedObject != nil {
-				assert.Equal(t, test.expectedObject, res.Object())
+
+			switch r := res.(type) {
+			case ResultCreated:
+				assert.Equal(t, test.expectedObject, r.Object())
+			case ResultUpdated:
+				assert.Equal(t, test.expectedObject, r.Object())
+			case ResultIdle:
+				assert.Equal(t, test.expectedObject, r.Object())
+			case ResultProgressed:
+				assert.Equal(t, test.expectedObject, r.Object())
+			case ResultRecovered:
+				assert.Equal(t, test.expectedObject, r.Object())
 			}
 			assert.Equal(t, test.expectedAction, res.Action())
 		})
@@ -1049,16 +992,4 @@ func (m *divergeDetectorMock) HasDiverged(
 ) (DivergeResult, error) {
 	args := m.Called(owner, desiredObject, actualObject)
 	return args.Get(0).(DivergeResult), args.Error(1)
-}
-
-type objectValidatorMock struct {
-	mock.Mock
-}
-
-func (m *objectValidatorMock) Validate(
-	ctx context.Context, obj *unstructured.Unstructured,
-) ([]validation.Violation, error) {
-	args := m.Called(ctx, obj)
-	vs, _ := args.Get(0).([]validation.Violation)
-	return vs, args.Error(1)
 }
