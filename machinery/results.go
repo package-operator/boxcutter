@@ -9,8 +9,8 @@ import (
 	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
-// Result is the common Result interface for multiple result types.
-type Result interface {
+// ObjectResult is the common Result interface for multiple result types.
+type ObjectResult interface {
 	// Action taken by the reconcile engine.
 	Action() Action
 	// Object as last seen on the cluster after creation/update.
@@ -20,40 +20,40 @@ type Result interface {
 	// is owned by the right controller and passes the given probe.
 	Success() bool
 	// Probe returns the results from the given object Probe.
-	Probe() ProbeResult
+	Probe() ObjectProbeResult
 	// String returns a human readable description of the Result.
 	String() string
 }
 
-// ProbeResult records probe results for the object.
-type ProbeResult struct {
+// ObjectProbeResult records probe results for the object.
+type ObjectProbeResult struct {
 	Success  bool
 	Messages []string
 }
 
 var (
-	_ Result = (*ResultCreated)(nil)
-	_ Result = (*ResultUpdated)(nil)
-	_ Result = (*ResultIdle)(nil)
-	_ Result = (*ResultProgressed)(nil)
-	_ Result = (*ResultRecovered)(nil)
-	_ Result = (*ResultCollision)(nil)
+	_ ObjectResult = (*ObjectResultCreated)(nil)
+	_ ObjectResult = (*ObjectResultUpdated)(nil)
+	_ ObjectResult = (*ObjectResultIdle)(nil)
+	_ ObjectResult = (*ObjectResultProgressed)(nil)
+	_ ObjectResult = (*ObjectResultRecovered)(nil)
+	_ ObjectResult = (*ObjectResultCollision)(nil)
 )
 
-// ResultCreated is returned when the Object was just created.
-type ResultCreated struct {
+// ObjectResultCreated is returned when the Object was just created.
+type ObjectResultCreated struct {
 	obj         *unstructured.Unstructured
-	probeResult ProbeResult
+	probeResult ObjectProbeResult
 }
 
-func newResultCreated(
+func newObjectResultCreated(
 	obj *unstructured.Unstructured,
 	probe prober,
-) Result {
+) ObjectResult {
 	s, msgs := probe.Probe(obj)
-	return ResultCreated{
+	return ObjectResultCreated{
 		obj: obj,
-		probeResult: ProbeResult{
+		probeResult: ObjectProbeResult{
 			Success:  s,
 			Messages: msgs,
 		},
@@ -61,29 +61,29 @@ func newResultCreated(
 }
 
 // Action taken by the reconcile engine.
-func (r ResultCreated) Action() Action {
+func (r ObjectResultCreated) Action() Action {
 	return ActionCreated
 }
 
 // Object as last seen on the cluster after creation/update.
-func (r ResultCreated) Object() *unstructured.Unstructured {
+func (r ObjectResultCreated) Object() *unstructured.Unstructured {
 	return r.obj
 }
 
 // Success returns true when the operation is considered successful.
 // Operations are considered a success, when the object reflects desired state,
 // is owned by the right controller and passes the given probe.
-func (r ResultCreated) Success() bool {
+func (r ObjectResultCreated) Success() bool {
 	return r.probeResult.Success
 }
 
 // Probe returns the results from the given object Probe.
-func (r ResultCreated) Probe() ProbeResult {
+func (r ObjectResultCreated) Probe() ObjectProbeResult {
 	return r.probeResult
 }
 
 // String returns a human readable description of the Result.
-func (r ResultCreated) String() string {
+func (r ObjectResultCreated) String() string {
 	id := types.ToObjectRef(r.obj)
 	msg := fmt.Sprintf(
 		"Object %s\n"+
@@ -93,63 +93,63 @@ func (r ResultCreated) String() string {
 	return msg
 }
 
-// ResultUpdated is returned when the object is updated.
-type ResultUpdated struct {
+// ObjectResultUpdated is returned when the object is updated.
+type ObjectResultUpdated struct {
 	normalResult
 }
 
-func newResultUpdated(
+func newObjectResultUpdated(
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
-) Result {
-	return ResultUpdated{
-		normalResult: newNormalResult(ActionUpdated, obj, diverged, probe),
+) ObjectResult {
+	return ObjectResultUpdated{
+		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, probe),
 	}
 }
 
-// ResultProgressed is returned when the object has been progressed to a newer revision.
-type ResultProgressed struct {
+// ObjectResultProgressed is returned when the object has been progressed to a newer revision.
+type ObjectResultProgressed struct {
 	normalResult
 }
 
-func newResultProgressed(
+func newObjectResultProgressed(
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
-) Result {
-	return ResultProgressed{
-		normalResult: newNormalResult(ActionProgressed, obj, diverged, probe),
+) ObjectResult {
+	return ObjectResultProgressed{
+		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, probe),
 	}
 }
 
-// ResultIdle is returned when nothing was done.
-type ResultIdle struct {
+// ObjectResultIdle is returned when nothing was done.
+type ObjectResultIdle struct {
 	normalResult
 }
 
-func newResultIdle(
+func newObjectResultIdle(
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
-) Result {
-	return ResultIdle{
-		normalResult: newNormalResult(ActionIdle, obj, diverged, probe),
+) ObjectResult {
+	return ObjectResultIdle{
+		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, probe),
 	}
 }
 
-// ResultRecovered is returned when the object had to be reset after conflicting with another actor.
-type ResultRecovered struct {
+// ObjectResultRecovered is returned when the object had to be reset after conflicting with another actor.
+type ObjectResultRecovered struct {
 	normalResult
 }
 
-func newResultRecovered(
+func newObjectResultRecovered(
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
-) Result {
-	return ResultRecovered{
-		normalResult: newNormalResult(ActionRecovered, obj, diverged, probe),
+) ObjectResult {
+	return ObjectResultRecovered{
+		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, probe),
 	}
 }
 
@@ -159,10 +159,10 @@ type normalResult struct {
 	updatedFields                   []string
 	conflictingFieldManagers        []string
 	conflictingFieldsByFieldManager map[string][]string
-	probeResult                     ProbeResult
+	probeResult                     ObjectProbeResult
 }
 
-func newNormalResult(
+func newNormalObjectResult(
 	action Action,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
@@ -175,7 +175,7 @@ func newNormalResult(
 		updatedFields:                   diverged.Modified(),
 		conflictingFieldManagers:        diverged.ConflictingFieldOwners,
 		conflictingFieldsByFieldManager: diverged.ConflictingPaths(),
-		probeResult: ProbeResult{
+		probeResult: ObjectProbeResult{
 			Success:  s,
 			Messages: msgs,
 		},
@@ -208,7 +208,7 @@ func (r normalResult) ConflictingFieldsByFieldManager() map[string][]string {
 }
 
 // Probe returns the results from the given object Probe.
-func (r normalResult) Probe() ProbeResult {
+func (r normalResult) Probe() ObjectProbeResult {
 	return r.probeResult
 }
 
@@ -246,40 +246,40 @@ func (r normalResult) String() string {
 	return msg
 }
 
-// ResultCollision is returned when conflicting with an existing object.
-type ResultCollision struct {
+// ObjectResultCollision is returned when conflicting with an existing object.
+type ObjectResultCollision struct {
 	normalResult
 	// conflictingOwner is provided when Refusing due to Collision.
 	conflictingOwner *metav1.OwnerReference
 }
 
 // ConflictingOwner Conflicting owner if Action == RefusingConflict.
-func (r ResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool) {
+func (r ObjectResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool) {
 	return r.conflictingOwner, r.conflictingOwner != nil
 }
 
 // Success returns true when the operation is considered successful.
 // Operations are considered a success, when the object reflects desired state,
 // is owned by the right controller and passes the given probe.
-func (r ResultCollision) Success() bool {
+func (r ObjectResultCollision) Success() bool {
 	return false
 }
 
 // String returns a human readable description of the Result.
-func (r ResultCollision) String() string {
+func (r ObjectResultCollision) String() string {
 	msg := r.normalResult.String()
 	msg += fmt.Sprintf("Conflicting Owner: %s\n", r.conflictingOwner.String())
 	return msg
 }
 
-func newResultConflict(
+func newObjectResultConflict(
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	conflictingOwner *metav1.OwnerReference,
 	probe prober,
-) Result {
-	return ResultCollision{
-		normalResult: newNormalResult(
+) ObjectResult {
+	return ObjectResultCollision{
+		normalResult: newNormalObjectResult(
 			ActionCollision,
 			obj, diverged, probe,
 		),

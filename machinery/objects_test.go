@@ -840,15 +840,15 @@ func TestObjectEngine(t *testing.T) {
 			require.NoError(t, err)
 
 			switch r := res.(type) {
-			case ResultCreated:
+			case ObjectResultCreated:
 				assert.Equal(t, test.expectedObject, r.Object())
-			case ResultUpdated:
+			case ObjectResultUpdated:
 				assert.Equal(t, test.expectedObject, r.Object())
-			case ResultIdle:
+			case ObjectResultIdle:
 				assert.Equal(t, test.expectedObject, r.Object())
-			case ResultProgressed:
+			case ObjectResultProgressed:
 				assert.Equal(t, test.expectedObject, r.Object())
-			case ResultRecovered:
+			case ObjectResultRecovered:
 				assert.Equal(t, test.expectedObject, r.Object())
 			}
 			assert.Equal(t, test.expectedAction, res.Action())

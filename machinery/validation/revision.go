@@ -10,6 +10,11 @@ import "context"
 // a phase is installed to prevent false positives.
 type RevisionValidator struct{}
 
+// NewRevisionValidator returns a new RevisionValidator instance.
+func NewRevisionValidator() *RevisionValidator {
+	return &RevisionValidator{}
+}
+
 // Revision represents a revision consisting of multiple phases.
 type Revision interface {
 	GetPhases() []Phase
