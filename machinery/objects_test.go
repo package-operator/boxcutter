@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"pkg.package-operator.run/boxcutter/internal/testutil"
-	"pkg.package-operator.run/boxcutter/ownerhandling"
+	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
@@ -56,9 +56,8 @@ func TestObjectEngine(t *testing.T) {
 			*divergeDetectorMock,
 		)
 
-		expectedIdentity Identity
-		expectedAction   Action
-		expectedObject   *unstructured.Unstructured
+		expectedAction Action
+		expectedObject *unstructured.Unstructured
 	}{
 		{
 			name:     "Updated noController CollisionProtectionIfNoController",
@@ -113,16 +112,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -186,16 +175,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionCreated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -275,16 +254,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionProgressed,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -364,16 +333,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionIdle,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -471,16 +430,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -574,16 +523,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionRecovered,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -675,16 +614,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionCollision,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -778,16 +707,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionUpdated,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -876,16 +795,6 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 
-			expectedIdentity: Identity{
-				ObjectKey: client.ObjectKey{
-					Name:      "testi",
-					Namespace: "test",
-				},
-				GroupVersionKind: schema.GroupVersionKind{
-					Version: "v1",
-					Kind:    "Secret",
-				},
-			},
 			expectedAction: ActionCollision,
 			expectedObject: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -929,7 +838,6 @@ func TestObjectEngine(t *testing.T) {
 				test.opts...,
 			)
 			require.NoError(t, err)
-			assert.Equal(t, test.expectedIdentity, res.Identity())
 
 			switch r := res.(type) {
 			case ResultCreated:

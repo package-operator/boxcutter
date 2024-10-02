@@ -6,33 +6,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
-
-// Identity holds information to identify an object.
-type Identity struct {
-	schema.GroupVersionKind
-	client.ObjectKey
-}
-
-// IdentityForUnstructured returns an Identity object from unstructured.
-func IdentityForUnstructured(obj *unstructured.Unstructured) Identity {
-	return Identity{
-		GroupVersionKind: obj.GroupVersionKind(),
-		ObjectKey:        client.ObjectKeyFromObject(obj),
-	}
-}
-
-// String returns a string representation.
-func (oid Identity) String() string {
-	return fmt.Sprintf("%s %s", oid.GroupVersionKind, oid.ObjectKey)
-}
 
 // Result is the common Result interface for multiple result types.
 type Result interface {
-	// Object the reconciliation was performed for.
-	Identity() Identity
 	// Action taken by the reconcile engine.
 	Action() Action
 	// Object as last seen on the cluster after creation/update.
@@ -64,30 +42,22 @@ var (
 
 // ResultCreated is returned when the Object was just created.
 type ResultCreated struct {
-	id          Identity
 	obj         *unstructured.Unstructured
 	probeResult ProbeResult
 }
 
 func newResultCreated(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	probe prober,
 ) Result {
 	s, msgs := probe.Probe(obj)
 	return ResultCreated{
-		id:  oid,
 		obj: obj,
 		probeResult: ProbeResult{
 			Success:  s,
 			Messages: msgs,
 		},
 	}
-}
-
-// Identity returns object the reconciliation was performed for.
-func (r ResultCreated) Identity() Identity {
-	return r.id
 }
 
 // Action taken by the reconcile engine.
@@ -114,10 +84,11 @@ func (r ResultCreated) Probe() ProbeResult {
 
 // String returns a human readable description of the Result.
 func (r ResultCreated) String() string {
+	id := types.ToObjectRef(r.obj)
 	msg := fmt.Sprintf(
 		"Object %s\n"+
 			`Action "Created":`+"\n",
-		r.id.String(),
+		id.String(),
 	)
 	return msg
 }
@@ -128,13 +99,12 @@ type ResultUpdated struct {
 }
 
 func newResultUpdated(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
 ) Result {
 	return ResultUpdated{
-		normalResult: newNormalResult(ActionUpdated, oid, obj, diverged, probe),
+		normalResult: newNormalResult(ActionUpdated, obj, diverged, probe),
 	}
 }
 
@@ -144,13 +114,12 @@ type ResultProgressed struct {
 }
 
 func newResultProgressed(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
 ) Result {
 	return ResultProgressed{
-		normalResult: newNormalResult(ActionProgressed, oid, obj, diverged, probe),
+		normalResult: newNormalResult(ActionProgressed, obj, diverged, probe),
 	}
 }
 
@@ -160,13 +129,12 @@ type ResultIdle struct {
 }
 
 func newResultIdle(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
 ) Result {
 	return ResultIdle{
-		normalResult: newNormalResult(ActionIdle, oid, obj, diverged, probe),
+		normalResult: newNormalResult(ActionIdle, obj, diverged, probe),
 	}
 }
 
@@ -176,18 +144,16 @@ type ResultRecovered struct {
 }
 
 func newResultRecovered(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
 ) Result {
 	return ResultRecovered{
-		normalResult: newNormalResult(ActionRecovered, oid, obj, diverged, probe),
+		normalResult: newNormalResult(ActionRecovered, obj, diverged, probe),
 	}
 }
 
 type normalResult struct {
-	id                              Identity
 	action                          Action
 	obj                             *unstructured.Unstructured
 	updatedFields                   []string
@@ -198,14 +164,12 @@ type normalResult struct {
 
 func newNormalResult(
 	action Action,
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	probe prober,
 ) normalResult {
 	s, msgs := probe.Probe(obj)
 	return normalResult{
-		id:                              oid,
 		obj:                             obj,
 		action:                          action,
 		updatedFields:                   diverged.Modified(),
@@ -216,11 +180,6 @@ func newNormalResult(
 			Messages: msgs,
 		},
 	}
-}
-
-// Identity returns object the reconciliation was performed for.
-func (r normalResult) Identity() Identity {
-	return r.id
 }
 
 // Action taken by the reconcile engine.
@@ -262,10 +221,11 @@ func (r normalResult) Success() bool {
 
 // String returns a human readable description of the Result.
 func (r normalResult) String() string {
+	id := types.ToObjectRef(r.obj)
 	msg := fmt.Sprintf(
-		"Object %s %s\n"+
+		"Object %s\n"+
 			"Action %q\n",
-		r.id.GroupVersionKind, r.id.ObjectKey,
+		id.String(),
 		r.action,
 	)
 	if len(r.updatedFields) > 0 {
@@ -313,7 +273,6 @@ func (r ResultCollision) String() string {
 }
 
 func newResultConflict(
-	oid Identity,
 	obj *unstructured.Unstructured,
 	diverged DivergeResult,
 	conflictingOwner *metav1.OwnerReference,
@@ -322,7 +281,7 @@ func newResultConflict(
 	return ResultCollision{
 		normalResult: newNormalResult(
 			ActionCollision,
-			oid, obj, diverged, probe,
+			obj, diverged, probe,
 		),
 		conflictingOwner: conflictingOwner,
 	}
