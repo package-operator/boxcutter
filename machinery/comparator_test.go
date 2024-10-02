@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kube-openapi/pkg/spec3"
-	"pkg.package-operator.run/boxcutter/ownerhandling"
+	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 )
 
 const testFieldOwner = "test.testy"

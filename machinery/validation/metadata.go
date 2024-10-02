@@ -5,7 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-func validateObjectMetadata(obj *unstructured.Unstructured) field.ErrorList {
+func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 	errs := field.ErrorList{}
 
 	// Type Meta
@@ -69,5 +69,10 @@ func validateObjectMetadata(obj *unstructured.Unstructured) field.ErrorList {
 				"must be empty",
 			))
 	}
-	return errs
+
+	msgs := make([]string, 0, len(errs))
+	for _, e := range errs {
+		msgs = append(msgs, e.Error())
+	}
+	return msgs
 }
