@@ -80,7 +80,7 @@ func (e *ObjectEngine) Reconcile(
 	revision int64, // Revision number, must start at 1.
 	desiredObject *unstructured.Unstructured,
 	opts ...ObjectOption,
-) (Result, error) {
+) (ObjectResult, error) {
 	var options ObjectOptions
 	for _, opt := range opts {
 		opt.ApplyToObjectOptions(&options)
@@ -136,7 +136,7 @@ func (e *ObjectEngine) Reconcile(
 		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
-		return newResultCreated(
+		return newObjectResultCreated(
 			desiredObject, options.Probe), nil
 
 	case err != nil:
@@ -160,7 +160,7 @@ func (e *ObjectEngine) Reconcile(
 	if actualObjectRevision > revision {
 		// Leave object alone.
 		// It's already owned by a later revision.
-		return newResultProgressed(
+		return newObjectResultProgressed(
 			actualObject, diverged, options.Probe,
 		), nil
 	}
@@ -174,8 +174,7 @@ func (e *ObjectEngine) Reconcile(
 		if !diverged.IsConflict() && !modified {
 			// No conflict with another field manager
 			// and no modification needed.
-
-			return newResultIdle(
+			return newObjectResultIdle(
 				actualObject, diverged, options.Probe,
 			), nil
 		}
@@ -188,7 +187,7 @@ func (e *ObjectEngine) Reconcile(
 				// Might be a Conflict if object already exists.
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
-			return newResultUpdated(
+			return newObjectResultUpdated(
 				desiredObject, diverged, options.Probe,
 			), nil
 		}
@@ -219,7 +218,7 @@ func (e *ObjectEngine) Reconcile(
 		if err != nil {
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
-		return newResultRecovered(
+		return newObjectResultRecovered(
 			desiredObject, diverged, options.Probe,
 		), nil
 
@@ -232,7 +231,7 @@ func (e *ObjectEngine) Reconcile(
 
 	case ctrlSituationUnknownController:
 		if options.CollisionProtection != CollisionProtectionNone {
-			return newResultConflict(
+			return newObjectResultConflict(
 				actualObject, diverged,
 				actualOwner, options.Probe,
 			), nil
@@ -240,7 +239,7 @@ func (e *ObjectEngine) Reconcile(
 
 	case ctrlSituationNoController:
 		if options.CollisionProtection == CollisionProtectionPrevent {
-			return newResultConflict(
+			return newObjectResultConflict(
 				actualObject, diverged,
 				actualOwner, options.Probe,
 			), nil
@@ -275,7 +274,7 @@ func (e *ObjectEngine) Reconcile(
 		// Might be a Conflict if object already exists.
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
-	return newResultUpdated(
+	return newObjectResultUpdated(
 		desiredObject, diverged, options.Probe,
 	), nil
 }
