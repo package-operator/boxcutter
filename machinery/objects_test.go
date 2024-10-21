@@ -814,13 +814,14 @@ func TestObjectEngine(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &divergeDetectorMock{}
 
 			oe := NewObjectEngine(
-				cache, writer,
+				cache, uncachedReader, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,

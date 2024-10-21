@@ -6,18 +6,23 @@ import (
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ObjectEngine reconciles individual objects.
 type ObjectEngine struct {
-	cache           objectEngineCache
+	cache objectEngineCache
+	// Used to resolve conflicts with objects
+	// excluded by the cache selector.
+	uncachedReader  client.Reader
 	writer          client.Writer
 	ownerStrategy   objectEngineOwnerStrategy
 	divergeDetector objectEngineDivergeDetector
@@ -29,6 +34,7 @@ type ObjectEngine struct {
 // NewObjectEngine returns a new Engine instance.
 func NewObjectEngine(
 	cache objectEngineCache,
+	uncachedReader client.Reader,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
 	divergeDetector objectEngineDivergeDetector,
@@ -38,6 +44,7 @@ func NewObjectEngine(
 ) *ObjectEngine {
 	return &ObjectEngine{
 		cache:           cache,
+		uncachedReader:  uncachedReader,
 		writer:          writer,
 		ownerStrategy:   ownerStrategy,
 		divergeDetector: divergeDetector,
@@ -73,7 +80,78 @@ type objectEngineDivergeDetector interface {
 	) (res DivergeResult, err error)
 }
 
+// Teardown ensures the given object is safely removed from the cluster.
+func (e *ObjectEngine) Teardown(
+	ctx context.Context,
+	owner client.Object, // Owner of the object.
+	revision int64, // Revision number, must start at 1.
+	desiredObject *unstructured.Unstructured,
+) (objectDeleted bool, err error) {
+	// Sanity checks.
+	if revision == 0 {
+		panic("owner revision must be set and start at 1")
+	}
+	if len(owner.GetUID()) == 0 {
+		panic("owner must be persistet to cluster, empty UID")
+	}
+
+	// Ensure to prime cache.
+	err = e.cache.Watch(
+		ctx, owner, desiredObject)
+	if meta.IsNoMatchError(err) {
+		// API no longer registered.
+		// Consider the object deleted.
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("watching resource: %w", err)
+	}
+
+	// Lookup actual object state on cluster.
+	actualObject := desiredObject.DeepCopy()
+	err = e.cache.Get(
+		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
+	)
+	if errors.IsNotFound(err) {
+		// Object is gone, yay!
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("getting object before deletion: %w", err)
+	}
+
+	// Check revision matches.
+	actualRevision, err := e.getObjectRevision(actualObject)
+	if err != nil {
+		return false, fmt.Errorf("getting object revision: %w", err)
+	}
+	if actualRevision != revision {
+		// TODO: ERROR! ... ?
+		return true, nil
+	}
+
+	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
+	if ctrlSit != ctrlSituationIsController {
+		// TODO: ERROR! ... ?
+		return true, nil
+	}
+
+	// Actually delete the object.
+	err = e.writer.Delete(ctx, desiredObject, client.Preconditions{
+		UID:             ptr.To(actualObject.GetUID()),
+		ResourceVersion: ptr.To(actualObject.GetResourceVersion()),
+	})
+	if errors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("deleting object: %w", err)
+	}
+	return false, nil // need to wait for Not Found Error to ensure finalizers have been progressed.
+}
+
 // Reconcile runs actions to bring actual state closer to desired.
+//
+//nolint:gocyclo,maintidx
 func (e *ObjectEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object, // Owner of the object.
@@ -124,13 +202,19 @@ func (e *ObjectEngine) Reconcile(
 		// To be on the safe-side do a normal POST call.
 		// Using SSA might patch an already existing object,
 		// violating collision protection settings.
-		err := e.writer.Create(
-			ctx, desiredObject, client.FieldOwner(e.fieldOwner))
-		if err != nil {
-			// TODO:
-			// Clarify what to do in case of an AlreadyExistsError.
+		err := e.create(
+			ctx, desiredObject, options, client.FieldOwner(e.fieldOwner))
+		if errors.IsAlreadyExists(err) {
 			// Might be a slow cache or an object created by a different actor
 			// but excluded by the cache selector.
+			if err := e.uncachedReader.Get(
+				ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
+			); err != nil {
+				return nil, fmt.Errorf("getting object via cache bypass after create conflict: %w", err)
+			}
+			goto updatehandling
+		}
+		if err != nil {
 			return nil, fmt.Errorf("creating resource: %w", err)
 		}
 		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
@@ -143,6 +227,7 @@ func (e *ObjectEngine) Reconcile(
 		return nil, fmt.Errorf("getting object: %w", err)
 	}
 
+updatehandling:
 	// An object already exists on the cluster.
 	// Before doing anything else, we have to figure out
 	// who owns and controls the object.
@@ -182,6 +267,7 @@ func (e *ObjectEngine) Reconcile(
 			// No conflict with another controller, but modifications needed.
 			err := e.patch(
 				ctx, desiredObject, client.Apply,
+				options,
 			)
 			if err != nil {
 				// Might be a Conflict if object already exists.
@@ -213,6 +299,7 @@ func (e *ObjectEngine) Reconcile(
 		// Even though we force FIELD-level ownership in the call below.
 		err := e.patch(
 			ctx, desiredObject, client.Apply,
+			options,
 			client.ForceOwnership,
 		)
 		if err != nil {
@@ -268,6 +355,7 @@ func (e *ObjectEngine) Reconcile(
 	// Write changes.
 	err = e.patch(
 		ctx, desiredObject, client.Apply,
+		options,
 		client.ForceOwnership,
 	)
 	if err != nil {
@@ -279,12 +367,26 @@ func (e *ObjectEngine) Reconcile(
 	), nil
 }
 
+func (e *ObjectEngine) create(
+	ctx context.Context, obj client.Object,
+	options ObjectOptions, opts ...client.CreateOption,
+) error {
+	if options.Paused {
+		return nil
+	}
+	return e.writer.Create(ctx, obj, opts...)
+}
+
 func (e *ObjectEngine) patch(
 	ctx context.Context,
 	obj *unstructured.Unstructured,
 	patch client.Patch,
+	options ObjectOptions,
 	opts ...client.PatchOption,
 ) error {
+	if options.Paused {
+		return nil
+	}
 	if err := e.migrateFieldManagersToSSA(ctx, obj); err != nil {
 		return err
 	}

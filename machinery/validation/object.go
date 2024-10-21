@@ -28,7 +28,8 @@ type ObjectValidator struct {
 	restMapper restMapper
 	writer     client.Writer
 
-	namespace string
+	// Allows creating objects in namespaces different to Owner.
+	allowNamespaceEscalation bool
 }
 
 // NewClusterObjectValidator returns an ObjectValidator for cross-cluster deployments.
@@ -36,36 +37,42 @@ func NewClusterObjectValidator(
 	restMapper restMapper,
 	writer client.Writer,
 ) *ObjectValidator {
-	return NewNamespacedObjectValidator(restMapper, writer, "")
+	return &ObjectValidator{
+		restMapper: restMapper,
+		writer:     writer,
+
+		allowNamespaceEscalation: true,
+	}
 }
 
 // NewNamespacedObjectValidator returns an ObjecctValidator for single-namespace deployments.
 func NewNamespacedObjectValidator(
 	restMapper restMapper,
 	writer client.Writer,
-	namespace string,
 ) *ObjectValidator {
 	return &ObjectValidator{
 		restMapper: restMapper,
 		writer:     writer,
-		namespace:  namespace,
 	}
 }
 
 // Validate validates the given object and returns violations.
 func (d *ObjectValidator) Validate(
-	ctx context.Context, obj *unstructured.Unstructured,
+	ctx context.Context, owner client.Object,
+	obj *unstructured.Unstructured,
 ) (ObjectViolation, error) {
 	// Static validation.
 	if msgs := validateObjectMetadata(obj); len(msgs) > 0 {
 		return newObjectViolation(obj, msgs), nil
 	}
 
-	// Ensure we are not leaving the namespace we are operating in.
-	if vs, err := validateNamespace(d.restMapper, d.namespace, obj); err != nil {
-		return nil, err
-	} else if !vs.Empty() {
-		return vs, nil
+	if !d.allowNamespaceEscalation {
+		// Ensure we are not leaving the namespace we are operating in.
+		if vs, err := validateNamespace(d.restMapper, owner.GetNamespace(), obj); err != nil {
+			return nil, err
+		} else if !vs.Empty() {
+			return vs, nil
+		}
 	}
 
 	// Dry run against API server to catch any other surprises.
