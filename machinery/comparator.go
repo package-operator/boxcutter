@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -123,11 +125,11 @@ func (d *Comparator) HasDiverged(
 	// Get OpenAPISchema to have the correct merge and field configuration.
 	s, err := d.openAPIAccessor.Get(gvk.GroupVersion())
 	if err != nil {
-		return res, err
+		return res, fmt.Errorf("API accessor: %w", err)
 	}
 	ss, err := schemaconv.ToSchemaFromOpenAPI(s.Components.Schemas, false)
 	if err != nil {
-		return res, err
+		return res, fmt.Errorf("schema from OpenAPI: %w", err)
 	}
 
 	var parser typed.Parser
@@ -202,12 +204,18 @@ func (d *Comparator) HasDiverged(
 
 	typedActual, err := parser.Type(tName).FromUnstructured(actualObject.Object)
 	if err != nil {
-		return res, err
+		return res, fmt.Errorf("from unstructured: %w", err)
 	}
 	actualValues := typedActual.ExtractItems(desiredFieldSet)
+	m := actualValues.AsValue().Unstructured().(map[string]interface{})
+	stripNils(m)
+	actualValues, err = parser.Type(tName).FromUnstructured(m)
+	if err != nil {
+		return res, fmt.Errorf("struct merge type conversion: %w", err)
+	}
 	res.Comparison, err = typedDesired.Compare(actualValues)
 	if err != nil {
-		return res, err
+		return res, fmt.Errorf("compare: %w", err)
 	}
 	return res, nil
 }
@@ -242,12 +250,25 @@ var stripSet = fieldpath.NewSet(
 	fieldpath.MakePathOrDie("metadata", "resourceVersion"),
 )
 
+var existingAPIScheme = runtime.NewScheme()
+
+func init() {
+	schemeBuilder := runtime.SchemeBuilder{
+		scheme.AddToScheme,
+		apiextensionsv1.AddToScheme,
+		apiextensions.AddToScheme,
+	}
+	if err := schemeBuilder.AddToScheme(existingAPIScheme); err != nil {
+		panic(err)
+	}
+}
+
 // Returns the canonical name to find the OpenAPISchema for the given objects GVK.
 func openAPICanonicalName(obj unstructured.Unstructured) (string, error) {
 	gvk := obj.GroupVersionKind()
 
 	var schemaTypeName string
-	o, err := scheme.Scheme.New(gvk)
+	o, err := existingAPIScheme.New(gvk)
 	switch {
 	case err != nil && runtime.IsNotRegisteredError(err):
 		// Assume CRD, when GVK is not part of core APIs.
@@ -258,4 +279,33 @@ func openAPICanonicalName(obj unstructured.Unstructured) (string, error) {
 		schemaTypeName = util.GetCanonicalTypeName(o)
 	}
 	return util.ToRESTFriendlyName(schemaTypeName), nil
+}
+
+func stripNils(o map[string]interface{}) {
+	for k, v := range o {
+		if v == nil {
+			// o[k] = map[interface{}]interface{}{}
+			delete(o, k)
+			continue
+		}
+		if m, ok := v.(map[string]interface{}); ok {
+			stripNils(m)
+		}
+
+		l, ok := v.([]interface{})
+		if !ok {
+			continue
+		}
+		var newList []interface{}
+		for _, v := range l {
+			if v == nil {
+				continue
+			}
+			if m, ok := v.(map[string]interface{}); ok {
+				stripNils(m)
+			}
+			newList = append(newList, v)
+		}
+		o[k] = newList
+	}
 }

@@ -6,7 +6,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // ObjectResult is the common Result interface for multiple result types.
@@ -84,13 +83,7 @@ func (r ObjectResultCreated) Probe() ObjectProbeResult {
 
 // String returns a human readable description of the Result.
 func (r ObjectResultCreated) String() string {
-	id := types.ToObjectRef(r.obj)
-	msg := fmt.Sprintf(
-		"Object %s\n"+
-			`Action "Created":`+"\n",
-		id.String(),
-	)
-	return msg
+	return reportStart(r)
 }
 
 // ObjectResultUpdated is returned when the object is updated.
@@ -221,15 +214,10 @@ func (r normalResult) Success() bool {
 
 // String returns a human readable description of the Result.
 func (r normalResult) String() string {
-	id := types.ToObjectRef(r.obj)
-	msg := fmt.Sprintf(
-		"Object %s\n"+
-			"Action %q\n",
-		id.String(),
-		r.action,
-	)
+	msg := reportStart(r)
+
 	if len(r.updatedFields) > 0 {
-		msg += "Updated Fields:\n"
+		msg += "Updated:\n"
 		for _, uf := range r.updatedFields {
 			msg += fmt.Sprintf("- %s\n", uf)
 		}
@@ -305,3 +293,24 @@ const (
 	// ActionCollision indicates aking actions was refused due to a collision with an existing object.
 	ActionCollision Action = "Collision"
 )
+
+func reportStart(or ObjectResult) string {
+	obj := or.Object()
+	msg := fmt.Sprintf(
+		"Object %s.%s %s/%s\n"+
+			`Action: %q`+"\n",
+		obj.GetKind(), obj.GetAPIVersion(),
+		obj.GetNamespace(), obj.GetName(),
+		or.Action(),
+	)
+	probe := or.Probe()
+	if probe.Success {
+		msg += "Probe:  Succeeded"
+	} else {
+		msg += "Probe:  Failed\n"
+		for _, m := range probe.Messages {
+			msg += "- " + m + "\n"
+		}
+	}
+	return msg
+}

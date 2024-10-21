@@ -30,7 +30,9 @@ func NewPhaseEngine(
 
 type phaseValidator interface {
 	Validate(
-		ctx context.Context, phase validation.Phase,
+		ctx context.Context,
+		owner client.Object,
+		phase validation.Phase,
 	) (validation.PhaseViolation, error)
 }
 
@@ -42,6 +44,12 @@ type objectEngine interface {
 		desiredObject *unstructured.Unstructured,
 		opts ...ObjectOption,
 	) (ObjectResult, error)
+	Teardown(
+		ctx context.Context,
+		owner client.Object, // Owner of the object.
+		revision int64, // Revision number, must start at 1.
+		desiredObject *unstructured.Unstructured,
+	) (objectDeleted bool, err error)
 }
 
 // Phase represents a phase consisting of multiple objects.
@@ -70,19 +78,46 @@ type PhaseObject struct {
 	Opts   []ObjectOption
 }
 
+// Teardown ensures the given phase is safely removed from the cluster.
+func (e *PhaseEngine) Teardown(
+	ctx context.Context,
+	owner client.Object,
+	revision int64,
+	phase Phase,
+) (bool, error) {
+	var numDeleted int
+	for _, o := range phase.GetObjects() {
+		deleted, err := e.objectEngine.Teardown(ctx, owner, revision, &o)
+
+		if IsTeardownRejectedDueToOwnerOrRevisionChange(err) {
+			// not deleted, but not "our" problem anymore.
+			numDeleted++
+			continue
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("teardown object: %w", err)
+		}
+		if deleted {
+			numDeleted++
+		}
+	}
+	return numDeleted == len(phase.Objects), nil
+}
+
 // Reconcile runs actions to bring actual state closer to desired.
 func (e *PhaseEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase *Phase,
+	phase Phase,
 ) (PhaseResult, error) {
 	pres := PhaseResult{
 		Name: phase.GetName(),
 	}
 
 	// Preflight
-	violation, err := e.phaseValidator.Validate(ctx, phase)
+	violation, err := e.phaseValidator.Validate(ctx, owner, &phase)
 	if err != nil {
 		return pres, fmt.Errorf("validating: %w", err)
 	}
