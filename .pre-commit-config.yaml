@@ -2,13 +2,15 @@ exclude: |
   (?x)(
     (^vendor/)|
     (^.vscode/)|
-    (.deepcopy.go$)
+    (.deepcopy.go$)|
+    (machinery/testdata/schemas.json)
   )
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:
   - id: check-added-large-files
+
   - id: check-case-conflict
   - id: check-json
   - id: check-merge-conflict
