@@ -88,6 +88,13 @@ func (e *PhaseEngine) Teardown(
 	var numDeleted int
 	for _, o := range phase.GetObjects() {
 		deleted, err := e.objectEngine.Teardown(ctx, owner, revision, &o)
+
+		if IsTeardownRejectedDueToOwnerOrRevisionChange(err) {
+			// not deleted, but not "our" problem anymore.
+			numDeleted++
+			continue
+		}
+
 		if err != nil {
 			return false, fmt.Errorf("teardown object: %w", err)
 		}

@@ -125,14 +125,19 @@ func (e *ObjectEngine) Teardown(
 		return false, fmt.Errorf("getting object revision: %w", err)
 	}
 	if actualRevision != revision {
-		// TODO: ERROR! ... ?
-		return true, nil
+		return false, TeardownRevisionError{
+			msg: fmt.Sprintf(
+				"Rejecting object teardown: Expected revision %d, actual revision %d",
+				revision, actualRevision,
+			),
+		}
 	}
 
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
 	if ctrlSit != ctrlSituationIsController {
-		// TODO: ERROR! ... ?
-		return true, nil
+		return false, TeardownRevisionError{
+			msg: "Rejecting object teardown: Owner not controller",
+		}
 	}
 
 	// Actually delete the object.
@@ -146,7 +151,8 @@ func (e *ObjectEngine) Teardown(
 	if err != nil {
 		return false, fmt.Errorf("deleting object: %w", err)
 	}
-	return false, nil // need to wait for Not Found Error to ensure finalizers have been progressed.
+	// need to wait for Not Found Error to ensure finalizers have been progressed.
+	return false, nil
 }
 
 // Reconcile runs actions to bring actual state closer to desired.
