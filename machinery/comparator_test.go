@@ -20,7 +20,7 @@ const testFieldOwner = "test.testy"
 func TestComparator(t *testing.T) {
 	t.Parallel()
 
-	testOAPISchema, err := os.ReadFile("testdata/secret.json")
+	testOAPISchema, err := os.ReadFile("testdata/schemas.json")
 	require.NoError(t, err)
 
 	oapi := &spec3.OpenAPI{}
@@ -96,6 +96,73 @@ func TestComparator(t *testing.T) {
 	err = n.SetControllerReference(owner, actualNewFieldOwner)
 	require.NoError(t, err)
 
+	// Test Case 2
+	pod := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"metadata": map[string]interface{}{
+				"name":      "t",
+				"namespace": "test",
+				"managedFields": []interface{}{
+					map[string]interface{}{
+						"apiVersion": "v1",
+						"fieldsType": "FieldsV1",
+						"fieldsV1": map[string]interface{}{
+							"f:spec": map[string]interface{}{
+								"f:containers": map[string]interface{}{
+									`k:{"name":"manager"}`: map[string]interface{}{
+										".": map[string]interface{}{},
+										"f:env": map[string]interface{}{
+											".": map[string]interface{}{},
+											`k:{"name":"TEST"}`: map[string]interface{}{
+												".":       map[string]interface{}{},
+												"f:name":  map[string]interface{}{},
+												"f:value": map[string]interface{}{},
+											},
+										},
+										"f:ports": map[string]interface{}{
+											".": map[string]interface{}{},
+											`k:{"containerPort":8080,"protocol":"TCP"}`: map[string]interface{}{
+												".":               map[string]interface{}{},
+												"f:name":          map[string]interface{}{},
+												"f:protocol":      map[string]interface{}{},
+												"f:containerPort": map[string]interface{}{},
+											},
+										},
+									},
+								},
+							},
+						},
+						"manager":   testFieldOwner,
+						"operation": "Apply",
+					},
+				},
+			},
+			"spec": map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{
+						"name": "manager",
+						"ports": []interface{}{
+							map[string]interface{}{
+								"containerPort": float64(8080),
+								"protocol":      "TCP",
+							},
+						},
+						"env": []interface{}{
+							map[string]interface{}{
+								"name":  "TEST",
+								"value": "xxx",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	err = n.SetControllerReference(owner, pod)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name    string
 		desired *unstructured.Unstructured
@@ -113,6 +180,11 @@ func TestComparator(t *testing.T) {
 				"Hans": ".data.test",
 			},
 		},
+		{
+			name:    "xxx",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -125,7 +197,9 @@ func TestComparator(t *testing.T) {
 					v, res.ConflictingPathsByFieldOwner[k].String(),
 				)
 			}
-			assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
+			if res.Comparison != nil {
+				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
+			}
 		})
 	}
 

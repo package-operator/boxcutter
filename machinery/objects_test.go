@@ -17,6 +17,7 @@ import (
 	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
 )
@@ -814,13 +815,14 @@ func TestObjectEngine(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &divergeDetectorMock{}
 
 			oe := NewObjectEngine(
-				cache, writer,
+				cache, uncachedReader, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
@@ -852,11 +854,12 @@ func TestObjectEngine(t *testing.T) {
 				assert.Equal(t, test.expectedObject, r.Object())
 			}
 			assert.Equal(t, test.expectedAction, res.Action())
+			cache.AssertCalled(t, "Watch", mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
 
-func TestObjectEngine_SanityChecks(t *testing.T) {
+func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Parallel()
 	oe := &ObjectEngine{}
 	owner := &unstructured.Unstructured{}
@@ -873,6 +876,238 @@ func TestObjectEngine_SanityChecks(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner must be persistet to cluster, empty UID", func() {
 			_, _ = oe.Reconcile(context.Background(), owner, 1, desired)
+		})
+	})
+}
+
+func TestObjectEngine_Teardown(t *testing.T) {
+	t.Parallel()
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+	err := controllerutil.SetOwnerReference(owner, obj, scheme.Scheme)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		revision      int64
+		desiredObject *unstructured.Unstructured
+
+		mockSetup func(
+			*cacheMock,
+			*testutil.CtrlClient,
+		)
+
+		expectedResult bool
+		expectedError  error
+	}{
+		{
+			name:          "deletes",
+			revision:      1,
+			desiredObject: obj,
+
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+			) {
+				actualObject := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Secret",
+						"metadata": map[string]interface{}{
+							"name":      "testi",
+							"namespace": "test",
+							"annotations": map[string]interface{}{
+								"testtest.xxx/revision": "1",
+							},
+							"ownerReferences": []interface{}{
+								map[string]interface{}{
+									"apiVersion":         "v1",
+									"kind":               "ConfigMap",
+									"controller":         true,
+									"name":               "owner",
+									"uid":                "12345-678",
+									"blockOwnerDeletion": true,
+								},
+							},
+						},
+					},
+				}
+
+				// Mock setup
+				cache.
+					On(
+						"Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything,
+					).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+
+				writer.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+			},
+		},
+		{
+			name:          "revision error",
+			revision:      1,
+			desiredObject: obj,
+
+			mockSetup: func(
+				cache *cacheMock, _ *testutil.CtrlClient,
+			) {
+				actualObject := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Secret",
+						"metadata": map[string]interface{}{
+							"name":      "testi",
+							"namespace": "test",
+							"annotations": map[string]interface{}{
+								"testtest.xxx/revision": "4",
+							},
+							"ownerReferences": []interface{}{
+								map[string]interface{}{
+									"apiVersion":         "v1",
+									"kind":               "ConfigMap",
+									"controller":         true,
+									"name":               "owner",
+									"uid":                "12345-678",
+									"blockOwnerDeletion": true,
+								},
+							},
+						},
+					},
+				}
+
+				// Mock setup
+				cache.
+					On(
+						"Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything,
+					).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+			},
+
+			expectedError: TeardownRevisionError{
+				msg: "Rejecting object teardown: Expected revision 1, actual revision 4",
+			},
+		},
+		{
+			name:          "owner error",
+			revision:      1,
+			desiredObject: obj,
+
+			mockSetup: func(
+				cache *cacheMock, _ *testutil.CtrlClient,
+			) {
+				actualObject := &unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Secret",
+						"metadata": map[string]interface{}{
+							"name":      "testi",
+							"namespace": "test",
+							"annotations": map[string]interface{}{
+								"testtest.xxx/revision": "1",
+							},
+						},
+					},
+				}
+
+				// Mock setup
+				cache.
+					On(
+						"Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything,
+					).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+			},
+
+			expectedError: TeardownRevisionError{
+				msg: "Rejecting object teardown: Owner not controller",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			uncachedReader := &cacheMock{}
+			cache := &cacheMock{}
+			writer := testutil.NewClient()
+			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+			divergeDetector := &divergeDetectorMock{}
+
+			cache.
+				On("Watch", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+
+			test.mockSetup(cache, writer)
+			oe := NewObjectEngine(
+				cache, uncachedReader, writer,
+				ownerStrategy, divergeDetector,
+				testFieldOwner,
+				testSystemPrefix,
+			)
+
+			ctx := context.Background()
+			deleted, err := oe.Teardown(ctx, owner, 1, obj)
+			if test.expectedError != nil {
+				assert.EqualError(t, err, test.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, test.expectedResult, deleted)
+			}
+		})
+	}
+}
+
+func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
+	t.Parallel()
+	oe := &ObjectEngine{}
+	owner := &unstructured.Unstructured{}
+	desired := &unstructured.Unstructured{}
+
+	t.Run("missing revision", func(t *testing.T) {
+		t.Parallel()
+		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
+			_, _ = oe.Teardown(context.Background(), owner, 0, desired)
+		})
+	})
+
+	t.Run("missing owner.UID", func(t *testing.T) {
+		t.Parallel()
+		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
+			_, _ = oe.Teardown(context.Background(), owner, 1, desired)
 		})
 	})
 }

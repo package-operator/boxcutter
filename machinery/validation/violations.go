@@ -95,10 +95,13 @@ func (v objectViolation) String() string {
 }
 
 func newObjectViolation(obj client.Object, msgs []string) *objectViolation {
-	return &objectViolation{
+	v := &objectViolation{
 		baseViolation: baseViolation{msgs: msgs},
-		obj:           types.ToObjectRef(obj),
 	}
+	if obj != nil {
+		v.obj = types.ToObjectRef(obj)
+	}
+	return v
 }
 
 func newObjectViolationFromRef(obj types.ObjectRef, msgs []string) *objectViolation {
@@ -132,7 +135,10 @@ func (v phaseViolation) Empty() bool {
 // String returns a human readable report of all violation messages
 // and the context the error was encountered in, if available.
 func (v phaseViolation) String() string {
-	out := fmt.Sprintf("Phase %q:\n", v.phaseName)
+	var out string
+	if len(v.phaseName) > 0 {
+		out += fmt.Sprintf("Phase %q:\n", v.phaseName)
+	}
 	out += v.baseViolation.String()
 	for _, o := range v.objects {
 		out += o.String()

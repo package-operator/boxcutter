@@ -23,17 +23,18 @@ func NewClusterPhaseValidator(
 	restMapper restMapper,
 	writer client.Writer,
 ) *PhaseValidator {
-	return NewNamespacedPhaseValidator(restMapper, writer, "")
+	return &PhaseValidator{
+		ObjectValidator: NewClusterObjectValidator(restMapper, writer),
+	}
 }
 
 // NewNamespacedPhaseValidator returns an ObjecctValidator for single-namespace deployments.
 func NewNamespacedPhaseValidator(
 	restMapper restMapper,
 	writer client.Writer,
-	namespace string,
 ) *PhaseValidator {
 	return &PhaseValidator{
-		ObjectValidator: NewNamespacedObjectValidator(restMapper, writer, namespace),
+		ObjectValidator: NewNamespacedObjectValidator(restMapper, writer),
 	}
 }
 
@@ -46,15 +47,20 @@ type Phase interface {
 }
 
 // Validate runs validation of the phase and its objects.
-func (v *PhaseValidator) Validate(ctx context.Context, phase Phase) (PhaseViolation, error) {
+func (v *PhaseValidator) Validate(ctx context.Context, owner client.Object, phase Phase) (PhaseViolation, error) {
 	var objects []ObjectViolation // errors of objects within.
 
 	// Phase name.
-	msgs := validatePhaseName(phase)
+	var msgs []string
+	if len(phase.GetName()) > 0 {
+		// TODO: This is due to ObjectSetPhases not knowing their phase name.
+		// Not sure this is the best way to deal with this...
+		msgs = validatePhaseName(phase)
+	}
 
 	// Individual objects.
 	for _, obj := range phase.GetObjects() {
-		vs, err := v.ObjectValidator.Validate(ctx, &obj)
+		vs, err := v.ObjectValidator.Validate(ctx, owner, &obj)
 		if err != nil {
 			return nil, err
 		}
