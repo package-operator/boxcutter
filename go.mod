@@ -8,7 +8,7 @@ require (
 	k8s.io/api v0.31.2
 	k8s.io/apiextensions-apiserver v0.31.0
 	k8s.io/apimachinery v0.31.2
-	k8s.io/client-go v0.31.1
+	k8s.io/client-go v0.31.2
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340
 	k8s.io/utils v0.0.0-20240902221715-702e33fdd3c3
 	pkg.package-operator.run/cardboard v0.0.3
