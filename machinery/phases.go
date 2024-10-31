@@ -3,6 +3,7 @@ package machinery
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"pkg.package-operator.run/boxcutter/machinery/types"
@@ -195,6 +196,7 @@ type PhaseResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	String() string
 }
 
 // phaseResult contains information of the state of a reconcile operation.
@@ -226,7 +228,7 @@ func (r *phaseResult) GetObjects() []ObjectResult {
 // if objects have unresolved conflicts.
 func (r *phaseResult) InTransistion() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
-		return true
+		return false
 	}
 	for _, o := range r.objects {
 		switch o.Action() {
@@ -252,4 +254,22 @@ func (r *phaseResult) IsComplete() bool {
 		}
 	}
 	return true
+}
+
+func (r *phaseResult) String() string {
+	out := fmt.Sprintf(
+		"Phase %q\nComplete: %t\nIn Transition: %t\n",
+		r.name, r.IsComplete(), r.InTransistion(),
+	)
+
+	if v, ok := r.GetPreflightViolation(); ok {
+		out += "Preflight Violation:\n"
+		out += "  " + strings.ReplaceAll(v.String(), "\n", "\n  ") + "\n"
+	}
+
+	out += "Objects:\n"
+	for _, ores := range r.objects {
+		out += "- " + strings.ReplaceAll(ores.String(), "\n", "\n  ") + "\n"
+	}
+	return out
 }

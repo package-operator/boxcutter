@@ -253,10 +253,10 @@ func TestPhaseResult(t *testing.T) {
 				expected: true,
 			},
 			{
-				name:     "true - preflight violation",
+				name:     "false - preflight violation",
 				pv:       &phaseViolationStub{msg: "xxx"},
 				res:      []ObjectResult{},
-				expected: true,
+				expected: false,
 			},
 			{
 				name:     "false - empty",
@@ -334,4 +334,37 @@ func TestPhaseResult(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestPhaseResult_String(t *testing.T) {
+	t.Parallel()
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+
+	r := phaseResult{
+		name:               "phase-1",
+		preflightViolation: &phaseViolationStub{msg: "xxx"},
+		objects: []ObjectResult{
+			newObjectResultCreated(obj, &noopProbe{}),
+		},
+	}
+
+	assert.Equal(t, `Phase "phase-1"
+Complete: false
+In Transition: false
+Preflight Violation:
+  xxx
+Objects:
+- Object Secret.v1 test/testi
+  Action: "Created"
+  Probe:  Succeeded
+`, r.String())
 }

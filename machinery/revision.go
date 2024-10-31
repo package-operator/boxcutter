@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,11 +76,12 @@ type RevisionResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	String() string
 }
 
 type revisionResult struct {
-	numberOfPhases     int
-	phases             []PhaseResult
+	phases             []string
+	phasesResults      []PhaseResult
 	preflightViolation validation.RevisionViolation
 }
 
@@ -94,11 +96,11 @@ func (r *revisionResult) GetPreflightViolation() (validation.RevisionViolation, 
 // if the phase has objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *revisionResult) InTransistion() bool {
-	if len(r.phases) < r.numberOfPhases {
+	if len(r.phasesResults) < len(r.phases) {
 		// not all phases have been acted on.
 		return true
 	}
-	for _, p := range r.phases {
+	for _, p := range r.phasesResults {
 		if p.InTransistion() {
 			return true
 		}
@@ -109,11 +111,11 @@ func (r *revisionResult) InTransistion() bool {
 // IsComplete returns true when all phases have
 // successfully been reconciled and pass their probes.
 func (r *revisionResult) IsComplete() bool {
-	if len(r.phases) < r.numberOfPhases {
+	if len(r.phasesResults) < len(r.phases) {
 		// not all phases have been acted on.
 		return false
 	}
-	for _, p := range r.phases {
+	for _, p := range r.phasesResults {
 		if !p.IsComplete() {
 			return false
 		}
@@ -123,15 +125,44 @@ func (r *revisionResult) IsComplete() bool {
 
 // GetPhases returns results for individual phases.
 func (r *revisionResult) GetPhases() []PhaseResult {
-	return r.phases
+	return r.phasesResults
+}
+
+func (r *revisionResult) String() string {
+	out := fmt.Sprintf(
+		"Revision\nComplete: %t\nIn Transition: %t\n",
+		r.IsComplete(), r.InTransistion(),
+	)
+
+	if v, ok := r.GetPreflightViolation(); ok {
+		out += "Preflight Violation:\n"
+		out += "  " + strings.ReplaceAll(v.String(), "\n", "\n  ") + "\n"
+	}
+
+	phasesWithResults := map[string]struct{}{}
+	out += "Phases:\n"
+	for _, ores := range r.phasesResults {
+		phasesWithResults[ores.GetName()] = struct{}{}
+		out += "- " + strings.TrimSpace(strings.ReplaceAll(ores.String(), "\n", "\n  ")) + "\n"
+	}
+
+	for _, p := range r.phases {
+		if _, ok := phasesWithResults[p]; ok {
+			continue
+		}
+		out += fmt.Sprintf("- Phase %q (Pending)\n", p)
+	}
+
+	return out
 }
 
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
 	ctx context.Context, rev Revision,
 ) (RevisionResult, error) {
-	rres := &revisionResult{
-		numberOfPhases: len(rev.Phases),
+	rres := &revisionResult{}
+	for _, p := range rev.Phases {
+		rres.phases = append(rres.phases, p.Name)
 	}
 
 	// Preflight
@@ -150,7 +181,7 @@ func (re *RevisionEngine) Reconcile(
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
-		rres.phases = append(rres.phases, pres)
+		rres.phasesResults = append(rres.phasesResults, pres)
 		if !pres.IsComplete() {
 			// Wait
 			return rres, nil

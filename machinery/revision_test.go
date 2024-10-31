@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -142,4 +143,47 @@ func (m *revisionValidatorMock) Validate(
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
 	return args.Get(0).(validation.RevisionViolation), args.Error(1)
+}
+
+func TestRevisionResult_String(t *testing.T) {
+	t.Parallel()
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+
+	r := revisionResult{
+		phases: []string{"phase-1", "phase-2"},
+		phasesResults: []PhaseResult{
+			&phaseResult{
+				name:               "phase-1",
+				preflightViolation: &phaseViolationStub{msg: "xxx"},
+				objects: []ObjectResult{
+					newObjectResultCreated(obj, &noopProbe{}),
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, `Revision
+Complete: false
+In Transition: true
+Phases:
+- Phase "phase-1"
+  Complete: false
+  In Transition: false
+  Preflight Violation:
+    xxx
+  Objects:
+  - Object Secret.v1 test/testi
+    Action: "Created"
+    Probe:  Succeeded
+- Phase "phase-2" (Pending)
+`, r.String())
 }
