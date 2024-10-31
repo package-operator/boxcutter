@@ -86,7 +86,7 @@ func (e *ObjectEngine) Teardown(
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
 	desiredObject *unstructured.Unstructured,
-) (objectDeleted bool, err error) {
+) (objectGone bool, err error) {
 	// Sanity checks.
 	if revision == 0 {
 		panic("owner revision must be set and start at 1")
