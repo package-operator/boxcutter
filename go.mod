@@ -13,7 +13,7 @@ require (
 	k8s.io/utils v0.0.0-20240902221715-702e33fdd3c3
 	pkg.package-operator.run/cardboard v0.0.3
 	sigs.k8s.io/controller-runtime v0.19.1
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.1
+	sigs.k8s.io/structured-merge-diff/v4 v4.4.2
 )
 
 require (
