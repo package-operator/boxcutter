@@ -153,7 +153,9 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.True(t, deleted)
+	assert.True(t, deleted.IsComplete())
+	assert.Empty(t, deleted.Waiting())
+	assert.Len(t, deleted.Gone(), 2)
 }
 
 type objectEngineMock struct {
@@ -222,4 +224,147 @@ func (s *phaseViolationStub) Messages() []string {
 
 func (s *phaseViolationStub) String() string {
 	return s.msg
+}
+
+func TestPhaseResult(t *testing.T) {
+	t.Parallel()
+	t.Run("InTransistion", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name     string
+			pv       validation.PhaseViolation
+			res      []ObjectResult
+			expected bool
+		}{
+			{
+				name: "true - progressed",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, &noopProbe{}),
+					newObjectResultProgressed(nil, DivergeResult{}, &noopProbe{}),
+				},
+				expected: true,
+			},
+			{
+				name: "true - conflict",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, &noopProbe{}),
+					newObjectResultConflict(nil, DivergeResult{}, nil, &noopProbe{}),
+				},
+				expected: true,
+			},
+			{
+				name:     "false - preflight violation",
+				pv:       &phaseViolationStub{msg: "xxx"},
+				res:      []ObjectResult{},
+				expected: false,
+			},
+			{
+				name:     "false - empty",
+				res:      []ObjectResult{},
+				expected: false,
+			},
+			{
+				name: "false - created",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, &noopProbe{}),
+				},
+				expected: false,
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				pr := &phaseResult{
+					preflightViolation: test.pv,
+					objects:            test.res,
+				}
+				assert.Equal(t, test.expected, pr.InTransistion())
+			})
+		}
+	})
+
+	t.Run("IsComplete", func(t *testing.T) {
+		t.Parallel()
+		failedProbeRes := newObjectResultCreated(nil, &noopProbe{}).(ObjectResultCreated)
+		failedProbeRes.probeResult.Success = false
+
+		tests := []struct {
+			name     string
+			pv       validation.PhaseViolation
+			res      []ObjectResult
+			expected bool
+		}{
+			{
+				name: "true",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, &noopProbe{}),
+				},
+				expected: true,
+			},
+			{
+				name:     "false - preflight violation",
+				pv:       &phaseViolationStub{msg: "xxx"},
+				res:      []ObjectResult{},
+				expected: false,
+			},
+			{
+				name: "false - conflict",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, &noopProbe{}),
+					newObjectResultConflict(nil, DivergeResult{}, nil, &noopProbe{}),
+				},
+				expected: false,
+			},
+			{
+				name: "false - probe fail",
+				res: []ObjectResult{
+					failedProbeRes,
+				},
+				expected: false,
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				pr := &phaseResult{
+					preflightViolation: test.pv,
+					objects:            test.res,
+				}
+				assert.Equal(t, test.expected, pr.IsComplete())
+			})
+		}
+	})
+}
+
+func TestPhaseResult_String(t *testing.T) {
+	t.Parallel()
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+
+	r := phaseResult{
+		name:               "phase-1",
+		preflightViolation: &phaseViolationStub{msg: "xxx"},
+		objects: []ObjectResult{
+			newObjectResultCreated(obj, &noopProbe{}),
+		},
+	}
+
+	assert.Equal(t, `Phase "phase-1"
+Complete: false
+In Transition: false
+Preflight Violation:
+  xxx
+Objects:
+- Object Secret.v1 test/testi
+  Action: "Created"
+  Probe:  Succeeded
+`, r.String())
 }
