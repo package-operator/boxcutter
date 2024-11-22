@@ -2,10 +2,9 @@ package machinery
 
 import (
 	"fmt"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 // ObjectResult is the common Result interface for multiple result types.
@@ -13,7 +12,7 @@ type ObjectResult interface {
 	// Action taken by the reconcile engine.
 	Action() Action
 	// Object as last seen on the cluster after creation/update.
-	Object() *unstructured.Unstructured
+	Object() Object
 	// Success returns true when the operation is considered successful.
 	// Operations are considered a success, when the object reflects desired state,
 	// is owned by the right controller and passes the given probe.
@@ -41,12 +40,12 @@ var (
 
 // ObjectResultCreated is returned when the Object was just created.
 type ObjectResultCreated struct {
-	obj         *unstructured.Unstructured
+	obj         Object
 	probeResult ObjectProbeResult
 }
 
 func newObjectResultCreated(
-	obj *unstructured.Unstructured,
+	obj Object,
 	probe prober,
 ) ObjectResult {
 	s, msgs := probe.Probe(obj)
@@ -65,7 +64,7 @@ func (r ObjectResultCreated) Action() Action {
 }
 
 // Object as last seen on the cluster after creation/update.
-func (r ObjectResultCreated) Object() *unstructured.Unstructured {
+func (r ObjectResultCreated) Object() Object {
 	return r.obj
 }
 
@@ -92,8 +91,8 @@ type ObjectResultUpdated struct {
 }
 
 func newObjectResultUpdated(
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	diverged CompareResult,
 	probe prober,
 ) ObjectResult {
 	return ObjectResultUpdated{
@@ -107,8 +106,8 @@ type ObjectResultProgressed struct {
 }
 
 func newObjectResultProgressed(
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	diverged CompareResult,
 	probe prober,
 ) ObjectResult {
 	return ObjectResultProgressed{
@@ -122,8 +121,8 @@ type ObjectResultIdle struct {
 }
 
 func newObjectResultIdle(
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	diverged CompareResult,
 	probe prober,
 ) ObjectResult {
 	return ObjectResultIdle{
@@ -137,8 +136,8 @@ type ObjectResultRecovered struct {
 }
 
 func newObjectResultRecovered(
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	diverged CompareResult,
 	probe prober,
 ) ObjectResult {
 	return ObjectResultRecovered{
@@ -147,31 +146,27 @@ func newObjectResultRecovered(
 }
 
 type normalResult struct {
-	action                          Action
-	obj                             *unstructured.Unstructured
-	updatedFields                   []string
-	conflictingFieldManagers        []string
-	conflictingFieldsByFieldManager map[string][]string
-	probeResult                     ObjectProbeResult
+	action        Action
+	obj           Object
+	probeResult   ObjectProbeResult
+	compareResult CompareResult
 }
 
 func newNormalObjectResult(
 	action Action,
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	compResult CompareResult,
 	probe prober,
 ) normalResult {
 	s, msgs := probe.Probe(obj)
 	return normalResult{
-		obj:                             obj,
-		action:                          action,
-		updatedFields:                   diverged.Modified(),
-		conflictingFieldManagers:        diverged.ConflictingFieldOwners,
-		conflictingFieldsByFieldManager: diverged.ConflictingPaths(),
+		obj:    obj,
+		action: action,
 		probeResult: ObjectProbeResult{
 			Success:  s,
 			Messages: msgs,
 		},
+		compareResult: compResult,
 	}
 }
 
@@ -181,23 +176,15 @@ func (r normalResult) Action() Action {
 }
 
 // Object as last seen on the cluster after creation/update.
-func (r normalResult) Object() *unstructured.Unstructured {
+func (r normalResult) Object() Object {
 	return r.obj
 }
 
-// Fields that had to be updated to reconcile the object.
-func (r normalResult) UpdatedFields() []string {
-	return r.updatedFields
-}
-
-// Other field managers that have changed fields causing conflicts.
-func (r normalResult) ConflictingFieldManagers() []string {
-	return r.conflictingFieldManagers
-}
-
-// List of field conflicts for each other manager.
-func (r normalResult) ConflictingFieldsByFieldManager() map[string][]string {
-	return r.conflictingFieldsByFieldManager
+// CompareResult returns the results from checking the
+// actual object on the cluster against the desired spec.
+// Contains informations about differences that had to be reconciled.
+func (r normalResult) CompareResult() CompareResult {
+	return r.compareResult
 }
 
 // Probe returns the results from the given object Probe.
@@ -215,23 +202,7 @@ func (r normalResult) Success() bool {
 // String returns a human readable description of the Result.
 func (r normalResult) String() string {
 	msg := reportStart(r)
-
-	if len(r.updatedFields) > 0 {
-		msg += "Updated:\n"
-		for _, uf := range r.updatedFields {
-			msg += fmt.Sprintf("- %s\n", uf)
-		}
-	}
-	if len(r.conflictingFieldsByFieldManager) > 0 {
-		msg += "Conflicting Field Managers: " + strings.Join(r.conflictingFieldManagers, ",") + "\n"
-		for k, v := range r.conflictingFieldsByFieldManager {
-			msg += fmt.Sprintf("Fields contested by %q:\n", k)
-			for _, f := range v {
-				msg += fmt.Sprintf("- %s\n", f)
-			}
-		}
-	}
-	return msg
+	return msg + r.compareResult.String()
 }
 
 // ObjectResultCollision is returned when conflicting with an existing object.
@@ -261,8 +232,8 @@ func (r ObjectResultCollision) String() string {
 }
 
 func newObjectResultConflict(
-	obj *unstructured.Unstructured,
-	diverged DivergeResult,
+	obj Object,
+	diverged CompareResult,
 	conflictingOwner *metav1.OwnerReference,
 	probe prober,
 ) ObjectResult {
@@ -296,16 +267,21 @@ const (
 
 func reportStart(or ObjectResult) string {
 	obj := or.Object()
+	if err := ensureGVKIsSet(obj, scheme.Scheme); err != nil {
+		panic(err)
+	}
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
 	msg := fmt.Sprintf(
 		"Object %s.%s %s/%s\n"+
 			`Action: %q`+"\n",
-		obj.GetKind(), obj.GetAPIVersion(),
+		gvk.Kind, gvk.GroupVersion().String(),
 		obj.GetNamespace(), obj.GetName(),
 		or.Action(),
 	)
 	probe := or.Probe()
 	if probe.Success {
-		msg += "Probe:  Succeeded"
+		msg += "Probe:  Succeeded\n"
 	} else {
 		msg += "Probe:  Failed\n"
 		for _, m := range probe.Messages {

@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kube-openapi/pkg/spec3"
 	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
@@ -17,7 +18,7 @@ import (
 
 const testFieldOwner = "test.testy"
 
-func TestComparator(t *testing.T) {
+func TestComparator_Unstructured(t *testing.T) {
 	t.Parallel()
 
 	testOAPISchema, err := os.ReadFile("testdata/schemas.json")
@@ -168,35 +169,31 @@ func TestComparator(t *testing.T) {
 		desired *unstructured.Unstructured
 		actual  *unstructured.Unstructured
 
-		expectedConflictingFieldOwners []string
-		expectedConflictingPaths       map[string]string
+		expectedReport string
 	}{
 		{
-			name:                           "Hans updated .data.test",
-			desired:                        desiredNewFieldOwner,
-			actual:                         actualNewFieldOwner,
-			expectedConflictingFieldOwners: []string{"Hans"},
-			expectedConflictingPaths: map[string]string{
-				"Hans": ".data.test",
-			},
+			name:    "Hans updated .data.test",
+			desired: desiredNewFieldOwner,
+			actual:  actualNewFieldOwner,
+			expectedReport: `Conflicts:
+- "Hans"
+  .data.test
+`,
 		},
 		{
-			name:    "xxx",
-			desired: pod.DeepCopy(),
-			actual:  pod.DeepCopy(),
+			name:           "Pod Compare",
+			desired:        pod.DeepCopy(),
+			actual:         pod.DeepCopy(),
+			expectedReport: ``,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			res, err := d.HasDiverged(owner, test.desired, test.actual)
+			res, err := d.Compare(owner, test.desired, test.actual)
 			require.NoError(t, err)
-			assert.Equal(t, test.expectedConflictingFieldOwners, res.ConflictingFieldOwners)
-			for k, v := range test.expectedConflictingPaths {
-				assert.Equal(t,
-					v, res.ConflictingPathsByFieldOwner[k].String(),
-				)
-			}
+
+			assert.Equal(t, test.expectedReport, res.String())
 			if res.Comparison != nil {
 				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
 			}
@@ -249,11 +246,287 @@ func TestComparator(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.HasDiverged(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
 		require.NoError(t, err)
 		// no conflicts
-		assert.Empty(t, res.ConflictingFieldOwners)
-		assert.Empty(t, res.ConflictingPathsByFieldOwner)
+		assert.Empty(t, res.ConflictingMangers)
+		// But a modification
+		assert.Equal(t, "- Modified Fields:\n.data.test\n", res.Comparison.String())
+	})
+}
+
+func TestComparator_Structured(t *testing.T) {
+	t.Parallel()
+
+	testOAPISchema, err := os.ReadFile("testdata/schemas.json")
+	require.NoError(t, err)
+
+	oapi := &spec3.OpenAPI{}
+	require.NoError(t, oapi.UnmarshalJSON(testOAPISchema))
+
+	a := &dummyOpenAPIAccessor{
+		openAPI: oapi,
+	}
+	n := ownerhandling.NewNative(scheme.Scheme)
+	d := &Comparator{
+		ownerStrategy:   n,
+		openAPIAccessor: a,
+		fieldOwner:      testFieldOwner,
+	}
+
+	now := metav1.Now()
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:               "12345-678",
+			Name:              "owner",
+			Namespace:         "test",
+			CreationTimestamp: now,
+		},
+	}
+
+	// Test Case 1
+	// Another actor has updated .data.test and the field owner has changed.
+	desiredNewFieldOwner := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "t",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"test": []byte("test123"),
+		},
+	}
+
+	actualNewFieldOwner := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "t",
+			Namespace:         "test",
+			CreationTimestamp: now,
+			UID:               types.UID("xxx"),
+			ResourceVersion:   "xxx",
+			Generation:        3,
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{
+					APIVersion: "v1",
+					Manager:    testFieldOwner,
+					Operation:  metav1.ManagedFieldsOperationApply,
+					FieldsType: "FieldsV1",
+					FieldsV1: &metav1.FieldsV1{
+						Raw: []byte(`{}`),
+					},
+				},
+				{
+					APIVersion: "v1",
+					Manager:    "Hans",
+					Operation:  metav1.ManagedFieldsOperationApply,
+					FieldsType: "FieldsV1",
+					FieldsV1: &metav1.FieldsV1{
+						Raw: []byte(`{"f:data":{"f:test":{}}}`),
+					},
+				},
+			},
+		},
+		Data: map[string][]byte{
+			"test": []byte("test123"),
+		},
+	}
+	err = n.SetControllerReference(owner, actualNewFieldOwner)
+	require.NoError(t, err)
+
+	// Test Case 2
+	desiredPod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "t",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: "manager",
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: 8080,
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "TEST",
+							Value: "xxx",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	actualPod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "t",
+			Namespace:         "test",
+			CreationTimestamp: now,
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{
+					APIVersion: "v1",
+					Manager:    testFieldOwner,
+					Operation:  metav1.ManagedFieldsOperationApply,
+					FieldsType: "FieldsV1",
+					FieldsV1: &metav1.FieldsV1{
+						Raw: []byte(`{
+    "f:spec": {
+        "f:containers": {
+            "k:{\"name\":\"manager\"}": {
+                ".": {},
+                "f:env": {
+                    ".": {},
+                    "k:{\"name\":\"TEST\"}": {
+                        ".": {},
+                        "f:name": {},
+                        "f:value": {}
+                    }
+                },
+                "f:ports": {
+                    ".": {},
+                    "k:{\"containerPort\":8080,\"protocol\":\"TCP\"}": {
+                        ".": {},
+                        "f:name": {},
+                        "f:protocol": {},
+                        "f:containerPort": {}
+                    }
+                }
+            }
+        }
+    }
+}`),
+					},
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Resources: corev1.ResourceRequirements{},
+					Name:      "manager",
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: 8080,
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "TEST",
+							Value: "xxx",
+						},
+					},
+				},
+			},
+		},
+	}
+	err = n.SetControllerReference(owner, actualPod)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		desired Object
+		actual  Object
+
+		expectedReport string
+	}{
+		{
+			name:    "Hans updated .data.test",
+			desired: desiredNewFieldOwner,
+			actual:  actualNewFieldOwner,
+			expectedReport: `Conflicts:
+- "Hans"
+  .data.test
+`,
+		},
+		{
+			name:           "Pod no update",
+			desired:        desiredPod.DeepCopy(),
+			actual:         actualPod.DeepCopy(),
+			expectedReport: ``,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			res, err := d.Compare(owner, test.desired, test.actual)
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedReport, res.String())
+
+			if res.Comparison != nil {
+				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
+			}
+		})
+	}
+
+	t.Run("divergence on field values", func(t *testing.T) {
+		t.Parallel()
+
+		desiredValueChange := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "t",
+					"namespace": "test",
+				},
+				"data": map[string]interface{}{
+					"test": "test123",
+				},
+			},
+		}
+
+		actualValueChange := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "t",
+					"namespace": "test",
+					"managedFields": []interface{}{
+						map[string]interface{}{
+							"apiVersion": "v1",
+							"fieldsType": "FieldsV1",
+							"fieldsV1": map[string]interface{}{
+								"f:data": map[string]interface{}{
+									"f:test": map[string]interface{}{},
+								},
+							},
+							"manager":   testFieldOwner,
+							"operation": "Apply",
+						},
+					},
+				},
+				"data": map[string]interface{}{
+					"test": "test1234",
+				},
+			},
+		}
+		err = n.SetControllerReference(owner, actualValueChange)
+		require.NoError(t, err)
+
+		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		require.NoError(t, err)
+		// no conflicts
+		assert.Empty(t, res.ConflictingMangers)
 		// But a modification
 		assert.Equal(t, "- Modified Fields:\n.data.test\n", res.Comparison.String())
 	})
@@ -329,7 +602,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cn, err := openAPICanonicalName(test.obj)
+			cn, err := openAPICanonicalName(&test.obj)
 			require.NoError(t, err)
 			assert.Equal(t, test.cn, cn)
 		})

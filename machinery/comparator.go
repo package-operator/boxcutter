@@ -3,7 +3,6 @@ package machinery
 import (
 	"bytes"
 	"fmt"
-	"slices"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -18,6 +17,7 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 	"k8s.io/kube-openapi/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
 )
@@ -29,6 +29,7 @@ import (
 type Comparator struct {
 	ownerStrategy   divergeDetectorOwnerStrategy
 	openAPIAccessor openAPIAccessor
+	scheme          *runtime.Scheme
 	fieldOwner      string
 }
 
@@ -48,6 +49,7 @@ type openAPIAccessor interface {
 func NewComparator(
 	ownerStrategy divergeDetectorOwnerStrategy,
 	discoveryClient discoveryClient,
+	scheme *runtime.Scheme,
 	fieldOwner string,
 ) *Comparator {
 	return &Comparator{
@@ -55,6 +57,7 @@ func NewComparator(
 		openAPIAccessor: &defaultOpenAPIAccessor{
 			c: discoveryClient.OpenAPIV3(),
 		},
+		scheme:     scheme,
 		fieldOwner: fieldOwner,
 	}
 }
@@ -68,37 +71,90 @@ func (a *defaultOpenAPIAccessor) Get(gv schema.GroupVersion) (*spec3.OpenAPI, er
 	return r.GVSpec(gv)
 }
 
-// DivergeResult holds the results of a diverge check.
-type DivergeResult struct {
-	// List of other conflicting field owners.
-	ConflictingFieldOwners []string
-	// Mapping of field owner name to conflicting fieldsets.
-	ConflictingPathsByFieldOwner map[string]*fieldpath.Set
+// CompareResult holds the results of a compare check.
+type CompareResult struct {
+	// ConflictingMangers is a list of all managers conflicting with "our" field manager.
+	ConflictingMangers []CompareResultManagedFields
+	// OtherManagers is a list of all other managers working on the object.
+	OtherManagers []CompareResultManagedFields
+	// DesiredFieldSet contains all fields identified to be
+	// part of the desired object. It is used for conflict
+	// detection with other field owners.
+	DesiredFieldSet *fieldpath.Set
 	// Comparison of desired fields to actual fields.
 	Comparison *typed.Comparison
 }
 
-// IsConflict returns true, if another actor has overidden changes.
-func (d DivergeResult) IsConflict() bool {
-	return len(d.ConflictingFieldOwners) > 0
+// CompareResultManagedFields combines a manger with the fields it manages.
+type CompareResultManagedFields struct {
+	// Manager causing the conflict.
+	Manager string
+	// Fields affected by this conflict.
+	Fields *fieldpath.Set
 }
 
-// ConflictingPaths returns a list if conflicting field paths indexed by their owner.
-func (d DivergeResult) ConflictingPaths() map[string][]string {
-	if d.ConflictingPathsByFieldOwner == nil {
-		return nil
+func (d CompareResult) String() string {
+	var out bytes.Buffer
+	if len(d.ConflictingMangers) != 0 {
+		fmt.Fprintln(&out, "Conflicts:")
 	}
-	out := map[string][]string{}
-	for k, v := range d.ConflictingPathsByFieldOwner {
-		v.Iterate(func(p fieldpath.Path) {
-			out[k] = append(out[k], p.String())
+	for _, c := range d.ConflictingMangers {
+		fmt.Fprintf(&out, "- %q\n", c.Manager)
+		c.Fields.Iterate(func(p fieldpath.Path) {
+			fmt.Fprintf(&out, "  %s\n", p.String())
 		})
 	}
-	return out
+
+	if len(d.OtherManagers) != 0 {
+		fmt.Fprintln(&out, "Other:")
+	}
+	for _, c := range d.OtherManagers {
+		fmt.Fprintf(&out, "- %q\n", c.Manager)
+		c.Fields.Iterate(func(p fieldpath.Path) {
+			fmt.Fprintf(&out, "  %s\n", p.String())
+		})
+	}
+
+	if d.Comparison != nil {
+		printAdded := d.Comparison.Added != nil && !d.Comparison.Added.Empty()
+		printModified := d.Comparison.Modified != nil && !d.Comparison.Modified.Empty()
+		printRemoved := d.Comparison.Removed != nil && !d.Comparison.Removed.Empty()
+		if printAdded || printModified || printRemoved {
+			fmt.Fprintln(&out, "Comparison:")
+		}
+
+		if printAdded {
+			fmt.Fprintln(&out, "- Added:")
+			d.Comparison.Added.Leaves().Iterate(func(p fieldpath.Path) {
+				fmt.Fprintf(&out, "  %s\n", p.String())
+			})
+		}
+
+		if printModified {
+			fmt.Fprintln(&out, "- Modified:")
+			d.Comparison.Modified.Leaves().Iterate(func(p fieldpath.Path) {
+				fmt.Fprintf(&out, "  %s\n", p.String())
+			})
+		}
+
+		if printRemoved {
+			fmt.Fprintln(&out, "- Removed:")
+			d.Comparison.Removed.Leaves().Iterate(func(p fieldpath.Path) {
+				fmt.Fprintf(&out, "  %s\n", p.String())
+			})
+		}
+	}
+
+	return out.String()
+}
+
+// IsConflict returns true, if another actor has overidden changes.
+func (d CompareResult) IsConflict() bool {
+	return len(d.ConflictingMangers) > 0
 }
 
 // Modified returns a list of fields that have been modified.
-func (d DivergeResult) Modified() []string {
+func (d CompareResult) Modified() []string {
 	if d.Comparison == nil {
 		return nil
 	}
@@ -112,18 +168,26 @@ func (d DivergeResult) Modified() []string {
 	return out
 }
 
-// HasDiverged checks if a resource has been changed from desired.
-func (d *Comparator) HasDiverged(
+// Compare checks if a resource has been changed from desired.
+func (d *Comparator) Compare(
 	owner client.Object,
-	desiredObject, actualObject *unstructured.Unstructured,
-) (res DivergeResult, err error) {
-	gvk := desiredObject.GroupVersionKind()
-	if gvk != actualObject.GroupVersionKind() {
+	desiredObject, actualObject Object,
+) (res CompareResult, err error) {
+	if err := ensureGVKIsSet(desiredObject, d.scheme); err != nil {
+		return res, err
+	}
+	if err := ensureGVKIsSet(actualObject, d.scheme); err != nil {
+		return res, err
+	}
+
+	desiredGVK := desiredObject.GetObjectKind().GroupVersionKind()
+	actualGVK := actualObject.GetObjectKind().GroupVersionKind()
+	if desiredGVK != actualGVK {
 		panic("desired and actual must have same GVK")
 	}
 
 	// Get OpenAPISchema to have the correct merge and field configuration.
-	s, err := d.openAPIAccessor.Get(gvk.GroupVersion())
+	s, err := d.openAPIAccessor.Get(desiredGVK.GroupVersion())
 	if err != nil {
 		return res, fmt.Errorf("API accessor: %w", err)
 	}
@@ -135,16 +199,43 @@ func (d *Comparator) HasDiverged(
 	var parser typed.Parser
 	ss.CopyInto(&parser.Schema)
 
+	// Extrapolate a field set from desired.
+	desiredObject = desiredObject.DeepCopyObject().(Object)
+	if err := d.ownerStrategy.SetControllerReference(owner, desiredObject); err != nil {
+		return res, err
+	}
+	tName, err := openAPICanonicalName(desiredObject)
+	if err != nil {
+		return res, err
+	}
+	typedDesired, err := getTyped(&parser, tName, desiredObject)
+	if err != nil {
+		return res, fmt.Errorf("desired object: %w", err)
+	}
+	res.DesiredFieldSet, err = typedDesired.ToFieldSet()
+	if err != nil {
+		return res, fmt.Errorf("desired to field set: %w", err)
+	}
+	res.DesiredFieldSet = res.DesiredFieldSet.Difference(stripSet)
+
 	// Get "our" managed fields on actual.
 	mf, ok := findManagedFields(d.fieldOwner, actualObject)
 	if !ok {
 		// not a single managed field from "us" -> diverged for sure
-		// -> diverged on EVERYTHING.
-		// TODO: sort out how to report this, because listing ALL fields is not helpful.
-		res.ConflictingPathsByFieldOwner = map[string]*fieldpath.Set{}
 		for _, mf := range actualObject.GetManagedFields() {
-			res.ConflictingFieldOwners = append(res.ConflictingFieldOwners, mf.Manager)
-			res.ConflictingPathsByFieldOwner[mf.Manager] = &fieldpath.Set{}
+			fs := &fieldpath.Set{}
+			if err := fs.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
+				return res, fmt.Errorf("field set for actual: %w", err)
+			}
+			fs = res.DesiredFieldSet.Intersection(fs)
+			if fs.Empty() {
+				continue
+			}
+
+			res.ConflictingMangers = append(res.ConflictingMangers, CompareResultManagedFields{
+				Manager: mf.Manager,
+				Fields:  fs,
+			})
 		}
 		return res, nil
 	}
@@ -153,71 +244,72 @@ func (d *Comparator) HasDiverged(
 		return res, fmt.Errorf("field set for actual: %w", err)
 	}
 
-	// Extrapolate a field set from desired.
-	desiredObject = desiredObject.DeepCopy()
-	if err := d.ownerStrategy.SetControllerReference(owner, desiredObject); err != nil {
-		return res, err
-	}
-	tName, err := openAPICanonicalName(*desiredObject)
-	if err != nil {
-		return res, err
-	}
-	typedDesired, err := parser.Type(tName).FromUnstructured(desiredObject.Object)
-	if err != nil {
-		return res, fmt.Errorf("struct merge type conversion: %w", err)
-	}
-
-	desiredFieldSet, err := typedDesired.ToFieldSet()
-	if err != nil {
-		return res, fmt.Errorf("desired to field set: %w", err)
-	}
-
 	// Diff field sets to get exclude all ownership references
 	// that are the same between actual and desired.
 	// Also limit results to leave nodes to keep resulting diff small.
-	diff := desiredFieldSet.Difference(actualFieldSet).Difference(stripSet).Leaves()
+	diff := res.DesiredFieldSet.Difference(actualFieldSet).Leaves()
 
 	// Index diff into something more useful for the caller.
-	managerPaths := map[string]*fieldpath.Set{}
 	for _, mf := range actualObject.GetManagedFields() {
+		if mf.Manager == d.fieldOwner {
+			continue
+		}
+
 		fs := &fieldpath.Set{}
 		if err := fs.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
 			return res, fmt.Errorf("field set for actual: %w", err)
 		}
-		diff.Iterate(func(p fieldpath.Path) {
-			if !fs.Has(p) {
-				return
-			}
-			if _, ok := managerPaths[mf.Manager]; !ok {
-				managerPaths[mf.Manager] = &fieldpath.Set{}
-			}
-			managerPaths[mf.Manager].Insert(p)
-		})
-	}
-	for fieldOwner := range managerPaths {
-		res.ConflictingFieldOwners = append(res.ConflictingFieldOwners, fieldOwner)
-	}
-	slices.Sort(res.ConflictingFieldOwners)
-	if len(managerPaths) > 0 {
-		res.ConflictingPathsByFieldOwner = managerPaths
+		c := CompareResultManagedFields{
+			Manager: mf.Manager,
+			Fields:  fs.Intersection(diff),
+		}
+		if !c.Fields.Empty() {
+			res.ConflictingMangers = append(res.ConflictingMangers, c)
+		}
+
+		o := CompareResultManagedFields{
+			Manager: mf.Manager,
+			Fields:  fs.Difference(diff),
+		}
+		if o.Fields.Empty() {
+			continue
+		}
+		res.OtherManagers = append(res.OtherManagers, o)
 	}
 
-	typedActual, err := parser.Type(tName).FromUnstructured(actualObject.Object)
+	typedActual, err := getTyped(&parser, tName, actualObject)
 	if err != nil {
-		return res, fmt.Errorf("from unstructured: %w", err)
+		return res, fmt.Errorf("actual object: %w", err)
 	}
-	actualValues := typedActual.ExtractItems(desiredFieldSet)
-	m := actualValues.AsValue().Unstructured().(map[string]interface{})
-	stripNils(m)
-	actualValues, err = parser.Type(tName).FromUnstructured(m)
-	if err != nil {
-		return res, fmt.Errorf("struct merge type conversion: %w", err)
-	}
-	res.Comparison, err = typedDesired.Compare(actualValues)
+
+	actualValues := typedActual.RemoveItems(stripSet)
+	res.Comparison, err = typedDesired.RemoveItems(stripSet).Compare(actualValues)
 	if err != nil {
 		return res, fmt.Errorf("compare: %w", err)
 	}
 	return res, nil
+}
+
+func getTyped(
+	parser *typed.Parser,
+	typeName string, obj Object,
+) (
+	typedDesired *typed.TypedValue, err error,
+) {
+	switch tobj := obj.(type) {
+	case *unstructured.Unstructured:
+		typedDesired, err = parser.Type(typeName).FromUnstructured(tobj.Object)
+		if err != nil {
+			return typedDesired, fmt.Errorf("from unstructured: %w", err)
+		}
+
+	default:
+		typedDesired, err = parser.Type(typeName).FromStructured(tobj)
+		if err != nil {
+			return typedDesired, fmt.Errorf("from structured: %w", err)
+		}
+	}
+	return typedDesired, nil
 }
 
 // Returns the ManagedFields associated with the given field owner.
@@ -238,7 +330,9 @@ func findManagedFields(fieldOwner string, accessor metav1.Object) (metav1.Manage
 var stripSet = fieldpath.NewSet(
 	fieldpath.MakePathOrDie("apiVersion"),
 	fieldpath.MakePathOrDie("kind"),
-	fieldpath.MakePathOrDie("metadata"),
+	// When we use this stip set via RemoveItems(),
+	// we don't want to remove everything under the metadata key.
+	// fieldpath.MakePathOrDie("metadata"),
 	fieldpath.MakePathOrDie("metadata", "name"),
 	fieldpath.MakePathOrDie("metadata", "namespace"),
 	fieldpath.MakePathOrDie("metadata", "creationTimestamp"),
@@ -264,8 +358,8 @@ func init() {
 }
 
 // Returns the canonical name to find the OpenAPISchema for the given objects GVK.
-func openAPICanonicalName(obj unstructured.Unstructured) (string, error) {
-	gvk := obj.GroupVersionKind()
+func openAPICanonicalName(obj client.Object) (string, error) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	var schemaTypeName string
 	o, err := existingAPIScheme.New(gvk)
@@ -281,31 +375,14 @@ func openAPICanonicalName(obj unstructured.Unstructured) (string, error) {
 	return util.ToRESTFriendlyName(schemaTypeName), nil
 }
 
-func stripNils(o map[string]interface{}) {
-	for k, v := range o {
-		if v == nil {
-			// o[k] = map[interface{}]interface{}{}
-			delete(o, k)
-			continue
-		}
-		if m, ok := v.(map[string]interface{}); ok {
-			stripNils(m)
-		}
-
-		l, ok := v.([]interface{})
-		if !ok {
-			continue
-		}
-		var newList []interface{}
-		for _, v := range l {
-			if v == nil {
-				continue
-			}
-			if m, ok := v.(map[string]interface{}); ok {
-				stripNils(m)
-			}
-			newList = append(newList, v)
-		}
-		o[k] = newList
+func ensureGVKIsSet(obj client.Object, scheme *runtime.Scheme) error {
+	if !obj.GetObjectKind().GroupVersionKind().Empty() {
+		return nil
 	}
+	gvk, err := apiutil.GVKForObject(obj, scheme)
+	if err != nil {
+		return err
+	}
+	obj.GetObjectKind().SetGroupVersionKind(gvk)
+	return nil
 }

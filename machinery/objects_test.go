@@ -54,7 +54,7 @@ func TestObjectEngine(t *testing.T) {
 		mockSetup func(
 			*cacheMock,
 			*testutil.CtrlClient,
-			*divergeDetectorMock,
+			*comperatorMock,
 		)
 
 		expectedAction Action
@@ -79,7 +79,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -105,8 +105,8 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -154,7 +154,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				// Mock setup
 				cache.
@@ -168,8 +168,8 @@ func TestObjectEngine(t *testing.T) {
 					).
 					Return(errors.NewNotFound(schema.GroupResource{}, ""))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Create", mock.Anything, mock.Anything, mock.Anything).
@@ -218,7 +218,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -247,8 +247,8 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -287,7 +287,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -326,8 +326,8 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -376,7 +376,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -417,8 +417,8 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{
 						Comparison: &typed.Comparison{
 							Added:    &fieldpath.Set{},
 							Removed:  &fieldpath.Set{},
@@ -473,7 +473,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -514,9 +514,11 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{
-						ConflictingFieldOwners: []string{"xxx"},
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{
+						ConflictingMangers: []CompareResultManagedFields{
+							{Manager: "xxx"},
+						},
 					}, nil)
 
 				writer.
@@ -566,7 +568,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -607,8 +609,8 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -659,7 +661,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -700,8 +702,8 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -757,7 +759,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *divergeDetectorMock,
+				ddm *comperatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -788,8 +790,8 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("HasDiverged", owner, mock.Anything, mock.Anything).
-					Return(DivergeResult{}, nil)
+					On("Compare", owner, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
 
 				writer.
 					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -819,9 +821,10 @@ func TestObjectEngine(t *testing.T) {
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
-			divergeDetector := &divergeDetectorMock{}
+			divergeDetector := &comperatorMock{}
 
 			oe := NewObjectEngine(
+				scheme.Scheme,
 				cache, uncachedReader, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
@@ -1065,7 +1068,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
-			divergeDetector := &divergeDetectorMock{}
+			divergeDetector := &comperatorMock{}
 
 			cache.
 				On("Watch", mock.Anything, mock.Anything, mock.Anything).
@@ -1073,6 +1076,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 
 			test.mockSetup(cache, writer)
 			oe := NewObjectEngine(
+				scheme.Scheme,
 				cache, uncachedReader, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
@@ -1125,14 +1129,14 @@ func (m *cacheMock) Watch(
 	return args.Error(0)
 }
 
-type divergeDetectorMock struct {
+type comperatorMock struct {
 	mock.Mock
 }
 
-func (m *divergeDetectorMock) HasDiverged(
+func (m *comperatorMock) Compare(
 	owner client.Object,
-	desiredObject, actualObject *unstructured.Unstructured,
-) (DivergeResult, error) {
+	desiredObject, actualObject Object,
+) (CompareResult, error) {
 	args := m.Called(owner, desiredObject, actualObject)
-	return args.Get(0).(DivergeResult), args.Error(1)
+	return args.Get(0).(CompareResult), args.Error(1)
 }

@@ -40,7 +40,6 @@ linters:
   - canonicalheader
   - copyloopvar
   - decorder
-  - dupword
   - durationcheck
   - err113
   - errcheck
@@ -114,11 +113,10 @@ linters:
 issues:
   max-same-issues: 0
   max-issues-per-linter: 0
-  exclude-dirs:
-  - internal/packages/internal/packagekickstart/rukpak
+  exclude-dirs: []
   exclude-rules:
   # Integration tests MUST NOT run in parallel.
-  - path: 'integration\/.+\.go'
+  - path: 'test\/.+\.go'
     linters: [paralleltest]
   # Do not require comments on private packages and
   # do not check their style.
