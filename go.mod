@@ -6,17 +6,17 @@ toolchain go1.23.2
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/stretchr/testify v1.9.0
-	k8s.io/api v0.31.2
-	k8s.io/apiextensions-apiserver v0.31.0
-	k8s.io/apimachinery v0.31.2
-	k8s.io/client-go v0.31.1
+	github.com/stretchr/testify v1.10.0
+	k8s.io/api v0.31.3
+	k8s.io/apiextensions-apiserver v0.31.3
+	k8s.io/apimachinery v0.31.3
+	k8s.io/client-go v0.31.3
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340
 	k8s.io/utils v0.0.0-20240902221715-702e33fdd3c3
 	pkg.package-operator.run/cardboard v0.0.3
 	pkg.package-operator.run/cardboard/kubeutils v0.0.0-20240215101355-db99fcc2d2ce
 	pkg.package-operator.run/cardboard/modules/kind v0.0.3
-	sigs.k8s.io/controller-runtime v0.19.1
+	sigs.k8s.io/controller-runtime v0.19.2
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1
 )
 
@@ -67,14 +67,14 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
-	golang.org/x/net v0.30.0 // indirect
+	golang.org/x/net v0.31.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/term v0.25.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/term v0.26.0 // indirect
+	golang.org/x/text v0.20.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
