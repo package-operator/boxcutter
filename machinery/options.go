@@ -1,7 +1,6 @@
 package machinery
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -82,7 +81,7 @@ func (p WithPaused) ApplyToObjectOptions(opts *ObjectOptions) {
 }
 
 type prober interface {
-	Probe(obj *unstructured.Unstructured) (success bool, messages []string)
+	Probe(obj client.Object) (success bool, messages []string)
 }
 
 // WithProbe executes the given probe to evaluate the state of the object.
@@ -95,6 +94,6 @@ func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {
 
 type noopProbe struct{}
 
-func (p *noopProbe) Probe(_ *unstructured.Unstructured) (success bool, messages []string) {
+func (p *noopProbe) Probe(_ client.Object) (success bool, messages []string) {
 	return true, nil
 }

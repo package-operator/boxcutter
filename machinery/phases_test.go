@@ -45,7 +45,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseViolationStub{}, nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, DivergeResult{}, &noopProbe{}), nil)
+		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, &noopProbe{}), nil)
 
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, Phase{
@@ -92,7 +92,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 			msg: "xxx",
 		}, nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, DivergeResult{}, &noopProbe{}), nil)
+		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, &noopProbe{}), nil)
 
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, Phase{
@@ -240,7 +240,7 @@ func TestPhaseResult(t *testing.T) {
 				name: "true - progressed",
 				res: []ObjectResult{
 					newObjectResultCreated(nil, &noopProbe{}),
-					newObjectResultProgressed(nil, DivergeResult{}, &noopProbe{}),
+					newObjectResultProgressed(nil, CompareResult{}, &noopProbe{}),
 				},
 				expected: true,
 			},
@@ -248,7 +248,7 @@ func TestPhaseResult(t *testing.T) {
 				name: "true - conflict",
 				res: []ObjectResult{
 					newObjectResultCreated(nil, &noopProbe{}),
-					newObjectResultConflict(nil, DivergeResult{}, nil, &noopProbe{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, &noopProbe{}),
 				},
 				expected: true,
 			},
@@ -311,7 +311,7 @@ func TestPhaseResult(t *testing.T) {
 				name: "false - conflict",
 				res: []ObjectResult{
 					newObjectResultCreated(nil, &noopProbe{}),
-					newObjectResultConflict(nil, DivergeResult{}, nil, &noopProbe{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, &noopProbe{}),
 				},
 				expected: false,
 			},

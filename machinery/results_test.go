@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
 )
@@ -40,10 +41,12 @@ func TestNormalObjectResult(t *testing.T) {
 	t.Parallel()
 	or := newNormalObjectResult(
 		ActionProgressed, resultExampleObj,
-		DivergeResult{
-			ConflictingFieldOwners: []string{"hans"},
-			ConflictingPathsByFieldOwner: map[string]*fieldpath.Set{
-				"hans": fieldpath.NewSet(fieldpath.MakePathOrDie("spec", "image")),
+		CompareResult{
+			ConflictingMangers: []CompareResultManagedFields{
+				{
+					Manager: "hans",
+					Fields:  fieldpath.NewSet(fieldpath.MakePathOrDie("spec", "image")),
+				},
 			},
 			Comparison: &typed.Comparison{
 				Modified: fieldpath.NewSet(
@@ -57,11 +60,12 @@ func TestNormalObjectResult(t *testing.T) {
 Action: "Progressed"
 Probe:  Failed
 - broken: broken
-Updated:
-- .spec.image
-Conflicting Field Managers: hans
-Fields contested by "hans":
-- .spec.image
+Conflicts:
+- "hans"
+  .spec.image
+Comparison:
+- Modified:
+  .spec.image
 `, or.String())
 }
 
@@ -71,7 +75,7 @@ type probeStub struct {
 }
 
 func (s *probeStub) Probe(
-	_ *unstructured.Unstructured,
+	_ client.Object,
 ) (success bool, messages []string) {
 	return s.success, s.msgs
 }

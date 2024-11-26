@@ -264,12 +264,12 @@ func (r *phaseResult) String() string {
 
 	if v, ok := r.GetPreflightViolation(); ok {
 		out += "Preflight Violation:\n"
-		out += "  " + strings.ReplaceAll(v.String(), "\n", "\n  ") + "\n"
+		out += "  " + strings.ReplaceAll(strings.TrimSpace(v.String()), "\n", "\n  ") + "\n"
 	}
 
 	out += "Objects:\n"
 	for _, ores := range r.objects {
-		out += "- " + strings.ReplaceAll(ores.String(), "\n", "\n  ") + "\n"
+		out += "- " + strings.ReplaceAll(strings.TrimSpace(ores.String()), "\n", "\n  ") + "\n"
 	}
 	return out
 }

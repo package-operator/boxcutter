@@ -56,3 +56,11 @@ func (dev *Dev) Lint(_ context.Context, _ []string) error {
 func (dev *Dev) LintFix(_ context.Context, _ []string) error {
 	return lint.glciFix()
 }
+
+// Destroy the local development cluster.
+func (dev *Dev) Destroy(ctx context.Context, _ []string) error {
+	self := run.Meth1(dev, dev.Destroy, []string{})
+	return mgr.ParallelDeps(ctx, self,
+		run.Meth(cluster, cluster.Destroy),
+	)
+}

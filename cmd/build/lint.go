@@ -29,5 +29,5 @@ func (Lint) glciCheck() error {
 }
 
 func (Lint) validateGitClean() error {
-	return shr.Run("git", "diff", "--quiet", "--exit-code")
+	return shr.Run("git", "diff", "--exit-code")
 }

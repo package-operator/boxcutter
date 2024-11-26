@@ -19,13 +19,14 @@ import (
 
 // ObjectEngine reconciles individual objects.
 type ObjectEngine struct {
-	cache objectEngineCache
+	scheme *runtime.Scheme
+	cache  client.Reader
 	// Used to resolve conflicts with objects
 	// excluded by the cache selector.
-	uncachedReader  client.Reader
-	writer          client.Writer
-	ownerStrategy   objectEngineOwnerStrategy
-	divergeDetector objectEngineDivergeDetector
+	uncachedReader client.Reader
+	writer         client.Writer
+	ownerStrategy  objectEngineOwnerStrategy
+	comperator     comperator
 
 	fieldOwner   string
 	systemPrefix string
@@ -33,28 +34,36 @@ type ObjectEngine struct {
 
 // NewObjectEngine returns a new Engine instance.
 func NewObjectEngine(
-	cache objectEngineCache,
+	scheme *runtime.Scheme,
+	cache client.Reader,
 	uncachedReader client.Reader,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
-	divergeDetector objectEngineDivergeDetector,
+	comperator comperator,
 
 	fieldOwner string,
 	systemPrefix string,
 ) *ObjectEngine {
 	return &ObjectEngine{
-		cache:           cache,
-		uncachedReader:  uncachedReader,
-		writer:          writer,
-		ownerStrategy:   ownerStrategy,
-		divergeDetector: divergeDetector,
+		scheme:         scheme,
+		cache:          cache,
+		uncachedReader: uncachedReader,
+		writer:         writer,
+		ownerStrategy:  ownerStrategy,
+		comperator:     comperator,
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
 	}
 }
 
-type objectEngineCache interface {
+// Object interface combining client.Object and runtime.Object.
+type Object interface {
+	client.Object
+	runtime.Object
+}
+
+type watchCache interface {
 	client.Reader
 
 	// Called to inform cache about owner object relationships.
@@ -73,11 +82,11 @@ type objectEngineOwnerStrategy interface {
 	ReleaseController(obj metav1.Object)
 }
 
-type objectEngineDivergeDetector interface {
-	HasDiverged(
+type comperator interface {
+	Compare(
 		owner client.Object,
-		desiredObject, actualObject *unstructured.Unstructured,
-	) (res DivergeResult, err error)
+		desiredObject, actualObject Object,
+	) (res CompareResult, err error)
 }
 
 // Teardown ensures the given object is safely removed from the cluster.
@@ -95,15 +104,17 @@ func (e *ObjectEngine) Teardown(
 		panic("owner must be persisted to cluster, empty UID")
 	}
 
-	// Ensure to prime cache.
-	err = e.cache.Watch(
-		ctx, owner, desiredObject)
-	if meta.IsNoMatchError(err) {
-		// API no longer registered.
-		// Consider the object deleted.
-		return true, nil
-	} else if err != nil {
-		return false, fmt.Errorf("watching resource: %w", err)
+	if c, ok := e.cache.(watchCache); ok {
+		// Ensure to prime cache.
+		err = c.Watch(
+			ctx, owner, desiredObject)
+		if meta.IsNoMatchError(err) {
+			// API no longer registered.
+			// Consider the object deleted.
+			return true, nil
+		} else if err != nil {
+			return false, fmt.Errorf("watching resource: %w", err)
+		}
 	}
 
 	// Lookup actual object state on cluster.
@@ -160,7 +171,7 @@ func (e *ObjectEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
-	desiredObject *unstructured.Unstructured,
+	desiredObject Object,
 	opts ...ObjectOption,
 ) (ObjectResult, error) {
 	var options ObjectOptions
@@ -177,8 +188,12 @@ func (e *ObjectEngine) Reconcile(
 		panic("owner must be persistet to cluster, empty UID")
 	}
 
+	if err := ensureGVKIsSet(desiredObject, e.scheme); err != nil {
+		return nil, err
+	}
+
 	// Copy because some client actions will modify the object.
-	desiredObject = desiredObject.DeepCopy()
+	desiredObject = desiredObject.DeepCopyObject().(Object)
 	e.setObjectRevision(desiredObject, revision)
 	if err := e.ownerStrategy.SetControllerReference(
 		owner, desiredObject,
@@ -187,13 +202,15 @@ func (e *ObjectEngine) Reconcile(
 	}
 
 	// Ensure to prime cache.
-	if err := e.cache.Watch(
-		ctx, owner, desiredObject); err != nil {
-		return nil, fmt.Errorf("watching resource: %w", err)
+	if c, ok := e.cache.(watchCache); ok {
+		if err := c.Watch(
+			ctx, owner, desiredObject); err != nil {
+			return nil, fmt.Errorf("watching resource: %w", err)
+		}
 	}
 
 	// Lookup actual object state on cluster.
-	actualObject := desiredObject.DeepCopy()
+	actualObject := desiredObject.DeepCopyObject().(Object)
 	err := e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
@@ -244,15 +261,15 @@ func (e *ObjectEngine) objectUpdateHandling(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	desiredObject *unstructured.Unstructured,
-	actualObject *unstructured.Unstructured,
+	desiredObject Object,
+	actualObject Object,
 	options ObjectOptions,
 ) (ObjectResult, error) {
 	// An object already exists on the cluster.
 	// Before doing anything else, we have to figure out
 	// who owns and controls the object.
 	ctrlSit, actualOwner := e.detectOwner(owner, actualObject, options.PreviousOwners)
-	diverged, err := e.divergeDetector.HasDiverged(owner, desiredObject, actualObject)
+	compareRes, err := e.comperator.Compare(owner, desiredObject, actualObject)
 	if err != nil {
 		return nil, fmt.Errorf("diverge check: %w", err)
 	}
@@ -266,24 +283,23 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Leave object alone.
 		// It's already owned by a later revision.
 		return newObjectResultProgressed(
-			actualObject, diverged, options.Probe,
+			actualObject, compareRes, options.Probe,
 		), nil
 	}
 
 	switch ctrlSit {
 	case ctrlSituationIsController:
-		modified := diverged.Comparison != nil &&
-			(!diverged.Comparison.Added.Empty() ||
-				!diverged.Comparison.Modified.Empty() ||
-				!diverged.Comparison.Removed.Empty())
-		if !diverged.IsConflict() && !modified {
+		modified := compareRes.Comparison != nil &&
+			(!compareRes.Comparison.Modified.Empty() ||
+				!compareRes.Comparison.Removed.Empty())
+		if !compareRes.IsConflict() && !modified {
 			// No conflict with another field manager
 			// and no modification needed.
 			return newObjectResultIdle(
-				actualObject, diverged, options.Probe,
+				actualObject, compareRes, options.Probe,
 			), nil
 		}
-		if !diverged.IsConflict() && modified {
+		if !compareRes.IsConflict() && modified {
 			// No conflict with another controller, but modifications needed.
 			err := e.patch(
 				ctx, desiredObject, client.Apply,
@@ -294,7 +310,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
 			return newObjectResultUpdated(
-				desiredObject, diverged, options.Probe,
+				desiredObject, compareRes, options.Probe,
 			), nil
 		}
 
@@ -326,7 +342,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
 		return newObjectResultRecovered(
-			desiredObject, diverged, options.Probe,
+			desiredObject, compareRes, options.Probe,
 		), nil
 
 		// Taking control checklist:
@@ -339,7 +355,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	case ctrlSituationUnknownController:
 		if options.CollisionProtection != CollisionProtectionNone {
 			return newObjectResultConflict(
-				actualObject, diverged,
+				actualObject, compareRes,
 				actualOwner, options.Probe,
 			), nil
 		}
@@ -347,7 +363,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	case ctrlSituationNoController:
 		if options.CollisionProtection == CollisionProtectionPrevent {
 			return newObjectResultConflict(
-				actualObject, diverged,
+				actualObject, compareRes,
 				actualOwner, options.Probe,
 			), nil
 		}
@@ -383,7 +399,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
 	return newObjectResultUpdated(
-		desiredObject, diverged, options.Probe,
+		desiredObject, compareRes, options.Probe,
 	), nil
 }
 
@@ -399,7 +415,7 @@ func (e *ObjectEngine) create(
 
 func (e *ObjectEngine) patch(
 	ctx context.Context,
-	obj *unstructured.Unstructured,
+	obj Object,
 	patch client.Patch,
 	options ObjectOptions,
 	opts ...client.PatchOption,
@@ -434,7 +450,7 @@ const (
 
 func (e *ObjectEngine) detectOwner(
 	owner client.Object,
-	actualObject *unstructured.Unstructured,
+	actualObject Object,
 	previousOwners []client.Object,
 ) (ctrlSituation, *metav1.OwnerReference) {
 	// e.ownerStrategy may either work on .metadata.ownerReferences or
@@ -487,7 +503,7 @@ func (e *ObjectEngine) getObjectRevision(obj client.Object) (int64, error) {
 // Migrate field ownerships to be compatible with server-side apply.
 // SSA really is complicated: https://github.com/kubernetes/kubernetes/issues/99003
 func (e *ObjectEngine) migrateFieldManagersToSSA(
-	ctx context.Context, object *unstructured.Unstructured,
+	ctx context.Context, object Object,
 ) error {
 	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
 		object, sets.New(e.fieldOwner), e.fieldOwner)
