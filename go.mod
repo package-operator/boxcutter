@@ -14,7 +14,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340
 	k8s.io/utils v0.0.0-20240902221715-702e33fdd3c3
 	pkg.package-operator.run/cardboard v0.0.3
-	pkg.package-operator.run/cardboard/kubeutils v0.0.0-20240215101355-db99fcc2d2ce
+	pkg.package-operator.run/cardboard/kubeutils v0.0.3
 	pkg.package-operator.run/cardboard/modules/kind v0.0.3
 	sigs.k8s.io/controller-runtime v0.19.2
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1
