@@ -80,7 +80,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	pkg.package-operator.run/cardboard/modules/kubeclients v0.0.0-20240215101355-db99fcc2d2ce // indirect
+	pkg.package-operator.run/cardboard/modules/kubeclients v0.0.3 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kind v0.25.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
