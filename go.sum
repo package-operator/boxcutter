@@ -211,8 +211,8 @@ pkg.package-operator.run/cardboard/kubeutils v0.0.0-20240215101355-db99fcc2d2ce 
 pkg.package-operator.run/cardboard/kubeutils v0.0.0-20240215101355-db99fcc2d2ce/go.mod h1:oBaZQmF47mOgkzlh0xsRi538uGLkgOlrNYcx1YniFRw=
 pkg.package-operator.run/cardboard/modules/kind v0.0.3 h1:M3nfRn2DaCjPLH9sOfbr6+A0bd70ewXJfpdt3PppuPs=
 pkg.package-operator.run/cardboard/modules/kind v0.0.3/go.mod h1:L+u4ogwzzku4loz63fGRUDINCffMzJg8eD/8lWdrw/w=
-pkg.package-operator.run/cardboard/modules/kubeclients v0.0.0-20240215101355-db99fcc2d2ce h1:7gPFVuq2L+EhHUMMLXdhfqbZkGP1XM5nhVzhMQB4Fio=
-pkg.package-operator.run/cardboard/modules/kubeclients v0.0.0-20240215101355-db99fcc2d2ce/go.mod h1:nUOs8FnYgwkzdv4xjnAtRI+BWBqLcgKHsSPvqGbMbJ4=
+pkg.package-operator.run/cardboard/modules/kubeclients v0.0.3 h1:VElzc9uqr/YPSLOVXFCAMDYUWDg6YBQ7KXM8VOYx/hU=
+pkg.package-operator.run/cardboard/modules/kubeclients v0.0.3/go.mod h1:elDewKwMcdscSlE9Bg/BmGpiJ0Mll1DMAdS92CoeGuY=
 sigs.k8s.io/controller-runtime v0.19.2 h1:3sPrF58XQEPzbE8T81TN6selQIMGbtYwuaJ6eDssDF8=
 sigs.k8s.io/controller-runtime v0.19.2/go.mod h1:iRmWllt8IlaLjvTTDLhRBXIEtkCK6hwVBJJsYS9Ajf4=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd h1:EDPBXCAspyGV4jQlpZSudPeMmr1bNJefnuqLsRAsHZo=
