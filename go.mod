@@ -17,7 +17,7 @@ require (
 	pkg.package-operator.run/cardboard/kubeutils v0.0.3
 	pkg.package-operator.run/cardboard/modules/kind v0.0.3
 	sigs.k8s.io/controller-runtime v0.19.2
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.3
+	sigs.k8s.io/structured-merge-diff/v4 v4.5.0
 )
 
 require (
