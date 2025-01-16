@@ -8,6 +8,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 var (
@@ -21,9 +23,11 @@ var (
 			},
 		},
 	}
-	failedExampleProbe = &probeStub{
-		success: false,
-		msgs:    []string{"broken: broken"},
+	failedExampleProbe = map[string]types.Prober{
+		types.ProgressProbeType: &probeStub{
+			success: false,
+			msgs:    []string{"broken: broken"},
+		},
 	}
 )
 
@@ -32,8 +36,9 @@ func TestObjectResultCreated(t *testing.T) {
 	or := newObjectResultCreated(resultExampleObj, failedExampleProbe)
 	assert.Equal(t, `Object Deployment.apps/v1 test/testi
 Action: "Created"
-Probe:  Failed
-- broken: broken
+Probes:
+- Progress: Failed
+  - broken: broken
 `, or.String())
 }
 
@@ -58,8 +63,9 @@ func TestNormalObjectResult(t *testing.T) {
 
 	assert.Equal(t, `Object Deployment.apps/v1 test/testi
 Action: "Progressed"
-Probe:  Failed
-- broken: broken
+Probes:
+- Progress: Failed
+  - broken: broken
 Conflicts:
 - "hans"
   .spec.image

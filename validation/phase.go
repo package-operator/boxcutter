@@ -5,10 +5,10 @@ import (
 	"slices"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"pkg.package-operator.run/boxcutter/machinery/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // PhaseValidator valiates a phase with all contained objects.
@@ -38,16 +38,10 @@ func NewNamespacedPhaseValidator(
 	}
 }
 
-// Phase represents a phase consisting of multiple objects.
-type Phase interface {
-	// GetName returns the name of the phase.
-	GetName() string
-	// GetObjects returns the list of objects belonging to the phase.
-	GetObjects() []unstructured.Unstructured
-}
-
 // Validate runs validation of the phase and its objects.
-func (v *PhaseValidator) Validate(ctx context.Context, owner client.Object, phase Phase) (PhaseViolation, error) {
+func (v *PhaseValidator) Validate(
+	ctx context.Context, owner client.Object, phase types.PhaseAccessor,
+) (PhaseViolation, error) {
 	var objects []ObjectViolation // errors of objects within.
 
 	// Phase name.
@@ -60,7 +54,7 @@ func (v *PhaseValidator) Validate(ctx context.Context, owner client.Object, phas
 
 	// Individual objects.
 	for _, obj := range phase.GetObjects() {
-		vs, err := v.ObjectValidator.Validate(ctx, owner, &obj)
+		vs, err := v.ObjectValidator.Validate(ctx, owner, obj.Object)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +68,7 @@ func (v *PhaseValidator) Validate(ctx context.Context, owner client.Object, phas
 	return newPhaseViolation(phase.GetName(), msgs, compactObjectViolations(objects)), nil
 }
 
-func validatePhaseName(phase Phase) []string {
+func validatePhaseName(phase types.PhaseAccessor) []string {
 	if errMsgs := phaseNameValid(phase.GetName()); len(errMsgs) > 0 {
 		return []string{
 			"phase name invalid: " + strings.Join(errMsgs, " and "),
@@ -87,14 +81,14 @@ func phaseNameValid(phaseName string) (errs []string) {
 	return validation.IsDNS1035Label(phaseName)
 }
 
-func checkForObjectDuplicates(phases ...Phase) []ObjectViolation {
+func checkForObjectDuplicates(phases ...types.PhaseAccessor) []ObjectViolation {
 	// remember unique objects and the phase we found them first in.
 	uniqueObjectsInPhase := map[types.ObjectRef]string{}
 	conflicts := map[types.ObjectRef]map[string]struct{}{}
 
 	for _, phase := range phases {
 		for _, obj := range phase.GetObjects() {
-			ref := types.ToObjectRef(&obj)
+			ref := types.ToObjectRef(obj.Object)
 			otherPhase, ok := uniqueObjectsInPhase[ref]
 			if !ok {
 				continue

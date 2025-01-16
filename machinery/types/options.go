@@ -1,4 +1,4 @@
-package machinery
+package types
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -8,17 +8,14 @@ import (
 type ObjectOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
-	Probe               prober
 	Paused              bool
+	Probes              map[string]Prober
 }
 
 // Default sets empty Option fields to their default value.
 func (opts *ObjectOptions) Default() {
 	if len(opts.CollisionProtection) == 0 {
 		opts.CollisionProtection = CollisionProtectionPrevent
-	}
-	if opts.Probe == nil {
-		opts.Probe = &noopProbe{}
 	}
 }
 
@@ -31,7 +28,7 @@ var (
 	_ ObjectOption = (WithCollisionProtection)("")
 	_ ObjectOption = (WithPaused{})
 	_ ObjectOption = (WithPreviousOwners{})
-	_ ObjectOption = (WithProbe{})
+	_ ObjectOption = (WithProbe("", nil))
 )
 
 // CollisionProtection specifies how collision with existing objects and
@@ -80,20 +77,45 @@ func (p WithPaused) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.Paused = true
 }
 
-type prober interface {
+// ProgressProbeType is a well-known probe type used to guard phase progression.
+const ProgressProbeType = "Progress"
+
+// Prober needs to be implemented by any probing implementation.
+type Prober interface {
 	Probe(obj client.Object) (success bool, messages []string)
 }
 
-// WithProbe executes the given probe to evaluate the state of the object.
-type WithProbe struct{ Probe prober }
-
-// ApplyToObjectOptions implements Option.
-func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {
-	opts.Probe = p.Probe
+// ProbeFunc wraps the given function to work with the Prober interface.
+func ProbeFunc(fn func(obj client.Object) (success bool, messages []string)) Prober {
+	return &probeFn{Fn: fn}
 }
 
-type noopProbe struct{}
+type probeFn struct {
+	Fn func(obj client.Object) (success bool, messages []string)
+}
 
-func (p *noopProbe) Probe(_ client.Object) (success bool, messages []string) {
-	return true, nil
+func (p *probeFn) Probe(obj client.Object) (success bool, messages []string) {
+	return p.Fn(obj)
+}
+
+// WithProbe registers the given probe to evaluate state of objects.
+func WithProbe(t string, probe Prober) ObjectOption {
+	return OptionFn{
+		Fn: func(opts *ObjectOptions) {
+			if opts.Probes == nil {
+				opts.Probes = map[string]Prober{}
+			}
+			opts.Probes[t] = probe
+		},
+	}
+}
+
+// OptionFn implements the ObjectOption interface for functions.
+type OptionFn struct {
+	Fn func(opts *ObjectOptions)
+}
+
+// ApplyToObjectOptions implements Option.
+func (p OptionFn) ApplyToObjectOptions(opts *ObjectOptions) {
+	p.Fn(opts)
 }

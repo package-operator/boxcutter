@@ -8,25 +8,24 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // ObjectEngine reconciles individual objects.
 type ObjectEngine struct {
-	scheme *runtime.Scheme
-	cache  client.Reader
-	// Used to resolve conflicts with objects
-	// excluded by the cache selector.
-	uncachedReader client.Reader
-	writer         client.Writer
-	ownerStrategy  objectEngineOwnerStrategy
-	comperator     comperator
+	scheme        *runtime.Scheme
+	cache         client.Reader
+	writer        client.Writer
+	ownerStrategy objectEngineOwnerStrategy
+	comperator    comperator
 
 	fieldOwner   string
 	systemPrefix string
@@ -36,7 +35,6 @@ type ObjectEngine struct {
 func NewObjectEngine(
 	scheme *runtime.Scheme,
 	cache client.Reader,
-	uncachedReader client.Reader,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
 	comperator comperator,
@@ -45,12 +43,11 @@ func NewObjectEngine(
 	systemPrefix string,
 ) *ObjectEngine {
 	return &ObjectEngine{
-		scheme:         scheme,
-		cache:          cache,
-		uncachedReader: uncachedReader,
-		writer:         writer,
-		ownerStrategy:  ownerStrategy,
-		comperator:     comperator,
+		scheme:        scheme,
+		cache:         cache,
+		writer:        writer,
+		ownerStrategy: ownerStrategy,
+		comperator:    comperator,
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
@@ -63,23 +60,13 @@ type Object interface {
 	runtime.Object
 }
 
-type watchCache interface {
-	client.Reader
-
-	// Called to inform cache about owner object relationships.
-	// Allows cache to dynamically setup and teardown caches.
-	// This method should block until this cache has been established and synced.
-	Watch(
-		ctx context.Context, owner client.Object, obj runtime.Object,
-	) error
-}
-
 type objectEngineOwnerStrategy interface {
 	SetControllerReference(owner, obj metav1.Object) error
 	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
 	IsController(owner, obj metav1.Object) bool
 	CopyOwnerReferences(objA, objB metav1.Object)
 	ReleaseController(obj metav1.Object)
+	RemoveOwner(owner, obj metav1.Object)
 }
 
 type comperator interface {
@@ -94,7 +81,7 @@ func (e *ObjectEngine) Teardown(
 	ctx context.Context,
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
-	desiredObject *unstructured.Unstructured,
+	desiredObject Object,
 ) (objectGone bool, err error) {
 	// Sanity checks.
 	if revision == 0 {
@@ -104,24 +91,23 @@ func (e *ObjectEngine) Teardown(
 		panic("owner must be persisted to cluster, empty UID")
 	}
 
-	if c, ok := e.cache.(watchCache); ok {
-		// Ensure to prime cache.
-		err = c.Watch(
-			ctx, owner, desiredObject)
-		if meta.IsNoMatchError(err) {
-			// API no longer registered.
-			// Consider the object deleted.
-			return true, nil
-		} else if err != nil {
-			return false, fmt.Errorf("watching resource: %w", err)
-		}
+	// Shortcut when Owner is orphaning its dependents.
+	// If we don't check this, we might be too quick and start deleting
+	// dependents that should be kept on the cluster!
+	if controllerutil.ContainsFinalizer(owner, "orphan") {
+		return true, nil
 	}
 
 	// Lookup actual object state on cluster.
-	actualObject := desiredObject.DeepCopy()
+	actualObject := desiredObject.DeepCopyObject().(Object)
 	err = e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
+	if meta.IsNoMatchError(err) {
+		// API no longer registered.
+		// Consider the object deleted.
+		return true, nil
+	}
 	if errors.IsNotFound(err) {
 		// Object is gone, yay!
 		return true, nil
@@ -135,20 +121,12 @@ func (e *ObjectEngine) Teardown(
 	if err != nil {
 		return false, fmt.Errorf("getting object revision: %w", err)
 	}
-	if actualRevision != revision {
-		return false, TeardownRevisionError{
-			msg: fmt.Sprintf(
-				"Rejecting object teardown: Expected revision %d, actual revision %d",
-				revision, actualRevision,
-			),
-		}
-	}
-
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
-	if ctrlSit != ctrlSituationIsController {
-		return false, TeardownRevisionError{
-			msg: "Rejecting object teardown: Owner not controller",
-		}
+	if actualRevision != revision || ctrlSit != ctrlSituationIsController {
+		// Remove us from owners list:
+		patch := actualObject.DeepCopyObject().(Object)
+		e.ownerStrategy.RemoveOwner(owner, patch)
+		return true, e.writer.Patch(ctx, patch, client.MergeFrom(actualObject))
 	}
 
 	// Actually delete the object.
@@ -159,6 +137,7 @@ func (e *ObjectEngine) Teardown(
 	if errors.IsNotFound(err) {
 		return true, nil
 	}
+	// TODO: Catch Precondition errors?
 	if err != nil {
 		return false, fmt.Errorf("deleting object: %w", err)
 	}
@@ -172,9 +151,9 @@ func (e *ObjectEngine) Reconcile(
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
 	desiredObject Object,
-	opts ...ObjectOption,
+	opts ...types.ObjectOption,
 ) (ObjectResult, error) {
-	var options ObjectOptions
+	var options types.ObjectOptions
 	for _, opt := range opts {
 		opt.ApplyToObjectOptions(&options)
 	}
@@ -201,14 +180,6 @@ func (e *ObjectEngine) Reconcile(
 		return nil, fmt.Errorf("set controller reference: %w", err)
 	}
 
-	// Ensure to prime cache.
-	if c, ok := e.cache.(watchCache); ok {
-		if err := c.Watch(
-			ctx, owner, desiredObject); err != nil {
-			return nil, fmt.Errorf("watching resource: %w", err)
-		}
-	}
-
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
 	err := e.cache.Get(
@@ -228,15 +199,7 @@ func (e *ObjectEngine) Reconcile(
 		if errors.IsAlreadyExists(err) {
 			// Might be a slow cache or an object created by a different actor
 			// but excluded by the cache selector.
-			if err := e.uncachedReader.Get(
-				ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
-			); err != nil {
-				return nil, fmt.Errorf("getting object via cache bypass after create conflict: %w", err)
-			}
-			return e.objectUpdateHandling(
-				ctx, owner, revision,
-				desiredObject, actualObject, options,
-			)
+			return nil, &CreateCollisionError{msg: err.Error()}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("creating resource: %w", err)
@@ -245,7 +208,7 @@ func (e *ObjectEngine) Reconcile(
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
 		return newObjectResultCreated(
-			desiredObject, options.Probe), nil
+			desiredObject, options.Probes), nil
 
 	case err != nil:
 		return nil, fmt.Errorf("getting object: %w", err)
@@ -263,7 +226,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	revision int64,
 	desiredObject Object,
 	actualObject Object,
-	options ObjectOptions,
+	options types.ObjectOptions,
 ) (ObjectResult, error) {
 	// An object already exists on the cluster.
 	// Before doing anything else, we have to figure out
@@ -283,7 +246,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Leave object alone.
 		// It's already owned by a later revision.
 		return newObjectResultProgressed(
-			actualObject, compareRes, options.Probe,
+			actualObject, compareRes, options.Probes,
 		), nil
 	}
 
@@ -296,7 +259,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			// No conflict with another field manager
 			// and no modification needed.
 			return newObjectResultIdle(
-				actualObject, compareRes, options.Probe,
+				actualObject, compareRes, options.Probes,
 			), nil
 		}
 		if !compareRes.IsConflict() && modified {
@@ -310,7 +273,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
 			return newObjectResultUpdated(
-				desiredObject, compareRes, options.Probe,
+				desiredObject, compareRes, options.Probes,
 			), nil
 		}
 
@@ -341,8 +304,13 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if err != nil {
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
+		if options.Paused {
+			return newObjectResultRecovered(
+				actualObject, compareRes, options.Probes,
+			), nil
+		}
 		return newObjectResultRecovered(
-			desiredObject, compareRes, options.Probe,
+			desiredObject, compareRes, options.Probes,
 		), nil
 
 		// Taking control checklist:
@@ -353,18 +321,18 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// If any of the above points is not true, refuse.
 
 	case ctrlSituationUnknownController:
-		if options.CollisionProtection != CollisionProtectionNone {
+		if options.CollisionProtection != types.CollisionProtectionNone {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probe,
+				actualOwner, options.Probes,
 			), nil
 		}
 
 	case ctrlSituationNoController:
-		if options.CollisionProtection == CollisionProtectionPrevent {
+		if options.CollisionProtection == types.CollisionProtectionPrevent {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probe,
+				actualOwner, options.Probes,
 			), nil
 		}
 
@@ -398,14 +366,19 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Might be a Conflict if object already exists.
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
+	if options.Paused {
+		return newObjectResultUpdated(
+			actualObject, compareRes, options.Probes,
+		), nil
+	}
 	return newObjectResultUpdated(
-		desiredObject, compareRes, options.Probe,
+		desiredObject, compareRes, options.Probes,
 	), nil
 }
 
 func (e *ObjectEngine) create(
 	ctx context.Context, obj client.Object,
-	options ObjectOptions, opts ...client.CreateOption,
+	options types.ObjectOptions, opts ...client.CreateOption,
 ) error {
 	if options.Paused {
 		return nil
@@ -417,7 +390,7 @@ func (e *ObjectEngine) patch(
 	ctx context.Context,
 	obj Object,
 	patch client.Patch,
-	options ObjectOptions,
+	options types.ObjectOptions,
 	opts ...client.PatchOption,
 ) error {
 	if options.Paused {
