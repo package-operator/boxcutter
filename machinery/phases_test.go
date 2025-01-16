@@ -166,7 +166,7 @@ func (m *objectEngineMock) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	desiredObject *unstructured.Unstructured,
+	desiredObject Object,
 	opts ...ObjectOption,
 ) (ObjectResult, error) {
 	args := m.Called(ctx, owner, revision, desiredObject, opts)
@@ -177,7 +177,7 @@ func (m *objectEngineMock) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	desiredObject *unstructured.Unstructured,
+	desiredObject Object,
 ) (objectDeleted bool, err error) {
 	args := m.Called(ctx, owner, revision, desiredObject)
 	return args.Bool(0), args.Error(1)

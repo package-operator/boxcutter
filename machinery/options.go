@@ -8,7 +8,7 @@ import (
 type ObjectOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
-	Probe               prober
+	Probe               Prober
 	Paused              bool
 }
 
@@ -80,12 +80,12 @@ func (p WithPaused) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.Paused = true
 }
 
-type prober interface {
+type Prober interface {
 	Probe(obj client.Object) (success bool, messages []string)
 }
 
 // WithProbe executes the given probe to evaluate the state of the object.
-type WithProbe struct{ Probe prober }
+type WithProbe struct{ Probe Prober }
 
 // ApplyToObjectOptions implements Option.
 func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {

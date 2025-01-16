@@ -43,14 +43,14 @@ type objectEngine interface {
 		ctx context.Context,
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
-		desiredObject *unstructured.Unstructured,
+		desiredObject Object,
 		opts ...ObjectOption,
 	) (ObjectResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
-		desiredObject *unstructured.Unstructured,
+		desiredObject Object,
 	) (objectGone bool, err error)
 }
 
@@ -82,6 +82,7 @@ type PhaseObject struct {
 
 // PhaseTeardownResult interface to access results of phase teardown.
 type PhaseTeardownResult interface {
+	GetName() string
 	// IsComplete returns true when all objects have been deleted,
 	// finalizers have been processes and the objects are longer
 	// present on the kube-apiserver.
@@ -92,11 +93,36 @@ type PhaseTeardownResult interface {
 	// Waiting returns a list of objects that have yet to be
 	// cleaned up on the kube-apiserver.
 	Waiting() []types.ObjectRef
+
+	String() string
 }
 
 type phaseTeardownResult struct {
+	name    string
 	gone    []types.ObjectRef
 	waiting []types.ObjectRef
+}
+
+func (r *phaseTeardownResult) String() string {
+	out := fmt.Sprintf("Phase %q\n", r.name)
+
+	if len(r.gone) > 0 {
+		out += "Gone Objects:\n"
+		for _, gone := range r.gone {
+			out += "- " + gone.String() + "\n"
+		}
+	}
+	if len(r.waiting) > 0 {
+		out += "Waiting Objects:\n"
+		for _, waiting := range r.waiting {
+			out += "- " + waiting.String() + "\n"
+		}
+	}
+	return out
+}
+
+func (r *phaseTeardownResult) GetName() string {
+	return r.name
 }
 
 // IsComplete returns true when all objects have been deleted,
@@ -125,7 +151,7 @@ func (e *PhaseEngine) Teardown(
 	revision int64,
 	phase Phase,
 ) (PhaseTeardownResult, error) {
-	res := &phaseTeardownResult{}
+	res := &phaseTeardownResult{name: phase.Name}
 
 	for _, o := range phase.GetObjects() {
 		gone, err := e.objectEngine.Teardown(ctx, owner, revision, &o)

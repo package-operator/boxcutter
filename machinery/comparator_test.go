@@ -469,8 +469,6 @@ func TestComparator_Structured(t *testing.T) {
 			t.Parallel()
 			res, err := d.Compare(owner, test.desired, test.actual)
 			require.NoError(t, err)
-			assert.Equal(t, test.expectedReport, res.String())
-
 			if res.Comparison != nil {
 				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
 			}

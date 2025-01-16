@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -94,7 +93,7 @@ func (e *ObjectEngine) Teardown(
 	ctx context.Context,
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
-	desiredObject *unstructured.Unstructured,
+	desiredObject Object,
 ) (objectGone bool, err error) {
 	// Sanity checks.
 	if revision == 0 {
@@ -118,7 +117,7 @@ func (e *ObjectEngine) Teardown(
 	}
 
 	// Lookup actual object state on cluster.
-	actualObject := desiredObject.DeepCopy()
+	actualObject := desiredObject.DeepCopyObject().(Object)
 	err = e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
@@ -146,7 +145,7 @@ func (e *ObjectEngine) Teardown(
 
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
 	if ctrlSit != ctrlSituationIsController {
-		return false, TeardownRevisionError{
+		return false, TeardownControllerChangedError{
 			msg: "Rejecting object teardown: Owner not controller",
 		}
 	}

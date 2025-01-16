@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes/scheme"
+	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,8 +21,9 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	t.Parallel()
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
 
-	re := NewRevisionEngine(pe, rv)
+	re := NewRevisionEngine(pe, rv, c, c, scheme.Scheme)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -63,8 +66,9 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	t.Parallel()
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
 
-	re := NewRevisionEngine(pe, rv)
+	re := NewRevisionEngine(pe, rv, c, c, scheme.Scheme)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -139,7 +143,7 @@ type revisionValidatorMock struct {
 }
 
 func (m *revisionValidatorMock) Validate(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev validation.Revision,
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
 	return args.Get(0).(validation.RevisionViolation), args.Error(1)
