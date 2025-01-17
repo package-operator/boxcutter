@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
+	"pkg.package-operator.run/boxcutter/machinery/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
@@ -49,7 +50,7 @@ func TestObjectEngine(t *testing.T) {
 		name          string
 		revision      int64
 		desiredObject *unstructured.Unstructured
-		opts          []ObjectOption
+		opts          []types.ObjectOption
 
 		mockSetup func(
 			*cacheMock,
@@ -73,8 +74,8 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{
-				WithCollisionProtection(CollisionProtectionIfNoController),
+			opts: []types.ObjectOption{
+				types.WithCollisionProtection(types.CollisionProtectionIfNoController),
 			},
 
 			mockSetup: func(
@@ -214,7 +215,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -283,7 +284,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -372,7 +373,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -469,7 +470,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -564,7 +565,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -655,8 +656,8 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{
-				WithPreviousOwners{oldOwner},
+			opts: []types.ObjectOption{
+				types.WithPreviousOwners{oldOwner},
 			},
 
 			mockSetup: func(

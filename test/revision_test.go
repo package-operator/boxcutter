@@ -4,6 +4,7 @@ package boxcutter
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,11 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func TestRevisionEngine(t *testing.T) {
@@ -29,14 +33,14 @@ func TestRevisionEngine(t *testing.T) {
 
 	obj1Probe := &stubProbe{success: false, messages: []string{"nope"}}
 	obj2Probe := &stubProbe{success: true}
-	rev := machinery.Revision{
+	rev := &bctypes.RevisionStandin{
 		Name:     "rev-1",
 		Owner:    revOwner,
 		Revision: 1,
-		Phases: []machinery.Phase{
-			{
+		Phases: []bctypes.Phase{
+			&bctypes.PhaseStandin{
 				Name: "phase-1",
-				Objects: []machinery.PhaseObject{
+				Objects: []bctypes.PhaseObject{
 					{
 						Object: &unstructured.Unstructured{
 							Object: map[string]interface{}{
@@ -48,15 +52,15 @@ func TestRevisionEngine(t *testing.T) {
 								},
 							},
 						},
-						Opts: []machinery.ObjectOption{
-							machinery.WithProbe{Probe: obj1Probe},
+						Opts: []bctypes.ObjectOption{
+							bctypes.WithProbe{Probe: obj1Probe},
 						},
 					},
 				},
 			},
-			{
+			&bctypes.PhaseStandin{
 				Name: "phase-2",
-				Objects: []machinery.PhaseObject{
+				Objects: []bctypes.PhaseObject{
 					{
 						Object: &unstructured.Unstructured{
 							Object: map[string]interface{}{
@@ -68,8 +72,8 @@ func TestRevisionEngine(t *testing.T) {
 								},
 							},
 						},
-						Opts: []machinery.ObjectOption{
-							machinery.WithProbe{Probe: obj2Probe},
+						Opts: []bctypes.ObjectOption{
+							bctypes.WithProbe{Probe: obj2Probe},
 						},
 					},
 				},
@@ -86,7 +90,11 @@ func TestRevisionEngine(t *testing.T) {
 	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)
 	rval := validation.NewRevisionValidator()
-	re := machinery.NewRevisionEngine(pe, rval, Client, Client, Scheme)
+	anchorObjectManager := &anchorObjectManager{
+		c:      Client,
+		scheme: Scheme,
+	}
+	re := machinery.NewRevisionEngine(pe, rval, Client, anchorObjectManager)
 
 	ctx := context.Background()
 
@@ -163,4 +171,63 @@ type stubProbe struct {
 
 func (p *stubProbe) Probe(obj client.Object) (success bool, messages []string) {
 	return p.success, p.messages
+}
+
+type anchorObjectManager struct {
+	c      client.Client
+	scheme *runtime.Scheme
+}
+
+func (re *anchorObjectManager) EnsureFor(
+	ctx context.Context,
+	owner client.Object,
+	childs []client.Object,
+) error {
+	anchor, err := re.ensure(ctx, owner)
+	if err != nil {
+		return err
+	}
+
+	for _, child := range childs {
+		if err := controllerutil.SetOwnerReference(anchor, child, re.scheme); err != nil {
+			return fmt.Errorf("add anchor ownerref: %w", err)
+		}
+	}
+	return nil
+}
+
+func (re *anchorObjectManager) ensure(ctx context.Context, owner client.Object) (client.Object, error) {
+	cm := &corev1.ConfigMap{ // TODO: Needs cluster-scoped custom API.
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      string(owner.GetUID()),
+			Namespace: owner.GetNamespace(),
+		},
+	}
+	err := re.c.Get(ctx, client.ObjectKeyFromObject(cm), cm)
+	if errors.IsNotFound(err) {
+		if err := re.c.Create(ctx, cm); err != nil {
+			return cm, nil
+		}
+	}
+	if err != nil {
+		return cm, nil
+	}
+
+	return cm, nil
+}
+
+func (re *anchorObjectManager) RemoveFor(
+	ctx context.Context,
+	owner client.Object,
+) error {
+	cm := &corev1.ConfigMap{ // TODO: Needs cluster-scoped custom API.
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      string(owner.GetUID()),
+			Namespace: owner.GetNamespace(),
+		},
+	}
+	if err := re.c.Delete(ctx, cm); err != nil || errors.IsNotFound(err) {
+		return nil
+	}
+	return nil
 }

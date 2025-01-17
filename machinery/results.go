@@ -5,6 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // ObjectResult is the common Result interface for multiple result types.
@@ -46,7 +47,7 @@ type ObjectResultCreated struct {
 
 func newObjectResultCreated(
 	obj Object,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	s, msgs := probe.Probe(obj)
 	return ObjectResultCreated{
@@ -93,7 +94,7 @@ type ObjectResultUpdated struct {
 func newObjectResultUpdated(
 	obj Object,
 	diverged CompareResult,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	return ObjectResultUpdated{
 		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, probe),
@@ -108,7 +109,7 @@ type ObjectResultProgressed struct {
 func newObjectResultProgressed(
 	obj Object,
 	diverged CompareResult,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	return ObjectResultProgressed{
 		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, probe),
@@ -123,7 +124,7 @@ type ObjectResultIdle struct {
 func newObjectResultIdle(
 	obj Object,
 	diverged CompareResult,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	return ObjectResultIdle{
 		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, probe),
@@ -138,7 +139,7 @@ type ObjectResultRecovered struct {
 func newObjectResultRecovered(
 	obj Object,
 	diverged CompareResult,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	return ObjectResultRecovered{
 		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, probe),
@@ -156,7 +157,7 @@ func newNormalObjectResult(
 	action Action,
 	obj Object,
 	compResult CompareResult,
-	probe Prober,
+	probe types.Prober,
 ) normalResult {
 	s, msgs := probe.Probe(obj)
 	return normalResult{
@@ -235,7 +236,7 @@ func newObjectResultConflict(
 	obj Object,
 	diverged CompareResult,
 	conflictingOwner *metav1.OwnerReference,
-	probe Prober,
+	probe types.Prober,
 ) ObjectResult {
 	return ObjectResultCollision{
 		normalResult: newNormalObjectResult(

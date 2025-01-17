@@ -1,4 +1,4 @@
-package machinery
+package types
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,7 +18,7 @@ func (opts *ObjectOptions) Default() {
 		opts.CollisionProtection = CollisionProtectionPrevent
 	}
 	if opts.Probe == nil {
-		opts.Probe = &noopProbe{}
+		opts.Probe = &NoOpProbe{}
 	}
 }
 
@@ -92,8 +92,8 @@ func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.Probe = p.Probe
 }
 
-type noopProbe struct{}
+type NoOpProbe struct{}
 
-func (p *noopProbe) Probe(_ client.Object) (success bool, messages []string) {
+func (p *NoOpProbe) Probe(_ client.Object) (success bool, messages []string) {
 	return true, nil
 }

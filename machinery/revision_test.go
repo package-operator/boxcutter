@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/kubernetes/scheme"
 	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/machinery/validation"
@@ -22,8 +21,9 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
+	am := &noopAnchorManager{}
 
-	re := NewRevisionEngine(pe, rv, c, c, scheme.Scheme)
+	re := NewRevisionEngine(pe, rv, c, am)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -33,13 +33,13 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		},
 	}
 
-	rev := Revision{
+	rev := &types.RevisionStandin{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
+		Phases: []types.Phase{
+			&types.PhaseStandin{Name: "phase-1"},
+			&types.PhaseStandin{Name: "phase-2"},
+			&types.PhaseStandin{Name: "phase-3"},
 		},
 	}
 
@@ -67,8 +67,9 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
+	am := &noopAnchorManager{}
 
-	re := NewRevisionEngine(pe, rv, c, c, scheme.Scheme)
+	re := NewRevisionEngine(pe, rv, c, am)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,14 +79,14 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 		},
 	}
 
-	rev := Revision{
+	rev := &types.RevisionStandin{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
-			{Name: "phase-4"},
+		Phases: []types.Phase{
+			&types.PhaseStandin{Name: "phase-1"},
+			&types.PhaseStandin{Name: "phase-2"},
+			&types.PhaseStandin{Name: "phase-3"},
+			&types.PhaseStandin{Name: "phase-4"},
 		},
 	}
 
@@ -122,7 +123,7 @@ func (m *phaseEngineMock) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.Phase,
 ) (PhaseResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
 	return args.Get(0).(PhaseResult), args.Error(1)
@@ -132,7 +133,7 @@ func (m *phaseEngineMock) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.Phase,
 ) (PhaseTeardownResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
@@ -143,7 +144,7 @@ type revisionValidatorMock struct {
 }
 
 func (m *revisionValidatorMock) Validate(
-	ctx context.Context, rev validation.Revision,
+	ctx context.Context, rev types.Revision,
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
 	return args.Get(0).(validation.RevisionViolation), args.Error(1)
@@ -169,7 +170,7 @@ func TestRevisionResult_String(t *testing.T) {
 				name:               "phase-1",
 				preflightViolation: &phaseViolationStub{msg: "xxx"},
 				objects: []ObjectResult{
-					newObjectResultCreated(obj, &noopProbe{}),
+					newObjectResultCreated(obj, &types.NoOpProbe{}),
 				},
 			},
 		},
@@ -190,4 +191,16 @@ Phases:
     Probe:  Succeeded
 - Phase "phase-2" (Pending)
 `, r.String())
+}
+
+type noopAnchorManager struct{}
+
+// Ensure an anchor for the given object exists and childs have an OwnerReference pointing to the anchor.
+func (m *noopAnchorManager) EnsureFor(ctx context.Context, owner client.Object, childs []client.Object) error {
+	return nil
+}
+
+// Removes the anchor for the given object.
+func (m *noopAnchorManager) RemoveFor(ctx context.Context, owner client.Object) error {
+	return nil
 }

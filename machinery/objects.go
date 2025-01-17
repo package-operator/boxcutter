@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
 	"k8s.io/utils/ptr"
+	"pkg.package-operator.run/boxcutter/machinery/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -171,9 +172,9 @@ func (e *ObjectEngine) Reconcile(
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
 	desiredObject Object,
-	opts ...ObjectOption,
+	opts ...types.ObjectOption,
 ) (ObjectResult, error) {
-	var options ObjectOptions
+	var options types.ObjectOptions
 	for _, opt := range opts {
 		opt.ApplyToObjectOptions(&options)
 	}
@@ -262,7 +263,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	revision int64,
 	desiredObject Object,
 	actualObject Object,
-	options ObjectOptions,
+	options types.ObjectOptions,
 ) (ObjectResult, error) {
 	// An object already exists on the cluster.
 	// Before doing anything else, we have to figure out
@@ -352,7 +353,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// If any of the above points is not true, refuse.
 
 	case ctrlSituationUnknownController:
-		if options.CollisionProtection != CollisionProtectionNone {
+		if options.CollisionProtection != types.CollisionProtectionNone {
 			return newObjectResultConflict(
 				actualObject, compareRes,
 				actualOwner, options.Probe,
@@ -360,7 +361,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		}
 
 	case ctrlSituationNoController:
-		if options.CollisionProtection == CollisionProtectionPrevent {
+		if options.CollisionProtection == types.CollisionProtectionPrevent {
 			return newObjectResultConflict(
 				actualObject, compareRes,
 				actualOwner, options.Probe,
@@ -404,7 +405,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 func (e *ObjectEngine) create(
 	ctx context.Context, obj client.Object,
-	options ObjectOptions, opts ...client.CreateOption,
+	options types.ObjectOptions, opts ...client.CreateOption,
 ) error {
 	if options.Paused {
 		return nil
@@ -416,7 +417,7 @@ func (e *ObjectEngine) patch(
 	ctx context.Context,
 	obj Object,
 	patch client.Patch,
-	options ObjectOptions,
+	options types.ObjectOptions,
 	opts ...client.PatchOption,
 ) error {
 	if options.Paused {

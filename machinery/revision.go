@@ -6,43 +6,45 @@ import (
 	"slices"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // RevisionEngine manages rollout and teardown of multiple phases.
 type RevisionEngine struct {
 	phaseEngine       phaseEngine
 	revisionValidator revisionValidator
-	scheme            *runtime.Scheme
-	reader            client.Reader
 	writer            client.Writer
+
+	anchorManager anchorManager
 }
 
 // NewRevisionEngine returns a new RevisionEngine instance.
 func NewRevisionEngine(
 	phaseEngine phaseEngine,
 	revisionValidator revisionValidator,
-	reader client.Reader,
-	client client.Client,
-	scheme *runtime.Scheme,
+	client client.Writer,
+
+	anchorManager anchorManager,
 ) *RevisionEngine {
 	return &RevisionEngine{
 		phaseEngine:       phaseEngine,
 		revisionValidator: revisionValidator,
-		reader:            reader,
 		writer:            client,
-		scheme:            scheme,
+		anchorManager:     anchorManager,
 	}
 }
 
+type anchorManager interface {
+	// Ensure an anchor for the given object exists and childs have an OwnerReference pointing to the anchor.
+	EnsureFor(ctx context.Context, owner client.Object, childs []client.Object) error
+	// Removes the anchor for the given object.
+	RemoveFor(ctx context.Context, owner client.Object) error
+}
+
 type revisionValidator interface {
-	Validate(_ context.Context, rev validation.Revision) (validation.RevisionViolation, error)
+	Validate(_ context.Context, rev types.Revision) (validation.RevisionViolation, error)
 }
 
 type phaseEngine interface {
@@ -50,32 +52,32 @@ type phaseEngine interface {
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase Phase,
+		phase types.Phase,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase Phase,
+		phase types.Phase,
 	) (PhaseTeardownResult, error)
 }
 
 // Revision represents multiple phases at a given point in time.
-type Revision struct {
-	Name     string
-	Owner    client.Object
-	Revision int64
-	Phases   []Phase
-}
+// type Revision struct {
+// 	Name     string
+// 	Owner    client.Object
+// 	Revision int64
+// 	Phases   []Phase
+// }
 
-// GetPhases returns the phases the revision is rolling out.
-func (r Revision) GetPhases() []validation.Phase {
-	phases := make([]validation.Phase, len(r.Phases))
-	for i := range r.Phases {
-		phases[i] = &r.Phases[i]
-	}
-	return phases
-}
+// // GetPhases returns the phases the revision is rolling out.
+// func (r Revision) GetPhases() []validation.Phase {
+// 	phases := make([]validation.Phase, len(r.Phases))
+// 	for i := range r.Phases {
+// 		phases[i] = &r.Phases[i]
+// 	}
+// 	return phases
+// }
 
 // RevisionResult holds details about the revision reconciliation run.
 type RevisionResult interface {
@@ -173,11 +175,11 @@ func (r *revisionResult) String() string {
 
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev types.Revision,
 ) (RevisionResult, error) {
 	rres := &revisionResult{}
-	for _, p := range rev.Phases {
-		rres.phases = append(rres.phases, p.Name)
+	for _, p := range rev.GetPhases() {
+		rres.phases = append(rres.phases, p.GetName())
 	}
 
 	// Preflight
@@ -190,23 +192,22 @@ func (re *RevisionEngine) Reconcile(
 		return rres, nil
 	}
 
-	// Anchor handling for controling object teardown order.
-	// TODO: ONLY when ownerstrat native
-	anchor, err := re.ensureAnchor(ctx, rev)
+	// Anchor handling to ensure controling object teardown order.
+	var objects []client.Object
+	for _, phase := range rev.GetPhases() {
+		for _, obj := range phase.GetObjects() {
+			objects = append(objects, obj.Object)
+		}
+	}
+
+	err = re.anchorManager.EnsureFor(ctx, rev.GetClientObject(), objects)
 	if err != nil {
 		return rres, fmt.Errorf("ensuring anchor object: %w", err)
 	}
 
 	// Reconcile
-	for _, phase := range rev.Phases {
-		// TODO: ONLY when ownerstrat native
-		for _, v := range phase.Objects {
-			if err := controllerutil.SetOwnerReference(anchor, v.Object, re.scheme); err != nil {
-				return rres, fmt.Errorf("setting owner reference for anchor: %w", err)
-			}
-		}
-
-		pres, err := re.phaseEngine.Reconcile(ctx, rev.Owner, rev.Revision, phase)
+	for _, phase := range rev.GetPhases() {
+		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
@@ -218,45 +219,6 @@ func (re *RevisionEngine) Reconcile(
 	}
 
 	return rres, nil
-}
-
-func (re *RevisionEngine) ensureAnchor(
-	ctx context.Context,
-	rev Revision,
-) (client.Object, error) {
-	cm := &corev1.ConfigMap{ // TODO: Needs cluster-scoped custom API.
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      string(rev.Owner.GetUID()),
-			Namespace: rev.Owner.GetNamespace(),
-		},
-	}
-	err := re.reader.Get(ctx, client.ObjectKeyFromObject(cm), cm)
-	if errors.IsNotFound(err) {
-		if err := re.writer.Create(ctx, cm); err != nil {
-			return cm, nil
-		}
-	}
-	if err != nil {
-		return cm, nil
-	}
-
-	return cm, nil
-}
-
-func (re *RevisionEngine) removeAnchor(
-	ctx context.Context,
-	rev Revision,
-) (client.Object, error) {
-	cm := &corev1.ConfigMap{ // TODO: Needs cluster-scoped custom API.
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      string(rev.Owner.GetUID()),
-			Namespace: rev.Owner.GetNamespace(),
-		},
-	}
-	if err := re.writer.Delete(ctx, cm); err != nil || errors.IsNotFound(err) {
-		return cm, nil
-	}
-	return cm, nil
 }
 
 // RevisionTeardownResult holds the results of a Teardown operation.
@@ -347,47 +309,46 @@ func (r *revisionTeardownResult) String() string {
 
 // Teardown ensures the given revision is safely removed from the cluster.
 func (re *RevisionEngine) Teardown(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev types.Revision,
 ) (RevisionTeardownResult, error) {
 	res := &revisionTeardownResult{}
 
 	waiting := map[string]struct{}{}
-	for _, p := range rev.Phases {
-		waiting[p.Name] = struct{}{}
+	for _, p := range rev.GetPhases() {
+		waiting[p.GetName()] = struct{}{}
 	}
 
 	// Phases should be torn down in reverse.
-	reversedPhases := slices.Clone(rev.Phases)
+	reversedPhases := slices.Clone(rev.GetPhases())
 	slices.Reverse(reversedPhases)
 
 	for _, p := range reversedPhases {
 		// Phase is no longer waiting.
-		delete(waiting, p.Name)
-		res.active = p.Name
+		delete(waiting, p.GetName())
+		res.active = p.GetName()
 
-		pres, err := re.phaseEngine.Teardown(ctx, rev.Owner, rev.Revision, p)
+		pres, err := re.phaseEngine.Teardown(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), p)
 		if err != nil {
 			return nil, fmt.Errorf("teardown phase: %w", err)
 		}
 
 		res.phases = append(res.phases, pres)
 		if pres.IsComplete() {
-			res.gone = append(res.gone, p.Name)
+			res.gone = append(res.gone, p.GetName())
 			continue
 		}
 
 		// record other phases as waiting in normal order.
-		for _, p := range rev.Phases {
-			if _, ok := waiting[p.Name]; ok {
-				res.waiting = append(res.waiting, p.Name)
+		for _, p := range rev.GetPhases() {
+			if _, ok := waiting[p.GetName()]; ok {
+				res.waiting = append(res.waiting, p.GetName())
 			}
 		}
 		slices.Reverse(res.gone)
 		return res, nil
 	}
 
-	// TODO: ONLY when ownerstrat native
-	if _, err := re.removeAnchor(ctx, rev); err != nil {
+	if err := re.anchorManager.RemoveFor(ctx, rev.GetClientObject()); err != nil {
 		return nil, fmt.Errorf("removing Anchor: %w", err)
 	}
 
