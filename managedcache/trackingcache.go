@@ -168,7 +168,7 @@ func (c *trackingCacheImpl) recordObjectList(ctx context.Context, list client.Ob
 func (c *trackingCacheImpl) recordGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	knownInformer := c.gvks.Has(gvk)
 	if !knownInformer {
-		i, err := c.GetInformerForKind(ctx, gvk)
+		i, err := c.Cache.GetInformerForKind(ctx, gvk)
 		if err != nil {
 			return err
 		}

@@ -29,6 +29,27 @@ type ObjectBoundCache[T refType] interface {
 	Source(handler.EventHandler, ...predicate.Predicate) source.Source
 }
 
+func NewObjectBoundCache[T refType](
+	scheme *runtime.Scheme,
+	mapConfig ConfigMapperFunc[T],
+	baseRestConfig *rest.Config,
+	baseCacheOptions cache.Options,
+) ObjectBoundCache[T] {
+	return &objectBoundCacheImpl[T]{
+		scheme:           scheme,
+		mapConfig:        mapConfig,
+		baseRestConfig:   baseRestConfig,
+		baseCacheOptions: baseCacheOptions,
+
+		cacheSourcer: &cacheSource{},
+		newCache:     cache.New,
+
+		caches:         map[types.UID]cacheEntry{},
+		cacheRequestCh: make(chan cacheRequest[T]),
+		cacheStopCh:    make(chan cacheRequest[T]),
+	}
+}
+
 type refType interface {
 	client.Object
 	comparable
@@ -82,6 +103,8 @@ func (c *objectBoundCacheImpl[T]) Source(handler handler.EventHandler, predicate
 func (i *objectBoundCacheImpl[T]) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	doneCh := make(chan cacheDone)
+	defer close(doneCh)
+
 	for {
 		select {
 		case done := <-doneCh:
@@ -108,10 +131,17 @@ func (i *objectBoundCacheImpl[T]) Start(ctx context.Context) error {
 			close(req.responseCh)
 
 		case <-ctx.Done():
+			// Drain doneCh to ensure shutdown does not block.
+			go func() {
+				for range doneCh {
+				}
+			}()
+
 			// All sub-caches should also receive this signal and start to stop.
 			// So we don't have to manually cancel caches individually.
 			// Just wait for all to close to ensure they have gracefully shutdown.
 			wg.Wait()
+			return nil
 		}
 	}
 }
@@ -135,7 +165,7 @@ func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 		return nil, fmt.Errorf("creating new Cache: %w", err)
 	}
 
-	cache := NewTrackingCache(ctrlcache, i.scheme)
+	cache := newTrackingCache(ctrlcache, i.scheme, i.cacheSourcer)
 
 	// start cache
 	ctx, cancel := context.WithCancel(ctx)

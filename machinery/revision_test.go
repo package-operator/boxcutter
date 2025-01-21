@@ -21,9 +21,8 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
-	am := &noopAnchorManager{}
 
-	re := NewRevisionEngine(pe, rv, c, am)
+	re := NewRevisionEngine(pe, rv, c)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,9 +66,8 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
-	am := &noopAnchorManager{}
 
-	re := NewRevisionEngine(pe, rv, c, am)
+	re := NewRevisionEngine(pe, rv, c)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,16 +188,4 @@ Phases:
     Action: "Created"
 - Phase "phase-2" (Pending)
 `, r.String())
-}
-
-type noopAnchorManager struct{}
-
-// Ensure an anchor for the given object exists and childs have an OwnerReference pointing to the anchor.
-func (m *noopAnchorManager) EnsureFor(ctx context.Context, owner client.Object, childs []client.Object) error {
-	return nil
-}
-
-// Removes the anchor for the given object.
-func (m *noopAnchorManager) RemoveFor(ctx context.Context, owner client.Object) error {
-	return nil
 }

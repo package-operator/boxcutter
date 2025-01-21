@@ -17,7 +17,7 @@ type RevisionEngine struct {
 	revisionValidator revisionValidator
 	writer            client.Writer
 
-	anchorManager anchorManager
+	// anchorManager anchorManager
 }
 
 // NewRevisionEngine returns a new RevisionEngine instance.
@@ -25,22 +25,13 @@ func NewRevisionEngine(
 	phaseEngine phaseEngine,
 	revisionValidator revisionValidator,
 	client client.Writer,
-
-	anchorManager anchorManager,
 ) *RevisionEngine {
 	return &RevisionEngine{
 		phaseEngine:       phaseEngine,
 		revisionValidator: revisionValidator,
 		writer:            client,
-		anchorManager:     anchorManager,
+		// anchorManager:     anchorManager,
 	}
-}
-
-type anchorManager interface {
-	// Ensure an anchor for the given object exists and childs have an OwnerReference pointing to the anchor.
-	EnsureFor(ctx context.Context, owner client.Object, childs []client.Object) error
-	// Removes the anchor for the given object.
-	RemoveFor(ctx context.Context, owner client.Object) error
 }
 
 type revisionValidator interface {
@@ -183,10 +174,10 @@ func (re *RevisionEngine) Reconcile(
 		}
 	}
 
-	err = re.anchorManager.EnsureFor(ctx, rev.GetClientObject(), objects)
-	if err != nil {
-		return rres, fmt.Errorf("ensuring anchor object: %w", err)
-	}
+	// err = re.anchorManager.EnsureFor(ctx, rev.GetClientObject(), objects)
+	// if err != nil {
+	// 	return rres, fmt.Errorf("ensuring anchor object: %w", err)
+	// }
 
 	// Reconcile
 	for _, phase := range rev.GetPhases() {
@@ -331,9 +322,9 @@ func (re *RevisionEngine) Teardown(
 		return res, nil
 	}
 
-	if err := re.anchorManager.RemoveFor(ctx, rev.GetClientObject()); err != nil {
-		return nil, fmt.Errorf("removing Anchor: %w", err)
-	}
+	// if err := re.anchorManager.RemoveFor(ctx, rev.GetClientObject()); err != nil {
+	// 	return nil, fmt.Errorf("removing Anchor: %w", err)
+	// }
 
 	slices.Reverse(res.gone)
 	res.active = ""

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,7 +19,7 @@ func TestObjectEngine(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, &noopCache{Reader: Client}, Client,
+		Scheme, Client, Client,
 		Client, os, comp, fieldOwner, systemPrefix,
 	)
 
@@ -111,14 +110,4 @@ Comparison:
   .data.new-test
   .metadata.annotations.my-annotation
 `, res.String())
-}
-
-type noopCache struct {
-	client.Reader
-}
-
-func (c *noopCache) Watch(
-	_ context.Context, _ client.Object, _ runtime.Object,
-) error {
-	return nil
 }
