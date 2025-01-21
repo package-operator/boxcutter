@@ -8,17 +8,14 @@ import (
 type ObjectOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
-	Probe               Prober
 	Paused              bool
+	Probes              map[string]Prober
 }
 
 // Default sets empty Option fields to their default value.
 func (opts *ObjectOptions) Default() {
 	if len(opts.CollisionProtection) == 0 {
 		opts.CollisionProtection = CollisionProtectionPrevent
-	}
-	if opts.Probe == nil {
-		opts.Probe = &NoOpProbe{}
 	}
 }
 
@@ -31,7 +28,7 @@ var (
 	_ ObjectOption = (WithCollisionProtection)("")
 	_ ObjectOption = (WithPaused{})
 	_ ObjectOption = (WithPreviousOwners{})
-	_ ObjectOption = (WithProbe{})
+	_ ObjectOption = (WithProbe("", nil))
 )
 
 // CollisionProtection specifies how collision with existing objects and
@@ -84,12 +81,26 @@ type Prober interface {
 	Probe(obj client.Object) (success bool, messages []string)
 }
 
-// WithProbe executes the given probe to evaluate the state of the object.
-type WithProbe struct{ Probe Prober }
+// WithProbe registers the given probe to evaluate state of objects.
+func WithProbe(t string, probe Prober) ObjectOption {
+	return OptionFn{
+		Fn: func(opts *ObjectOptions) {
+			if opts.Probes == nil {
+				opts.Probes = map[string]Prober{}
+			}
+			opts.Probes[t] = probe
+		},
+	}
+}
+
+// OptionFn implements the ObjectOption interface for functions.
+type OptionFn struct {
+	Fn func(opts *ObjectOptions)
+}
 
 // ApplyToObjectOptions implements Option.
-func (p WithProbe) ApplyToObjectOptions(opts *ObjectOptions) {
-	opts.Probe = p.Probe
+func (p OptionFn) ApplyToObjectOptions(opts *ObjectOptions) {
+	p.Fn(opts)
 }
 
 type NoOpProbe struct{}

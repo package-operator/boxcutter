@@ -54,7 +54,6 @@ func TestObjectEngine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Created"
-Probe:  Succeeded
 `, res.String())
 
 	// Idle
@@ -62,7 +61,6 @@ Probe:  Succeeded
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
-Probe:  Succeeded
 `, res.String())
 
 	// Add other participant.
@@ -80,7 +78,6 @@ Probe:  Succeeded
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
-Probe:  Succeeded
 Other:
 - "Franz"
   .data.test5
@@ -101,7 +98,6 @@ Comparison:
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Updated"
-Probe:  Succeeded
 Other:
 - "Franz"
   .data.test5

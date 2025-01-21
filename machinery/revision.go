@@ -62,23 +62,6 @@ type phaseEngine interface {
 	) (PhaseTeardownResult, error)
 }
 
-// Revision represents multiple phases at a given point in time.
-// type Revision struct {
-// 	Name     string
-// 	Owner    client.Object
-// 	Revision int64
-// 	Phases   []Phase
-// }
-
-// // GetPhases returns the phases the revision is rolling out.
-// func (r Revision) GetPhases() []validation.Phase {
-// 	phases := make([]validation.Phase, len(r.Phases))
-// 	for i := range r.Phases {
-// 		phases[i] = &r.Phases[i]
-// 	}
-// 	return phases
-// }
-
 // RevisionResult holds details about the revision reconciliation run.
 type RevisionResult interface {
 	// GetPreflightViolation returns the preflight

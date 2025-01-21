@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"fmt"
+	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -18,8 +19,8 @@ type ObjectResult interface {
 	// Operations are considered a success, when the object reflects desired state,
 	// is owned by the right controller and passes the given probe.
 	Success() bool
-	// Probe returns the results from the given object Probe.
-	Probe() ObjectProbeResult
+	// Probes returns the results from the given object Probes.
+	Probes() map[string]ObjectProbeResult
 	// String returns a human readable description of the Result.
 	String() string
 }
@@ -41,21 +42,17 @@ var (
 
 // ObjectResultCreated is returned when the Object was just created.
 type ObjectResultCreated struct {
-	obj         Object
-	probeResult ObjectProbeResult
+	obj          Object
+	probeResults map[string]ObjectProbeResult
 }
 
 func newObjectResultCreated(
 	obj Object,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
-	s, msgs := probe.Probe(obj)
 	return ObjectResultCreated{
-		obj: obj,
-		probeResult: ObjectProbeResult{
-			Success:  s,
-			Messages: msgs,
-		},
+		obj:          obj,
+		probeResults: runProbes(obj, probes),
 	}
 }
 
@@ -73,12 +70,17 @@ func (r ObjectResultCreated) Object() Object {
 // Operations are considered a success, when the object reflects desired state,
 // is owned by the right controller and passes the given probe.
 func (r ObjectResultCreated) Success() bool {
-	return r.probeResult.Success
+	for _, res := range r.probeResults {
+		if !res.Success {
+			return false
+		}
+	}
+	return true
 }
 
 // Probe returns the results from the given object Probe.
-func (r ObjectResultCreated) Probe() ObjectProbeResult {
-	return r.probeResult
+func (r ObjectResultCreated) Probes() map[string]ObjectProbeResult {
+	return r.probeResults
 }
 
 // String returns a human readable description of the Result.
@@ -94,10 +96,10 @@ type ObjectResultUpdated struct {
 func newObjectResultUpdated(
 	obj Object,
 	diverged CompareResult,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
 	return ObjectResultUpdated{
-		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, probe),
+		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, probes),
 	}
 }
 
@@ -109,10 +111,10 @@ type ObjectResultProgressed struct {
 func newObjectResultProgressed(
 	obj Object,
 	diverged CompareResult,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
 	return ObjectResultProgressed{
-		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, probe),
+		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, probes),
 	}
 }
 
@@ -124,10 +126,10 @@ type ObjectResultIdle struct {
 func newObjectResultIdle(
 	obj Object,
 	diverged CompareResult,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
 	return ObjectResultIdle{
-		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, probe),
+		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, probes),
 	}
 }
 
@@ -139,17 +141,17 @@ type ObjectResultRecovered struct {
 func newObjectResultRecovered(
 	obj Object,
 	diverged CompareResult,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
 	return ObjectResultRecovered{
-		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, probe),
+		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, probes),
 	}
 }
 
 type normalResult struct {
 	action        Action
 	obj           Object
-	probeResult   ObjectProbeResult
+	probeResults  map[string]ObjectProbeResult
 	compareResult CompareResult
 }
 
@@ -157,16 +159,12 @@ func newNormalObjectResult(
 	action Action,
 	obj Object,
 	compResult CompareResult,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) normalResult {
-	s, msgs := probe.Probe(obj)
 	return normalResult{
-		obj:    obj,
-		action: action,
-		probeResult: ObjectProbeResult{
-			Success:  s,
-			Messages: msgs,
-		},
+		obj:           obj,
+		action:        action,
+		probeResults:  runProbes(obj, probes),
 		compareResult: compResult,
 	}
 }
@@ -189,15 +187,20 @@ func (r normalResult) CompareResult() CompareResult {
 }
 
 // Probe returns the results from the given object Probe.
-func (r normalResult) Probe() ObjectProbeResult {
-	return r.probeResult
+func (r normalResult) Probes() map[string]ObjectProbeResult {
+	return r.probeResults
 }
 
 // Success returns true when the operation is considered successful.
 // Operations are considered a success, when the object reflects desired state,
 // is owned by the right controller and passes the given probe.
 func (r normalResult) Success() bool {
-	return r.probeResult.Success
+	for _, res := range r.probeResults {
+		if !res.Success {
+			return false
+		}
+	}
+	return true
 }
 
 // String returns a human readable description of the Result.
@@ -236,12 +239,12 @@ func newObjectResultConflict(
 	obj Object,
 	diverged CompareResult,
 	conflictingOwner *metav1.OwnerReference,
-	probe types.Prober,
+	probes map[string]types.Prober,
 ) ObjectResult {
 	return ObjectResultCollision{
 		normalResult: newNormalObjectResult(
 			ActionCollision,
-			obj, diverged, probe,
+			obj, diverged, probes,
 		),
 		conflictingOwner: conflictingOwner,
 	}
@@ -280,14 +283,39 @@ func reportStart(or ObjectResult) string {
 		obj.GetNamespace(), obj.GetName(),
 		or.Action(),
 	)
-	probe := or.Probe()
-	if probe.Success {
-		msg += "Probe:  Succeeded\n"
-	} else {
-		msg += "Probe:  Failed\n"
-		for _, m := range probe.Messages {
-			msg += "- " + m + "\n"
+
+	var probeTypes []string
+	probes := or.Probes()
+	for k := range probes {
+		probeTypes = append(probeTypes, k)
+	}
+	sort.Strings(probeTypes)
+	if len(probeTypes) > 0 {
+		msg += "Probes:\n"
+	}
+	for _, probeType := range probeTypes {
+		probeRes := probes[probeType]
+		if probeRes.Success {
+			msg += fmt.Sprintf("- %s: Succeeded\n", probeType)
+		} else {
+			msg += fmt.Sprintf("- %s: Failed\n", probeType)
+			for _, m := range probeRes.Messages {
+				msg += "  - " + m + "\n"
+			}
 		}
 	}
+
 	return msg
+}
+
+func runProbes(obj Object, probes map[string]types.Prober) map[string]ObjectProbeResult {
+	results := map[string]ObjectProbeResult{}
+	for t, probe := range probes {
+		s, msgs := probe.Probe(obj)
+		results[t] = ObjectProbeResult{
+			Success:  s,
+			Messages: msgs,
+		}
+	}
+	return results
 }

@@ -246,7 +246,7 @@ func (r *phaseResult) InTransistion() bool {
 }
 
 // IsComplete returns true when all objects have
-// successfully been reconciled and pass their probes.
+// successfully been reconciled and pass their progress probes.
 func (r *phaseResult) IsComplete() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
 		return false
@@ -255,7 +255,7 @@ func (r *phaseResult) IsComplete() bool {
 		if o.Action() == ActionCollision {
 			return false
 		}
-		if !o.Probe().Success {
+		if probe, ok := o.Probes()[ProgressProbeType]; ok && !probe.Success {
 			return false
 		}
 	}

@@ -53,7 +53,7 @@ func TestRevisionEngine(t *testing.T) {
 							},
 						},
 						Opts: []bctypes.ObjectOption{
-							bctypes.WithProbe{Probe: obj1Probe},
+							bctypes.WithProbe(machinery.ProgressProbeType, obj1Probe),
 						},
 					},
 				},
@@ -73,7 +73,7 @@ func TestRevisionEngine(t *testing.T) {
 							},
 						},
 						Opts: []bctypes.ObjectOption{
-							bctypes.WithProbe{Probe: obj2Probe},
+							bctypes.WithProbe(machinery.ProgressProbeType, obj2Probe),
 						},
 					},
 				},

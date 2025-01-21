@@ -170,7 +170,7 @@ func TestRevisionResult_String(t *testing.T) {
 				name:               "phase-1",
 				preflightViolation: &phaseViolationStub{msg: "xxx"},
 				objects: []ObjectResult{
-					newObjectResultCreated(obj, &types.NoOpProbe{}),
+					newObjectResultCreated(obj, nil),
 				},
 			},
 		},
@@ -188,7 +188,6 @@ Phases:
   Objects:
   - Object Secret.v1 test/testi
     Action: "Created"
-    Probe:  Succeeded
 - Phase "phase-2" (Pending)
 `, r.String())
 }

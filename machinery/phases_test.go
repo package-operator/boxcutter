@@ -46,7 +46,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseViolationStub{}, nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, &types.NoOpProbe{}), nil)
+		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, &types.PhaseStandin{
@@ -93,7 +93,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 			msg: "xxx",
 		}, nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, &types.NoOpProbe{}), nil)
+		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, &types.PhaseStandin{
@@ -240,16 +240,16 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true - progressed",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, &types.NoOpProbe{}),
-					newObjectResultProgressed(nil, CompareResult{}, &types.NoOpProbe{}),
+					newObjectResultCreated(nil, nil),
+					newObjectResultProgressed(nil, CompareResult{}, nil),
 				},
 				expected: true,
 			},
 			{
 				name: "true - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, &types.NoOpProbe{}),
-					newObjectResultConflict(nil, CompareResult{}, nil, &types.NoOpProbe{}),
+					newObjectResultCreated(nil, nil),
+					newObjectResultConflict(nil, CompareResult{}, nil, nil),
 				},
 				expected: true,
 			},
@@ -267,7 +267,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - created",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, &types.NoOpProbe{}),
+					newObjectResultCreated(nil, nil),
 				},
 				expected: false,
 			},
@@ -286,8 +286,8 @@ func TestPhaseResult(t *testing.T) {
 
 	t.Run("IsComplete", func(t *testing.T) {
 		t.Parallel()
-		failedProbeRes := newObjectResultCreated(nil, &types.NoOpProbe{}).(ObjectResultCreated)
-		failedProbeRes.probeResult.Success = false
+		failedProbeRes := newObjectResultCreated(nil, nil).(ObjectResultCreated)
+		failedProbeRes.probeResults[ProgressProbeType] = ObjectProbeResult{Success: false}
 
 		tests := []struct {
 			name     string
@@ -298,7 +298,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, &types.NoOpProbe{}),
+					newObjectResultCreated(nil, nil),
 				},
 				expected: true,
 			},
@@ -311,8 +311,8 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, &types.NoOpProbe{}),
-					newObjectResultConflict(nil, CompareResult{}, nil, &types.NoOpProbe{}),
+					newObjectResultCreated(nil, nil),
+					newObjectResultConflict(nil, CompareResult{}, nil, nil),
 				},
 				expected: false,
 			},
@@ -354,7 +354,7 @@ func TestPhaseResult_String(t *testing.T) {
 		name:               "phase-1",
 		preflightViolation: &phaseViolationStub{msg: "xxx"},
 		objects: []ObjectResult{
-			newObjectResultCreated(obj, &types.NoOpProbe{}),
+			newObjectResultCreated(obj, nil),
 		},
 	}
 
@@ -366,6 +366,5 @@ Preflight Violation:
 Objects:
 - Object Secret.v1 test/testi
   Action: "Created"
-  Probe:  Succeeded
 `, r.String())
 }

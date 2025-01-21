@@ -63,17 +63,6 @@ type Object interface {
 	runtime.Object
 }
 
-type watchCache interface {
-	client.Reader
-
-	// Called to inform cache about owner object relationships.
-	// Allows cache to dynamically setup and teardown caches.
-	// This method should block until this cache has been established and synced.
-	Watch(
-		ctx context.Context, owner client.Object, obj runtime.Object,
-	) error
-}
-
 type objectEngineOwnerStrategy interface {
 	SetControllerReference(owner, obj metav1.Object) error
 	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
@@ -104,24 +93,16 @@ func (e *ObjectEngine) Teardown(
 		panic("owner must be persisted to cluster, empty UID")
 	}
 
-	if c, ok := e.cache.(watchCache); ok {
-		// Ensure to prime cache.
-		err = c.Watch(
-			ctx, owner, desiredObject)
-		if meta.IsNoMatchError(err) {
-			// API no longer registered.
-			// Consider the object deleted.
-			return true, nil
-		} else if err != nil {
-			return false, fmt.Errorf("watching resource: %w", err)
-		}
-	}
-
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
 	err = e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
+	if meta.IsNoMatchError(err) {
+		// API no longer registered.
+		// Consider the object deleted.
+		return true, nil
+	}
 	if errors.IsNotFound(err) {
 		// Object is gone, yay!
 		return true, nil
@@ -201,14 +182,6 @@ func (e *ObjectEngine) Reconcile(
 		return nil, fmt.Errorf("set controller reference: %w", err)
 	}
 
-	// Ensure to prime cache.
-	if c, ok := e.cache.(watchCache); ok {
-		if err := c.Watch(
-			ctx, owner, desiredObject); err != nil {
-			return nil, fmt.Errorf("watching resource: %w", err)
-		}
-	}
-
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
 	err := e.cache.Get(
@@ -245,7 +218,7 @@ func (e *ObjectEngine) Reconcile(
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
 		return newObjectResultCreated(
-			desiredObject, options.Probe), nil
+			desiredObject, options.Probes), nil
 
 	case err != nil:
 		return nil, fmt.Errorf("getting object: %w", err)
@@ -283,7 +256,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Leave object alone.
 		// It's already owned by a later revision.
 		return newObjectResultProgressed(
-			actualObject, compareRes, options.Probe,
+			actualObject, compareRes, options.Probes,
 		), nil
 	}
 
@@ -296,7 +269,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			// No conflict with another field manager
 			// and no modification needed.
 			return newObjectResultIdle(
-				actualObject, compareRes, options.Probe,
+				actualObject, compareRes, options.Probes,
 			), nil
 		}
 		if !compareRes.IsConflict() && modified {
@@ -310,7 +283,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
 			return newObjectResultUpdated(
-				desiredObject, compareRes, options.Probe,
+				desiredObject, compareRes, options.Probes,
 			), nil
 		}
 
@@ -342,7 +315,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
 		return newObjectResultRecovered(
-			desiredObject, compareRes, options.Probe,
+			desiredObject, compareRes, options.Probes,
 		), nil
 
 		// Taking control checklist:
@@ -356,7 +329,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if options.CollisionProtection != types.CollisionProtectionNone {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probe,
+				actualOwner, options.Probes,
 			), nil
 		}
 
@@ -364,7 +337,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if options.CollisionProtection == types.CollisionProtectionPrevent {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probe,
+				actualOwner, options.Probes,
 			), nil
 		}
 
@@ -399,7 +372,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
 	return newObjectResultUpdated(
-		desiredObject, compareRes, options.Probe,
+		desiredObject, compareRes, options.Probes,
 	), nil
 }
 
