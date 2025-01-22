@@ -55,8 +55,8 @@ type phaseEngine interface {
 
 // RevisionResult holds details about the revision reconciliation run.
 type RevisionResult interface {
-	// GetPreflightViolation returns the preflight
-	// violation, if one was encountered.
+	// GetPreflightViolation returns the preflight violation of the entire Revision.
+	// Revision preflight checks are not as extensive as phase-preflight checks.
 	GetPreflightViolation() (validation.RevisionViolation, bool)
 	// GetPhases returns results for individual phases.
 	GetPhases() []PhaseResult
@@ -76,8 +76,7 @@ type revisionResult struct {
 	preflightViolation validation.RevisionViolation
 }
 
-// GetPreflightViolation returns the preflight
-// violation, if one was encountered.
+// GetPreflightViolation returns the preflight violations.
 func (r *revisionResult) GetPreflightViolation() (validation.RevisionViolation, bool) {
 	return r.preflightViolation,
 		r.preflightViolation != nil && !r.preflightViolation.Empty()

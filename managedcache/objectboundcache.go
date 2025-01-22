@@ -22,21 +22,25 @@ type ObjectBoundCache[T refType] interface {
 	manager.Runnable
 	// Get returns a TrackingCache for the provided object if one exists.
 	// If one does not exist, a new Cache is created and returned.
-	Get(context.Context, T) (TrackingCache, error)
+	Get(context.Context, T) (ScopedCacheClient, error)
 	// Free will stop and remove a TrackingCache for
 	// the provided object, if one exists.
 	Free(context.Context, T) error
 	Source(handler.EventHandler, ...predicate.Predicate) source.Source
 }
 
+type ScopedCacheClient interface {
+	client.Writer
+	TrackingCache
+}
+
 func NewObjectBoundCache[T refType](
-	scheme *runtime.Scheme,
 	mapConfig ConfigMapperFunc[T],
 	baseRestConfig *rest.Config,
 	baseCacheOptions cache.Options,
 ) ObjectBoundCache[T] {
 	return &objectBoundCacheImpl[T]{
-		scheme:           scheme,
+		scheme:           baseCacheOptions.Scheme,
 		mapConfig:        mapConfig,
 		baseRestConfig:   baseRestConfig,
 		baseCacheOptions: baseCacheOptions,
@@ -77,7 +81,7 @@ type objectBoundCacheImpl[T refType] struct {
 }
 
 type cacheEntry struct {
-	cache  TrackingCache
+	cache  ScopedCacheClient
 	cancel func()
 }
 
@@ -87,7 +91,7 @@ type cacheRequest[T refType] struct {
 }
 
 type cacheResponse struct {
-	cache TrackingCache
+	cache ScopedCacheClient
 	err   error
 }
 
@@ -146,16 +150,22 @@ func (i *objectBoundCacheImpl[T]) Start(ctx context.Context) error {
 	}
 }
 
+type accessor struct {
+	TrackingCache
+	client.Writer
+}
+
 func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 	ctx context.Context, req cacheRequest[T],
 	doneCh chan<- cacheDone, wg *sync.WaitGroup,
-) (TrackingCache, error) {
+) (ScopedCacheClient, error) {
 	c, ok := i.caches[req.owner.GetUID()]
 	if ok {
 		return c.cache, nil
 	}
 
-	restConfig, cacheOpts, err := i.mapConfig(ctx, req.owner, i.baseRestConfig, i.baseCacheOptions)
+	restConfig, cacheOpts, err := i.mapConfig(
+		ctx, req.owner, rest.CopyConfig(i.baseRestConfig), i.baseCacheOptions)
 	if err != nil {
 		return nil, fmt.Errorf("mapping rest.Config and cache.Options: %w", err)
 	}
@@ -166,11 +176,20 @@ func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 	}
 
 	cache := newTrackingCache(ctrlcache, i.scheme, i.cacheSourcer)
+	client, err := client.New(restConfig, client.Options{
+		Scheme:     i.baseCacheOptions.Scheme,
+		Mapper:     i.baseCacheOptions.Mapper,
+		HTTPClient: i.baseCacheOptions.HTTPClient,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating new Client: %w", err)
+	}
 
 	// start cache
 	ctx, cancel := context.WithCancel(ctx)
+	a := &accessor{TrackingCache: cache, Writer: client}
 	entry := cacheEntry{
-		cache:  cache,
+		cache:  a,
 		cancel: cancel,
 	}
 	i.caches[req.owner.GetUID()] = entry
@@ -179,14 +198,14 @@ func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 		defer wg.Done()
 		doneCh <- cacheDone{uid: req.owner.GetUID(), err: cache.Start(ctx)}
 	}(ctx, doneCh)
-	return cache, nil
+	return a, nil
 }
 
 // Get returns a Cache for the provided object reference.
 // If a cache does not already exist, a new one will be created.
 // If a nil object is provided this function will panic.
 // If the given object has no UID set this function will panic.
-func (i *objectBoundCacheImpl[T]) Get(ctx context.Context, owner T) (TrackingCache, error) {
+func (i *objectBoundCacheImpl[T]) Get(ctx context.Context, owner T) (ScopedCacheClient, error) {
 	var zeroT T
 	if owner == zeroT {
 		panic("nil object provided")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -79,25 +80,30 @@ func (r *Reference) Start(ctx context.Context) error {
 		return fmt.Errorf("creating discovery client: %w", err)
 	}
 
-	// Create a remote client that does not cache resources cluster-wide.
-	uncachedClient, err := client.New(
-		r.restConfig, client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
-	if err != nil {
-		return fmt.Errorf("unable to set up uncached client: %w", err)
-	}
-
 	mapper := func(ctx context.Context, cm *corev1.ConfigMap, c *rest.Config, o cache.Options) (*rest.Config, cache.Options, error) {
-
+		o.DefaultLabelSelector = labels.SelectorFromSet(labels.Set{
+			"boxcutter.test/Owner":     "ConfigMap",
+			"boxcutter.test/OwnerName": cm.Name,
+		})
+		c.Impersonate = rest.ImpersonationConfig{
+			UID:      string(cm.GetUID()),
+			UserName: fmt.Sprintf("boxcutter:reference:%s:%s", cm.GetNamespace(), cm.GetName()),
+			Groups: []string{
+				"boxcutter:references:" + cm.GetNamespace(),
+				"boxcutter:references",
+			},
+		}
 		return c, o, nil
 	}
-	mc := managedcache.NewObjectBoundCache[*corev1.ConfigMap](r.scheme, mapper, r.restConfig, cache.Options{})
+	mc := managedcache.NewObjectBoundCache[*corev1.ConfigMap](mapper, r.restConfig, cache.Options{
+		Scheme: r.scheme, Mapper: mgr.GetRESTMapper(),
+	})
 	if err := mgr.Add(mc); err != nil {
 		return fmt.Errorf("adding managedcache: %w", err)
 	}
 
 	c := &CMRevisionReconciler{
 		client:          mgr.GetClient(),
-		uncachedClient:  uncachedClient,
 		discoveryClient: discoveryClient,
 		restMapper:      mgr.GetRESTMapper(),
 		cache:           mc,
@@ -112,7 +118,6 @@ func (r *Reference) Start(ctx context.Context) error {
 
 type CMRevisionReconciler struct {
 	client          client.Client
-	uncachedClient  client.Client
 	discoveryClient *discovery.DiscoveryClient
 	restMapper      meta.RESTMapper
 
@@ -127,23 +132,22 @@ func (c *CMRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return res, client.IgnoreNotFound(err)
 	}
 
-	cache, err := c.cache.Get(ctx, revisionCM)
+	accessor, err := c.cache.Get(ctx, revisionCM)
 	if err != nil {
 		return res, fmt.Errorf("get cache: %w", err)
 	}
 
 	os := ownerhandling.NewNative(c.scheme)
 	comp := machinery.NewComparator(os, c.discoveryClient, c.scheme, fieldOwner)
-	pval := validation.NewNamespacedPhaseValidator(c.restMapper, c.client)
+	pval := validation.NewNamespacedPhaseValidator(c.restMapper, accessor)
 	rval := validation.NewRevisionValidator()
 
 	oe := machinery.NewObjectEngine(
-		c.scheme, cache, c.uncachedClient,
-		c.client, os, comp, fieldOwner, systemPrefix,
+		c.scheme, accessor, accessor, os, comp, fieldOwner, systemPrefix,
 	)
 	pe := machinery.NewPhaseEngine(oe, pval)
 
-	re := machinery.NewRevisionEngine(pe, rval, c.client)
+	re := machinery.NewRevisionEngine(pe, rval, accessor)
 
 	rev, err := c.toRevision(revisionCM)
 	if err != nil {
@@ -185,6 +189,18 @@ func (c *CMRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	fmt.Println("-----------")
 	fmt.Println(rres.String())
+
+	// Retry failing preflight checks with a flat 10s retry.
+	if _, ok := rres.GetPreflightViolation(); ok {
+		res.RequeueAfter = 10 * time.Second
+		return res, nil
+	}
+	for _, pres := range rres.GetPhases() {
+		if _, ok := pres.GetPreflightViolation(); ok {
+			res.RequeueAfter = 10 * time.Second
+			return res, nil
+		}
+	}
 
 	return res, nil
 }
@@ -268,6 +284,14 @@ func (c *CMRevisionReconciler) toRevision(cm *corev1.ConfigMap) (bctypes.Revisio
 			obj.SetNamespace(
 				cm.GetNamespace())
 		}
+
+		labels := obj.GetLabels()
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels["boxcutter.test/Owner"] = "ConfigMap"
+		labels["boxcutter.test/OwnerName"] = cm.Name
+		obj.SetLabels(labels)
 
 		objects[phase] = append(objects[phase], obj)
 	}

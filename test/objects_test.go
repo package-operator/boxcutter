@@ -19,8 +19,7 @@ func TestObjectEngine(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client,
-		Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
 	)
 
 	ctx := context.Background()

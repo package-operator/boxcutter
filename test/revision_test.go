@@ -81,8 +81,7 @@ func TestRevisionEngine(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client,
-		Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
 	)
 	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)

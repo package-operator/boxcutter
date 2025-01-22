@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"pkg.package-operator.run/boxcutter/internal/testutil"
@@ -818,7 +817,6 @@ func TestObjectEngine(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -826,15 +824,11 @@ func TestObjectEngine(t *testing.T) {
 
 			oe := NewObjectEngine(
 				scheme.Scheme,
-				cache, uncachedReader, writer,
+				cache, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
-
-			cache.
-				On("Watch", mock.Anything, mock.Anything, mock.Anything).
-				Return(nil)
 
 			test.mockSetup(cache, writer, divergeDetector)
 
@@ -858,7 +852,6 @@ func TestObjectEngine(t *testing.T) {
 				assert.Equal(t, test.expectedObject, r.Object())
 			}
 			assert.Equal(t, test.expectedAction, res.Action())
-			cache.AssertCalled(t, "Watch", mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -1065,7 +1058,6 @@ func TestObjectEngine_Teardown(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -1078,7 +1070,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			test.mockSetup(cache, writer)
 			oe := NewObjectEngine(
 				scheme.Scheme,
-				cache, uncachedReader, writer,
+				cache, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
@@ -1119,15 +1111,6 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 
 type cacheMock struct {
 	testutil.CtrlClient
-}
-
-func (m *cacheMock) Watch(
-	ctx context.Context,
-	owner client.Object,
-	obj runtime.Object,
-) error {
-	args := m.Called(ctx, owner, obj)
-	return args.Error(0)
 }
 
 type comperatorMock struct {

@@ -20,14 +20,11 @@ import (
 
 // ObjectEngine reconciles individual objects.
 type ObjectEngine struct {
-	scheme *runtime.Scheme
-	cache  client.Reader
-	// Used to resolve conflicts with objects
-	// excluded by the cache selector.
-	uncachedReader client.Reader
-	writer         client.Writer
-	ownerStrategy  objectEngineOwnerStrategy
-	comperator     comperator
+	scheme        *runtime.Scheme
+	cache         client.Reader
+	writer        client.Writer
+	ownerStrategy objectEngineOwnerStrategy
+	comperator    comperator
 
 	fieldOwner   string
 	systemPrefix string
@@ -37,7 +34,6 @@ type ObjectEngine struct {
 func NewObjectEngine(
 	scheme *runtime.Scheme,
 	cache client.Reader,
-	uncachedReader client.Reader,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
 	comperator comperator,
@@ -46,12 +42,11 @@ func NewObjectEngine(
 	systemPrefix string,
 ) *ObjectEngine {
 	return &ObjectEngine{
-		scheme:         scheme,
-		cache:          cache,
-		uncachedReader: uncachedReader,
-		writer:         writer,
-		ownerStrategy:  ownerStrategy,
-		comperator:     comperator,
+		scheme:        scheme,
+		cache:         cache,
+		writer:        writer,
+		ownerStrategy: ownerStrategy,
+		comperator:    comperator,
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
@@ -95,6 +90,8 @@ func (e *ObjectEngine) Teardown(
 	}
 
 	// Shortcut when Owner is orphaning its dependents.
+	// If we don't check this, we might be too quick and start deleting
+	// dependents that should be kept on the cluster!
 	if controllerutil.ContainsFinalizer(owner, "orphan") {
 		return true, nil
 	}
@@ -146,6 +143,7 @@ func (e *ObjectEngine) Teardown(
 	if errors.IsNotFound(err) {
 		return true, nil
 	}
+	// TODO: Catch Precondition errors?
 	if err != nil {
 		return false, fmt.Errorf("deleting object: %w", err)
 	}
@@ -207,15 +205,7 @@ func (e *ObjectEngine) Reconcile(
 		if errors.IsAlreadyExists(err) {
 			// Might be a slow cache or an object created by a different actor
 			// but excluded by the cache selector.
-			if err := e.uncachedReader.Get(
-				ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
-			); err != nil {
-				return nil, fmt.Errorf("getting object via cache bypass after create conflict: %w", err)
-			}
-			return e.objectUpdateHandling(
-				ctx, owner, revision,
-				desiredObject, actualObject, options,
-			)
+			return nil, &CreateCollisionError{msg: err.Error()}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("creating resource: %w", err)
