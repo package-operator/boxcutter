@@ -95,7 +95,7 @@ func (r *Reference) Start(ctx context.Context) error {
 		}
 		return c, o, nil
 	}
-	mc := managedcache.NewObjectBoundCache[*corev1.ConfigMap](mapper, r.restConfig, cache.Options{
+	mc := managedcache.NewObjectBoundAccessManager[*corev1.ConfigMap](mapper, r.restConfig, cache.Options{
 		Scheme: r.scheme, Mapper: mgr.GetRESTMapper(),
 	})
 	if err := mgr.Add(mc); err != nil {
@@ -121,7 +121,7 @@ type CMRevisionReconciler struct {
 	discoveryClient *discovery.DiscoveryClient
 	restMapper      meta.RESTMapper
 
-	cache  managedcache.ObjectBoundCache[*corev1.ConfigMap]
+	cache  managedcache.ObjectBoundAccessManager[*corev1.ConfigMap]
 	scheme *runtime.Scheme
 }
 

@@ -16,9 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// ObjectBoundCache manages caches for individual bound to objects.
-// Each object instance will receive it's own cache instance.
-type ObjectBoundCache[T refType] interface {
+// ObjectBoundAccessManager manages caches and clients bound to objects.
+// Each object instance will receive it's own cache and client instance.
+type ObjectBoundAccessManager[T refType] interface {
 	manager.Runnable
 	// Get returns a TrackingCache for the provided object if one exists.
 	// If one does not exist, a new Cache is created and returned.
@@ -34,12 +34,12 @@ type ScopedCacheClient interface {
 	TrackingCache
 }
 
-func NewObjectBoundCache[T refType](
+func NewObjectBoundAccessManager[T refType](
 	mapConfig ConfigMapperFunc[T],
 	baseRestConfig *rest.Config,
 	baseCacheOptions cache.Options,
-) ObjectBoundCache[T] {
-	return &objectBoundCacheImpl[T]{
+) ObjectBoundAccessManager[T] {
+	return &objectBoundAccessManagerImpl[T]{
 		scheme:           baseCacheOptions.Scheme,
 		mapConfig:        mapConfig,
 		baseRestConfig:   baseRestConfig,
@@ -47,6 +47,7 @@ func NewObjectBoundCache[T refType](
 
 		cacheSourcer: &cacheSource{},
 		newCache:     cache.New,
+		newClient:    client.New,
 
 		caches:         map[types.UID]cacheEntry{},
 		cacheRequestCh: make(chan cacheRequest[T]),
@@ -63,10 +64,11 @@ type refType interface {
 type ConfigMapperFunc[T refType] func(context.Context, T, *rest.Config, cache.Options) (*rest.Config, cache.Options, error)
 
 type newCacheFunc func(config *rest.Config, opts cache.Options) (cache.Cache, error)
+type newClientFunc func(config *rest.Config, opts client.Options) (client.Client, error)
 
-var _ ObjectBoundCache[client.Object] = (*objectBoundCacheImpl[client.Object])(nil)
+var _ ObjectBoundAccessManager[client.Object] = (*objectBoundAccessManagerImpl[client.Object])(nil)
 
-type objectBoundCacheImpl[T refType] struct {
+type objectBoundAccessManagerImpl[T refType] struct {
 	scheme           *runtime.Scheme
 	mapConfig        ConfigMapperFunc[T]
 	baseRestConfig   *rest.Config
@@ -74,6 +76,7 @@ type objectBoundCacheImpl[T refType] struct {
 
 	cacheSourcer cacheSourcer
 	newCache     newCacheFunc
+	newClient    newClientFunc
 
 	caches         map[types.UID]cacheEntry
 	cacheRequestCh chan cacheRequest[T]
@@ -100,11 +103,11 @@ type cacheDone struct {
 	uid types.UID
 }
 
-func (c *objectBoundCacheImpl[T]) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
+func (c *objectBoundAccessManagerImpl[T]) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
 	return c.cacheSourcer.Source(handler, predicates...)
 }
 
-func (i *objectBoundCacheImpl[T]) Start(ctx context.Context) error {
+func (i *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	doneCh := make(chan cacheDone)
 	defer close(doneCh)
@@ -155,7 +158,7 @@ type accessor struct {
 	client.Writer
 }
 
-func (i *objectBoundCacheImpl[T]) handleCacheRequest(
+func (i *objectBoundAccessManagerImpl[T]) handleCacheRequest(
 	ctx context.Context, req cacheRequest[T],
 	doneCh chan<- cacheDone, wg *sync.WaitGroup,
 ) (ScopedCacheClient, error) {
@@ -176,7 +179,7 @@ func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 	}
 
 	cache := newTrackingCache(ctrlcache, i.scheme, i.cacheSourcer)
-	client, err := client.New(restConfig, client.Options{
+	client, err := i.newClient(restConfig, client.Options{
 		Scheme:     i.baseCacheOptions.Scheme,
 		Mapper:     i.baseCacheOptions.Mapper,
 		HTTPClient: i.baseCacheOptions.HTTPClient,
@@ -205,7 +208,7 @@ func (i *objectBoundCacheImpl[T]) handleCacheRequest(
 // If a cache does not already exist, a new one will be created.
 // If a nil object is provided this function will panic.
 // If the given object has no UID set this function will panic.
-func (i *objectBoundCacheImpl[T]) Get(ctx context.Context, owner T) (ScopedCacheClient, error) {
+func (i *objectBoundAccessManagerImpl[T]) Get(ctx context.Context, owner T) (ScopedCacheClient, error) {
 	var zeroT T
 	if owner == zeroT {
 		panic("nil object provided")
@@ -234,7 +237,7 @@ func (i *objectBoundCacheImpl[T]) Get(ctx context.Context, owner T) (ScopedCache
 }
 
 // Free stops and removes the Cache for the provided object.
-func (i *objectBoundCacheImpl[T]) Free(ctx context.Context, owner T) error {
+func (i *objectBoundAccessManagerImpl[T]) Free(ctx context.Context, owner T) error {
 	var zeroT T
 	if owner == zeroT {
 		panic("nil ClusterExtension provided")
