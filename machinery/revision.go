@@ -166,19 +166,6 @@ func (re *RevisionEngine) Reconcile(
 		return rres, nil
 	}
 
-	// Anchor handling to ensure controling object teardown order.
-	var objects []client.Object
-	for _, phase := range rev.GetPhases() {
-		for _, obj := range phase.GetObjects() {
-			objects = append(objects, obj.Object)
-		}
-	}
-
-	// err = re.anchorManager.EnsureFor(ctx, rev.GetClientObject(), objects)
-	// if err != nil {
-	// 	return rres, fmt.Errorf("ensuring anchor object: %w", err)
-	// }
-
 	// Reconcile
 	for _, phase := range rev.GetPhases() {
 		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase)
@@ -321,10 +308,6 @@ func (re *RevisionEngine) Teardown(
 		slices.Reverse(res.gone)
 		return res, nil
 	}
-
-	// if err := re.anchorManager.RemoveFor(ctx, rev.GetClientObject()); err != nil {
-	// 	return nil, fmt.Errorf("removing Anchor: %w", err)
-	// }
 
 	slices.Reverse(res.gone)
 	res.active = ""

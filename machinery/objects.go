@@ -15,6 +15,7 @@ import (
 	"k8s.io/utils/ptr"
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // ObjectEngine reconciles individual objects.
@@ -91,6 +92,11 @@ func (e *ObjectEngine) Teardown(
 	}
 	if len(owner.GetUID()) == 0 {
 		panic("owner must be persisted to cluster, empty UID")
+	}
+
+	// Shortcut when Owner is orphaning its dependents.
+	if controllerutil.ContainsFinalizer(owner, "orphan") {
+		return true, nil
 	}
 
 	// Lookup actual object state on cluster.
