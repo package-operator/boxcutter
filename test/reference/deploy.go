@@ -29,10 +29,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type CMDeploymentReconciler struct {
+const deploymentLabel = "boxcutter.test/deployment"
+const hashAnnotation = "boxcutter.test/hash"
+const cmPhasesKey = "phases"
+const cmRevisionNumberKey = "revision"
+const cmPreviousKey = "previous"
+const cmStateKey = "state"
+
+type Reconciler struct {
 	client          client.Client
 	discoveryClient *discovery.DiscoveryClient
 	restMapper      meta.RESTMapper
@@ -41,14 +47,14 @@ type CMDeploymentReconciler struct {
 	scheme *runtime.Scheme
 }
 
-func NewDeploymentReconciler(
+func NewReconciler(
 	client client.Client,
 	discoveryClient *discovery.DiscoveryClient,
 	restMapper meta.RESTMapper,
 	cache managedcache.ObjectBoundAccessManager[*corev1.ConfigMap],
 	scheme *runtime.Scheme,
-) *CMDeploymentReconciler {
-	return &CMDeploymentReconciler{
+) *Reconciler {
+	return &Reconciler{
 		client:          client,
 		discoveryClient: discoveryClient,
 		restMapper:      restMapper,
@@ -57,10 +63,7 @@ func NewDeploymentReconciler(
 	}
 }
 
-const deploymentLabel = "boxcutter.test/deployment"
-const hashAnnotation = "boxcutter.test/hash"
-
-func (c *CMDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
+func (c *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	cm := &corev1.ConfigMap{}
 	if err := c.client.Get(
 		ctx, req.NamespacedName, cm); err != nil {
@@ -81,16 +84,21 @@ func (c *CMDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				ResourceVersion: ptr.To(cm.GetResourceVersion()),
 			})
 		}
+		return c.handleRevision(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				UID:       owner.UID,
+				Name:      owner.Name,
+				Namespace: cm.GetNamespace(),
+			},
+		}, cm)
 
-		if err := c.client.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: cm.Namespace}, cm); err != nil {
-			return res, client.IgnoreNotFound(err)
-		}
+	case "Deployment":
+		return c.handleDeployment(ctx, cm)
 	}
-	return c.handleDeployment(ctx, cm)
-	// return res, nil
+	return res, nil
 }
 
-func (c *CMDeploymentReconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap) (res ctrl.Result, err error) {
+func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap) (res ctrl.Result, err error) {
 	existingRevisionsRaw := &corev1.ConfigMapList{}
 	if err := c.client.List(ctx, existingRevisionsRaw, client.MatchingLabels{
 		typeLabel:       "Revision",
@@ -100,39 +108,6 @@ func (c *CMDeploymentReconciler) handleDeployment(ctx context.Context, cm *corev
 	}
 
 	if !cm.DeletionTimestamp.IsZero() {
-		// Delete Revisions
-		for _, v := range existingRevisionsRaw.Items {
-			if controllerutil.ContainsFinalizer(cm, "orphan") {
-				if err := c.client.Delete(ctx, &v, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-					return res, err
-				}
-			} else {
-				if err := c.client.Delete(ctx, &v); err != nil {
-					return res, err
-				}
-			}
-		}
-
-		// TODO: detect orphaning
-		accessor, err := c.cache.Get(ctx, cm)
-		if err != nil {
-			return res, fmt.Errorf("get accessor: %w", err)
-		}
-
-		for _, rev := range existingRevisionsRaw.Items {
-			rev, _, err := c.toRevision(cm, &rev)
-			if err != nil {
-				return res, fmt.Errorf("to rev: %w", err)
-			}
-			_, err = c.handleRevision(ctx, rev, nil, accessor)
-			if err != nil {
-				return res, fmt.Errorf("reconciling prev revision: %w", err)
-			}
-		}
-		if len(existingRevisionsRaw.Items) > 0 {
-			return res, nil
-		}
-
 		if err := c.cache.Free(ctx, cm); err != nil {
 			return res, fmt.Errorf("free cache: %w", err)
 		}
@@ -148,7 +123,7 @@ func (c *CMDeploymentReconciler) handleDeployment(ctx context.Context, cm *corev
 
 	var existingRevisions []bctypes.Revision
 	for _, rev := range existingRevisionsRaw.Items {
-		r, _, err := c.toRevision(cm, &rev)
+		r, _, err := c.toRevision(cm.Name, &rev)
 		if err != nil {
 			return res, fmt.Errorf("to revision: %w", err)
 		}
@@ -203,56 +178,18 @@ func (c *CMDeploymentReconciler) handleDeployment(ctx context.Context, cm *corev
 		if err := c.client.Create(ctx, newRevision); err != nil {
 			return res, fmt.Errorf("creating new Revision: %w", err)
 		}
-
-		currentRevision, _, err = c.toRevision(cm, newRevision)
-		if err != nil {
-			return res, fmt.Errorf("new revision to revision: %w", err)
-		}
 	}
 
-	accessor, err := c.cache.Get(ctx, cm)
-	if err != nil {
-		return res, fmt.Errorf("get accessor: %w", err)
-	}
-
-	if _, err := c.handleRevision(ctx, currentRevision, prevRevisions, accessor); err != nil {
-		return res, fmt.Errorf("reconciling current revision: %w", err)
-	}
-	for _, rev := range prevRevisions {
-		if _, err := c.handleRevision(ctx, rev, nil, accessor); err != nil {
-			return res, fmt.Errorf("reconciling prev revision: %w", err)
-		}
-	}
-
-	// TODO: Free Caches.
-
-	// TODO: Delete previous revisions.
-	// Need some signal to know it's safe to do so...
 	return res, nil
 }
 
-type clientReadWriter interface {
-	client.Writer
-	client.Reader
-}
-
-func (c *CMDeploymentReconciler) handleRevision(
-	ctx context.Context, revision bctypes.Revision, previous []bctypes.Revision,
-	accessor clientReadWriter,
+func (c *Reconciler) handleRevision(
+	ctx context.Context, deploy *corev1.ConfigMap, revisionCM *corev1.ConfigMap,
 ) (res ctrl.Result, err error) {
-	revisionCM := revision.GetClientObject().(*corev1.ConfigMap)
-
-	// acccessorObj := &corev1.ConfigMap{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		UID:       owner.UID,
-	// 		Name:      owner.Name,
-	// 		Namespace: revisionCM.GetNamespace(),
-	// 	},
-	// }
-	// accessor, err := c.cache.Get(ctx, acccessorObj) // TODO: get accessor from parent (deployment)
-	// if err != nil {
-	// 	return res, fmt.Errorf("get cache: %w", err)
-	// }
+	accessor, err := c.cache.Get(ctx, deploy)
+	if err != nil {
+		return res, fmt.Errorf("get cache: %w", err)
+	}
 
 	os := ownerhandling.NewNative(c.scheme)
 	comp := machinery.NewComparator(os, c.discoveryClient, c.scheme, fieldOwner)
@@ -266,10 +203,10 @@ func (c *CMDeploymentReconciler) handleRevision(
 
 	re := machinery.NewRevisionEngine(pe, rval, accessor)
 
-	// rev, previous, err := c.toRevision(revisionCM)
-	// if err != nil {
-	// 	return res, fmt.Errorf("converting CM to revision: %w", err)
-	// }
+	revision, previous, err := c.toRevision(deploy.Name, revisionCM)
+	if err != nil {
+		return res, fmt.Errorf("converting CM to revision: %w", err)
+	}
 
 	if !revisionCM.DeletionTimestamp.IsZero() ||
 		revisionCM.Data[cmStateKey] == "Archived" {
@@ -319,7 +256,7 @@ func (c *CMDeploymentReconciler) handleRevision(
 	// Archive other revisions.
 	if rres.IsComplete() {
 		for _, a := range previous {
-			if err := c.client.Patch(ctx, a.GetClientObject(), client.RawPatch(types.MergePatchType, []byte(`{"data":{"state":"Archived"}}`))); err != nil {
+			if err := c.client.Patch(ctx, a, client.RawPatch(types.MergePatchType, []byte(`{"data":{"state":"Archived"}}`))); err != nil {
 				return res, fmt.Errorf("archive previous Revision: %w", err)
 			}
 		}
@@ -327,12 +264,25 @@ func (c *CMDeploymentReconciler) handleRevision(
 	return res, nil
 }
 
-const cmPhasesKey = "phases"
-const cmRevisionNumberKey = "revision"
-const cmPreviousKey = "previous"
-const cmStateKey = "state"
+func (c *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(
+			&corev1.ConfigMap{},
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		WatchesRawSource(
+			c.cache.Source(
+				handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &corev1.ConfigMap{}),
+				predicate.ResourceVersionChangedPredicate{},
+				predicate.NewPredicateFuncs(func(object client.Object) bool {
+					return true
+				}),
+			),
+		).
+		Complete(c)
+}
 
-func (c *CMDeploymentReconciler) toRevision(deploy, cm *corev1.ConfigMap) (r bctypes.Revision, previous []client.Object, err error) {
+func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (r bctypes.Revision, previous []client.Object, err error) {
 	var phases []string
 	objects := map[string][]unstructured.Unstructured{}
 	var previousUnstr []unstructured.Unstructured
@@ -382,9 +332,7 @@ func (c *CMDeploymentReconciler) toRevision(deploy, cm *corev1.ConfigMap) (r bct
 		if labels == nil {
 			labels = map[string]string{}
 		}
-		// labels["boxcutter.test/Owner"] = "ConfigMap"
-		// labels["boxcutter.test/OwnerName"] = cm.Name
-		labels[deploymentLabel] = deploy.Name
+		labels[deploymentLabel] = deployName
 		obj.SetLabels(labels)
 
 		objects[phase] = append(objects[phase], obj)
@@ -413,6 +361,20 @@ func (c *CMDeploymentReconciler) toRevision(deploy, cm *corev1.ConfigMap) (r bct
 				Object: &obj,
 				Opts: []bctypes.ObjectOption{
 					bctypes.WithPreviousOwners(previous),
+					bctypes.WithProbe(machinery.ProgressProbeType, &bctypes.ProbeFn{Fn: func(obj client.Object) (success bool, messages []string) {
+						u, ok := obj.(*unstructured.Unstructured)
+						if obj.GetObjectKind().GroupVersionKind().Kind != "ConfigMap" || !ok {
+							return true, nil
+						}
+						f, ok, _ := unstructured.NestedString(u.Object, "data", "continue")
+						if !ok {
+							return false, []string{".data.continue not set"}
+						}
+						if f != "yes" {
+							return false, []string{`.data.continue not set to "yes"`}
+						}
+						return true, nil
+					}}),
 				},
 			})
 		}
@@ -422,7 +384,7 @@ func (c *CMDeploymentReconciler) toRevision(deploy, cm *corev1.ConfigMap) (r bct
 	return rev, previous, nil
 }
 
-func (c *CMDeploymentReconciler) ensureFinalizer(
+func (c *Reconciler) ensureFinalizer(
 	ctx context.Context, obj client.Object, finalizer string,
 ) error {
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
@@ -447,7 +409,7 @@ func (c *CMDeploymentReconciler) ensureFinalizer(
 	return nil
 }
 
-func (c *CMDeploymentReconciler) removeFinalizer(
+func (c *Reconciler) removeFinalizer(
 	ctx context.Context, obj client.Object, finalizer string,
 ) error {
 	if !controllerutil.ContainsFinalizer(obj, finalizer) {
@@ -470,88 +432,4 @@ func (c *CMDeploymentReconciler) removeFinalizer(
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
 	return nil
-}
-
-func (c *CMDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		// For(&corev1.ConfigMap{}, builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
-		Named("DeploymentConfigMaps").
-		Watches(
-			&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				cm := obj.(*corev1.ConfigMap)
-				switch cm.Labels[typeLabel] {
-				case "Revision":
-					// every time a revision completes, check revisions for cleanup/archival.
-					owner, ownerFound := getOwner(cm)
-					if !ownerFound {
-						return nil
-					}
-					return []reconcile.Request{
-						{NamespacedName: types.NamespacedName{Name: owner.Name, Namespace: cm.Namespace}},
-					}
-				case "Deployment":
-					return []reconcile.Request{
-						{NamespacedName: types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}},
-					}
-				}
-				return nil
-			}),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
-		WatchesRawSource(
-			c.cache.Source(
-				handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &corev1.ConfigMap{}),
-				predicate.ResourceVersionChangedPredicate{},
-				predicate.NewPredicateFuncs(func(object client.Object) bool {
-					return true
-				}),
-			),
-		).
-		Complete(c)
-}
-
-type revisionAscending []bctypes.Revision
-
-func (a revisionAscending) Len() int      { return len(a) }
-func (a revisionAscending) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a revisionAscending) Less(i, j int) bool {
-	iObj := a[i]
-	jObj := a[j]
-
-	return iObj.GetRevisionNumber() < jObj.GetRevisionNumber()
-}
-
-func latestRevisionNumber(prevRevisions []bctypes.Revision) int64 {
-	if len(prevRevisions) == 0 {
-		return 0
-	}
-	return prevRevisions[len(prevRevisions)-1].GetRevisionNumber()
-}
-
-func prevJson(prevRevisions []bctypes.Revision) string {
-	var data []unstructured.Unstructured
-	for _, rev := range prevRevisions {
-		refObj := rev.GetClientObject()
-		ref := unstructured.Unstructured{}
-		ref.SetGroupVersionKind(refObj.GetObjectKind().GroupVersionKind())
-		ref.SetName(refObj.GetName())
-		ref.SetNamespace(refObj.GetNamespace())
-		ref.SetUID(refObj.GetUID())
-		data = append(data, ref)
-	}
-	dataJson, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-	return string(dataJson)
-}
-
-func getOwner(obj client.Object) (metav1.OwnerReference, bool) {
-	for _, v := range obj.GetOwnerReferences() {
-		if v.Controller != nil && *v.Controller {
-			return v, true
-		}
-	}
-	return metav1.OwnerReference{}, false
 }
