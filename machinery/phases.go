@@ -135,12 +135,6 @@ func (e *PhaseEngine) Teardown(
 
 	for _, o := range phase.GetObjects() {
 		gone, err := e.objectEngine.Teardown(ctx, owner, revision, o.Object)
-
-		if IsTeardownRejectedDueToOwnerOrRevisionChange(err) {
-			// not deleted, but not "our" problem anymore.
-			res.gone = append(res.gone, types.ToObjectRef(o.Object))
-			continue
-		}
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
@@ -202,6 +196,8 @@ type PhaseResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	// HasProgressed returns true when all objects have been progressed to a newer revision.
+	HasProgressed() bool
 	String() string
 }
 
@@ -230,10 +226,14 @@ func (r *phaseResult) GetObjects() []ObjectResult {
 }
 
 // InTransition returns true if the Phase has not yet fully rolled out,
-// if the phase has objects progressed to a new revision or
+// if the phase has some objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *phaseResult) InTransistion() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
+		return false
+	}
+	if r.HasProgressed() {
+		// If all objects have progressed, we are done transitioning.
 		return false
 	}
 	for _, o := range r.objects {
@@ -243,6 +243,18 @@ func (r *phaseResult) InTransistion() bool {
 		}
 	}
 	return false
+}
+
+// HasProgressed returns true when all objects have been progressed to a newer revision.
+func (r *phaseResult) HasProgressed() bool {
+	var numProgressed int
+	for _, o := range r.objects {
+		switch o.Action() {
+		case ActionProgressed:
+			numProgressed++
+		}
+	}
+	return numProgressed == len(r.objects)
 }
 
 // IsComplete returns true when all objects have

@@ -44,7 +44,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 	if len(obj.GetGenerateName()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
-				metadataPath.Child("generation"),
+				metadataPath.Child("generateName"),
 				"must be empty",
 			))
 	}
@@ -55,14 +55,12 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must be empty",
 			))
 	}
-	for _, ownerRef := range obj.GetOwnerReferences() {
-		if ownerRef.Controller != nil && *ownerRef.Controller {
-			errs = append(errs,
-				field.Forbidden(
-					metadataPath.Child("ownerReferences"),
-					"must not have controller set",
-				))
-		}
+	if len(obj.GetOwnerReferences()) > 0 {
+		errs = append(errs,
+			field.Forbidden(
+				metadataPath.Child("ownerReferences"),
+				"must be empty",
+			))
 	}
 	if len(obj.GetResourceVersion()) > 0 {
 		errs = append(errs,

@@ -1,0 +1,18 @@
+
+
+
+Supports:
+- Orphaning of resources (OCPSTRAT-1144)
+- Preflight checks (OCPSTRAT-192)
+  - dry-run
+  - static:
+    - .apiVersion set
+    - .kind set
+    - .metadata.uid empty
+    - .metadata.generation empty
+    - .metadata.generateName empty
+    - .metadata.finalizers empty
+    - .metadata.ownerReferences empty
+    - .metadata.resourceVersion empty
+    - dublicate objects
+- Canary style rollouts (OCPSTRAT-626)

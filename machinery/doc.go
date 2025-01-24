@@ -2,4 +2,4 @@
 package machinery
 
 // ProgressProbeType is a well-known probe type used to guard phase progression.
-const ProgressProbeType = "package-operator.run/Progress"
+const ProgressProbeType = "Progress"

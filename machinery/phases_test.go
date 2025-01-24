@@ -139,11 +139,7 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	var revision int64 = 1
 
 	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything).
-		Once().
 		Return(true, nil)
-	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything).
-		Once().
-		Return(false, TeardownControllerChangedError{})
 
 	ctx := context.Background()
 	deleted, err := pe.Teardown(ctx, owner, revision, &types.PhaseStandin{

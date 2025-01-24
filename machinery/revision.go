@@ -67,6 +67,8 @@ type RevisionResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	// HasProgressed returns true when all phases have been progressed to a newer revision.
+	HasProgressed() bool
 	String() string
 }
 
@@ -96,6 +98,17 @@ func (r *revisionResult) InTransistion() bool {
 		}
 	}
 	return false
+}
+
+// HasProgressed returns true when all phases have been progressed to a newer revision.
+func (r *revisionResult) HasProgressed() bool {
+	var numProgressed int
+	for _, p := range r.phasesResults {
+		if p.HasProgressed() {
+			numProgressed++
+		}
+	}
+	return numProgressed == len(r.phases)
 }
 
 // IsComplete returns true when all phases have

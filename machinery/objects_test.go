@@ -1008,10 +1008,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					}).
 					Return(nil)
 			},
-
-			expectedError: TeardownRevisionError{
-				msg: "Rejecting object teardown: Expected revision 1, actual revision 4",
-			},
+			expectedResult: true,
 		},
 		{
 			name:          "owner error",
@@ -1019,7 +1016,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			desiredObject: obj,
 
 			mockSetup: func(
-				cache *cacheMock, _ *testutil.CtrlClient,
+				cache *cacheMock, writer *testutil.CtrlClient,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -1047,11 +1044,10 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-			},
 
-			expectedError: TeardownRevisionError{
-				msg: "Rejecting object teardown: Owner not controller",
+				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
+			expectedResult: true,
 		},
 	}
 
@@ -1066,6 +1062,8 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			cache.
 				On("Watch", mock.Anything, mock.Anything, mock.Anything).
 				Return(nil)
+
+			writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 			test.mockSetup(cache, writer)
 			oe := NewObjectEngine(

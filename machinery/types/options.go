@@ -81,6 +81,14 @@ type Prober interface {
 	Probe(obj client.Object) (success bool, messages []string)
 }
 
+type ProbeFn struct {
+	Fn func(obj client.Object) (success bool, messages []string)
+}
+
+func (p *ProbeFn) Probe(obj client.Object) (success bool, messages []string) {
+	return p.Fn(obj)
+}
+
 // WithProbe registers the given probe to evaluate state of objects.
 func WithProbe(t string, probe Prober) ObjectOption {
 	return OptionFn{

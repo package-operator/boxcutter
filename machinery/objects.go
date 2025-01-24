@@ -65,6 +65,7 @@ type objectEngineOwnerStrategy interface {
 	IsController(owner, obj metav1.Object) bool
 	CopyOwnerReferences(objA, objB metav1.Object)
 	ReleaseController(obj metav1.Object)
+	RemoveOwner(owner, obj metav1.Object)
 }
 
 type comperator interface {
@@ -119,20 +120,12 @@ func (e *ObjectEngine) Teardown(
 	if err != nil {
 		return false, fmt.Errorf("getting object revision: %w", err)
 	}
-	if actualRevision != revision {
-		return false, TeardownRevisionError{
-			msg: fmt.Sprintf(
-				"Rejecting object teardown: Expected revision %d, actual revision %d",
-				revision, actualRevision,
-			),
-		}
-	}
-
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
-	if ctrlSit != ctrlSituationIsController {
-		return false, TeardownControllerChangedError{
-			msg: "Rejecting object teardown: Owner not controller",
-		}
+	if actualRevision != revision || ctrlSit != ctrlSituationIsController {
+		// Remove us from owners list:
+		patch := actualObject.DeepCopyObject().(Object)
+		e.ownerStrategy.RemoveOwner(owner, patch)
+		return true, e.writer.Patch(ctx, patch, client.MergeFrom(actualObject))
 	}
 
 	// Actually delete the object.
