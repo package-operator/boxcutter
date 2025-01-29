@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"pkg.package-operator.run/boxcutter/machinery/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // Violation is a generic violation message without

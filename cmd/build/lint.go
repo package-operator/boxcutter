@@ -21,7 +21,7 @@ func (l Lint) goModTidyAll(ctx context.Context) error {
 }
 
 func (Lint) glciFix() error {
-	return shr.Run("golangci-lint", "run", "--fix", "./...")
+	return shr.Run("golangci-lint", "run", "--concurrency=4", "--fix", "./...")
 }
 
 func (Lint) glciCheck() error {

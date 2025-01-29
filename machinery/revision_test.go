@@ -10,17 +10,20 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"pkg.package-operator.run/boxcutter/machinery/types"
-	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/internal/testutil"
+	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/validation"
 )
 
 func TestRevisionEngine_Teardown(t *testing.T) {
 	t.Parallel()
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
 
-	re := NewRevisionEngine(pe, rv)
+	re := NewRevisionEngine(pe, rv, c)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -30,13 +33,13 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		},
 	}
 
-	rev := Revision{
+	rev := &types.Revision{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
+		Phases: []types.PhaseAccessor{
+			&types.Phase{Name: "phase-1"},
+			&types.Phase{Name: "phase-2"},
+			&types.Phase{Name: "phase-3"},
 		},
 	}
 
@@ -63,8 +66,9 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	t.Parallel()
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
 
-	re := NewRevisionEngine(pe, rv)
+	re := NewRevisionEngine(pe, rv, c)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,14 +78,14 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 		},
 	}
 
-	rev := Revision{
+	rev := &types.Revision{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
-			{Name: "phase-4"},
+		Phases: []types.PhaseAccessor{
+			&types.Phase{Name: "phase-1"},
+			&types.Phase{Name: "phase-2"},
+			&types.Phase{Name: "phase-3"},
+			&types.Phase{Name: "phase-4"},
 		},
 	}
 
@@ -118,7 +122,7 @@ func (m *phaseEngineMock) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.PhaseAccessor,
 ) (PhaseResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
 	return args.Get(0).(PhaseResult), args.Error(1)
@@ -128,7 +132,7 @@ func (m *phaseEngineMock) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.PhaseAccessor,
 ) (PhaseTeardownResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
@@ -139,7 +143,7 @@ type revisionValidatorMock struct {
 }
 
 func (m *revisionValidatorMock) Validate(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev types.RevisionAccessor,
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
 	return args.Get(0).(validation.RevisionViolation), args.Error(1)
@@ -165,7 +169,7 @@ func TestRevisionResult_String(t *testing.T) {
 				name:               "phase-1",
 				preflightViolation: &phaseViolationStub{msg: "xxx"},
 				objects: []ObjectResult{
-					newObjectResultCreated(obj, &noopProbe{}),
+					newObjectResultCreated(obj, nil),
 				},
 			},
 		},
@@ -183,7 +187,6 @@ Phases:
   Objects:
   - Object Secret.v1 test/testi
     Action: "Created"
-    Probe:  Succeeded
 - Phase "phase-2" (Pending)
 `, r.String())
 }

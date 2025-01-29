@@ -10,18 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"pkg.package-operator.run/boxcutter/machinery"
-	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 func TestObjectEngine(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, &noopCache{Reader: Client}, Client,
-		Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
 	)
 
 	ctx := context.Background()
@@ -54,7 +53,6 @@ func TestObjectEngine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Created"
-Probe:  Succeeded
 `, res.String())
 
 	// Idle
@@ -62,7 +60,6 @@ Probe:  Succeeded
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
-Probe:  Succeeded
 `, res.String())
 
 	// Add other participant.
@@ -80,7 +77,6 @@ Probe:  Succeeded
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
-Probe:  Succeeded
 Other:
 - "Franz"
   .data.test5
@@ -101,7 +97,6 @@ Comparison:
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Updated"
-Probe:  Succeeded
 Other:
 - "Franz"
   .data.test5
@@ -115,14 +110,4 @@ Comparison:
   .data.new-test
   .metadata.annotations.my-annotation
 `, res.String())
-}
-
-type noopCache struct {
-	client.Reader
-}
-
-func (c *noopCache) Watch(
-	_ context.Context, _ client.Object, _ runtime.Object,
-) error {
-	return nil
 }

@@ -44,7 +44,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 	if len(obj.GetGenerateName()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
-				metadataPath.Child("generation"),
+				metadataPath.Child("generateName"),
 				"must be empty",
 			))
 	}

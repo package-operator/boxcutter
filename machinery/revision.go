@@ -6,29 +6,34 @@ import (
 	"slices"
 	"strings"
 
-	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/validation"
 )
 
 // RevisionEngine manages rollout and teardown of multiple phases.
 type RevisionEngine struct {
 	phaseEngine       phaseEngine
 	revisionValidator revisionValidator
+	writer            client.Writer
 }
 
 // NewRevisionEngine returns a new RevisionEngine instance.
 func NewRevisionEngine(
 	phaseEngine phaseEngine,
 	revisionValidator revisionValidator,
+	client client.Writer,
 ) *RevisionEngine {
 	return &RevisionEngine{
 		phaseEngine:       phaseEngine,
 		revisionValidator: revisionValidator,
+		writer:            client,
 	}
 }
 
 type revisionValidator interface {
-	Validate(_ context.Context, rev Revision) (validation.RevisionViolation, error)
+	Validate(_ context.Context, rev types.RevisionAccessor) (validation.RevisionViolation, error)
 }
 
 type phaseEngine interface {
@@ -36,36 +41,20 @@ type phaseEngine interface {
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase Phase,
+		phase types.PhaseAccessor,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase Phase,
+		phase types.PhaseAccessor,
 	) (PhaseTeardownResult, error)
-}
-
-// Revision represents multiple phases at a given point in time.
-type Revision struct {
-	Owner    client.Object
-	Revision int64
-	Phases   []Phase
-}
-
-// GetPhases returns the phases the revision is rolling out.
-func (r Revision) GetPhases() []validation.Phase {
-	phases := make([]validation.Phase, len(r.Phases))
-	for i := range r.Phases {
-		phases[i] = &r.Phases[i]
-	}
-	return phases
 }
 
 // RevisionResult holds details about the revision reconciliation run.
 type RevisionResult interface {
-	// GetPreflightViolation returns the preflight
-	// violation, if one was encountered.
+	// GetPreflightViolation returns the preflight violation of the entire Revision.
+	// Revision preflight checks are not as extensive as phase-preflight checks.
 	GetPreflightViolation() (validation.RevisionViolation, bool)
 	// GetPhases returns results for individual phases.
 	GetPhases() []PhaseResult
@@ -76,6 +65,8 @@ type RevisionResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	// HasProgressed returns true when all phases have been progressed to a newer revision.
+	HasProgressed() bool
 	String() string
 }
 
@@ -85,8 +76,7 @@ type revisionResult struct {
 	preflightViolation validation.RevisionViolation
 }
 
-// GetPreflightViolation returns the preflight
-// violation, if one was encountered.
+// GetPreflightViolation returns the preflight violations.
 func (r *revisionResult) GetPreflightViolation() (validation.RevisionViolation, bool) {
 	return r.preflightViolation,
 		r.preflightViolation != nil && !r.preflightViolation.Empty()
@@ -106,6 +96,17 @@ func (r *revisionResult) InTransistion() bool {
 		}
 	}
 	return false
+}
+
+// HasProgressed returns true when all phases have been progressed to a newer revision.
+func (r *revisionResult) HasProgressed() bool {
+	var numProgressed int
+	for _, p := range r.phasesResults {
+		if p.HasProgressed() {
+			numProgressed++
+		}
+	}
+	return numProgressed == len(r.phases)
 }
 
 // IsComplete returns true when all phases have
@@ -158,11 +159,11 @@ func (r *revisionResult) String() string {
 
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev types.RevisionAccessor,
 ) (RevisionResult, error) {
 	rres := &revisionResult{}
-	for _, p := range rev.Phases {
-		rres.phases = append(rres.phases, p.Name)
+	for _, p := range rev.GetPhases() {
+		rres.phases = append(rres.phases, p.GetName())
 	}
 
 	// Preflight
@@ -176,8 +177,8 @@ func (re *RevisionEngine) Reconcile(
 	}
 
 	// Reconcile
-	for _, phase := range rev.Phases {
-		pres, err := re.phaseEngine.Reconcile(ctx, rev.Owner, rev.Revision, phase)
+	for _, phase := range rev.GetPhases() {
+		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
@@ -208,6 +209,8 @@ type RevisionTeardownResult interface {
 	GetActivePhaseName() (string, bool)
 	// GetGonePhaseNames returns a list of phase names already processed.
 	GetGonePhaseNames() []string
+	// String returns a human readable report.
+	String() string
 }
 
 type revisionTeardownResult struct {
@@ -247,41 +250,69 @@ func (r *revisionTeardownResult) GetGonePhaseNames() []string {
 	return r.gone
 }
 
+func (r *revisionTeardownResult) String() string {
+	out := fmt.Sprintf(
+		"Revision Teardown\nActive: %s\n",
+		r.active,
+	)
+
+	if len(r.waiting) > 0 {
+		out += "Waiting Phases:\n"
+		for _, waiting := range r.waiting {
+			out += "- " + waiting + "\n"
+		}
+	}
+	if len(r.gone) > 0 {
+		out += "Gone Phases:\n"
+		for _, gone := range r.gone {
+			out += "- " + gone + "\n"
+		}
+	}
+
+	phasesWithResults := map[string]struct{}{}
+	out += "Phases:\n"
+	for _, ores := range r.phases {
+		phasesWithResults[ores.GetName()] = struct{}{}
+		out += "- " + strings.TrimSpace(strings.ReplaceAll(ores.String(), "\n", "\n  ")) + "\n"
+	}
+	return out
+}
+
 // Teardown ensures the given revision is safely removed from the cluster.
 func (re *RevisionEngine) Teardown(
-	ctx context.Context, rev Revision,
+	ctx context.Context, rev types.RevisionAccessor,
 ) (RevisionTeardownResult, error) {
 	res := &revisionTeardownResult{}
 
 	waiting := map[string]struct{}{}
-	for _, p := range rev.Phases {
-		waiting[p.Name] = struct{}{}
+	for _, p := range rev.GetPhases() {
+		waiting[p.GetName()] = struct{}{}
 	}
 
 	// Phases should be torn down in reverse.
-	reversedPhases := slices.Clone(rev.Phases)
+	reversedPhases := slices.Clone(rev.GetPhases())
 	slices.Reverse(reversedPhases)
 
 	for _, p := range reversedPhases {
 		// Phase is no longer waiting.
-		delete(waiting, p.Name)
-		res.active = p.Name
+		delete(waiting, p.GetName())
+		res.active = p.GetName()
 
-		pres, err := re.phaseEngine.Teardown(ctx, rev.Owner, rev.Revision, p)
+		pres, err := re.phaseEngine.Teardown(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), p)
 		if err != nil {
 			return nil, fmt.Errorf("teardown phase: %w", err)
 		}
 
 		res.phases = append(res.phases, pres)
 		if pres.IsComplete() {
-			res.gone = append(res.gone, p.Name)
+			res.gone = append(res.gone, p.GetName())
 			continue
 		}
 
 		// record other phases as waiting in normal order.
-		for _, p := range rev.Phases {
-			if _, ok := waiting[p.Name]; ok {
-				res.waiting = append(res.waiting, p.Name)
+		for _, p := range rev.GetPhases() {
+			if _, ok := waiting[p.GetName()]; ok {
+				res.waiting = append(res.waiting, p.GetName())
 			}
 		}
 		slices.Reverse(res.gone)

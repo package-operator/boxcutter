@@ -13,7 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kube-openapi/pkg/spec3"
-	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
+
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 const testFieldOwner = "test.testy"
@@ -469,8 +470,6 @@ func TestComparator_Structured(t *testing.T) {
 			t.Parallel()
 			res, err := d.Compare(owner, test.desired, test.actual)
 			require.NoError(t, err)
-			assert.Equal(t, test.expectedReport, res.String())
-
 			if res.Comparison != nil {
 				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
 			}

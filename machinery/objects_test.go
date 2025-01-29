@@ -11,15 +11,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
-	"pkg.package-operator.run/boxcutter/internal/testutil"
-	"pkg.package-operator.run/boxcutter/machinery/ownerhandling"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v4/typed"
+
+	"pkg.package-operator.run/boxcutter/internal/testutil"
+	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 const (
@@ -49,7 +50,7 @@ func TestObjectEngine(t *testing.T) {
 		name          string
 		revision      int64
 		desiredObject *unstructured.Unstructured
-		opts          []ObjectOption
+		opts          []types.ObjectOption
 
 		mockSetup func(
 			*cacheMock,
@@ -73,8 +74,8 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{
-				WithCollisionProtection(CollisionProtectionIfNoController),
+			opts: []types.ObjectOption{
+				types.WithCollisionProtection(types.CollisionProtectionIfNoController),
 			},
 
 			mockSetup: func(
@@ -214,7 +215,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -283,7 +284,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -372,7 +373,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -469,7 +470,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -564,7 +565,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{},
+			opts: []types.ObjectOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -655,8 +656,8 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []ObjectOption{
-				WithPreviousOwners{oldOwner},
+			opts: []types.ObjectOption{
+				types.WithPreviousOwners{oldOwner},
 			},
 
 			mockSetup: func(
@@ -817,7 +818,6 @@ func TestObjectEngine(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -825,15 +825,11 @@ func TestObjectEngine(t *testing.T) {
 
 			oe := NewObjectEngine(
 				scheme.Scheme,
-				cache, uncachedReader, writer,
+				cache, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
-
-			cache.
-				On("Watch", mock.Anything, mock.Anything, mock.Anything).
-				Return(nil)
 
 			test.mockSetup(cache, writer, divergeDetector)
 
@@ -857,7 +853,6 @@ func TestObjectEngine(t *testing.T) {
 				assert.Equal(t, test.expectedObject, r.Object())
 			}
 			assert.Equal(t, test.expectedAction, res.Action())
-			cache.AssertCalled(t, "Watch", mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -1014,10 +1009,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					}).
 					Return(nil)
 			},
-
-			expectedError: TeardownRevisionError{
-				msg: "Rejecting object teardown: Expected revision 1, actual revision 4",
-			},
+			expectedResult: true,
 		},
 		{
 			name:          "owner error",
@@ -1025,7 +1017,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			desiredObject: obj,
 
 			mockSetup: func(
-				cache *cacheMock, _ *testutil.CtrlClient,
+				cache *cacheMock, writer *testutil.CtrlClient,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -1053,18 +1045,16 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-			},
 
-			expectedError: TeardownRevisionError{
-				msg: "Rejecting object teardown: Owner not controller",
+				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
+			expectedResult: true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			uncachedReader := &cacheMock{}
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -1074,10 +1064,12 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				On("Watch", mock.Anything, mock.Anything, mock.Anything).
 				Return(nil)
 
+			writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
 			test.mockSetup(cache, writer)
 			oe := NewObjectEngine(
 				scheme.Scheme,
-				cache, uncachedReader, writer,
+				cache, writer,
 				ownerStrategy, divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
@@ -1118,15 +1110,6 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 
 type cacheMock struct {
 	testutil.CtrlClient
-}
-
-func (m *cacheMock) Watch(
-	ctx context.Context,
-	owner client.Object,
-	obj runtime.Object,
-) error {
-	args := m.Called(ctx, owner, obj)
-	return args.Error(0)
 }
 
 type comperatorMock struct {

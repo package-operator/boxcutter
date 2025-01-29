@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"pkg.package-operator.run/boxcutter/machinery/types"
-	"pkg.package-operator.run/boxcutter/machinery/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/validation"
 )
 
 // PhaseEngine groups reconciliation of a list of objects,
@@ -34,7 +35,7 @@ type phaseValidator interface {
 	Validate(
 		ctx context.Context,
 		owner client.Object,
-		phase validation.Phase,
+		phase types.PhaseAccessor,
 	) (validation.PhaseViolation, error)
 }
 
@@ -43,45 +44,26 @@ type objectEngine interface {
 		ctx context.Context,
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
-		desiredObject *unstructured.Unstructured,
-		opts ...ObjectOption,
+		desiredObject Object,
+		opts ...types.ObjectOption,
 	) (ObjectResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
-		desiredObject *unstructured.Unstructured,
+		desiredObject Object,
 	) (objectGone bool, err error)
-}
-
-// Phase represents a phase consisting of multiple objects.
-type Phase struct {
-	Name    string
-	Objects []PhaseObject
-}
-
-// GetName returns the name of the phase.
-func (p *Phase) GetName() string {
-	return p.Name
-}
-
-// GetObjects returns the list of objects belonging to the phase.
-func (p *Phase) GetObjects() []unstructured.Unstructured {
-	objects := make([]unstructured.Unstructured, 0, len(p.Objects))
-	for _, o := range p.Objects {
-		objects = append(objects, *o.Object)
-	}
-	return objects
 }
 
 // PhaseObject represents an object and it's options.
 type PhaseObject struct {
 	Object *unstructured.Unstructured
-	Opts   []ObjectOption
+	Opts   []types.ObjectOption
 }
 
 // PhaseTeardownResult interface to access results of phase teardown.
 type PhaseTeardownResult interface {
+	GetName() string
 	// IsComplete returns true when all objects have been deleted,
 	// finalizers have been processes and the objects are longer
 	// present on the kube-apiserver.
@@ -92,11 +74,36 @@ type PhaseTeardownResult interface {
 	// Waiting returns a list of objects that have yet to be
 	// cleaned up on the kube-apiserver.
 	Waiting() []types.ObjectRef
+
+	String() string
 }
 
 type phaseTeardownResult struct {
+	name    string
 	gone    []types.ObjectRef
 	waiting []types.ObjectRef
+}
+
+func (r *phaseTeardownResult) String() string {
+	out := fmt.Sprintf("Phase %q\n", r.name)
+
+	if len(r.gone) > 0 {
+		out += "Gone Objects:\n"
+		for _, gone := range r.gone {
+			out += "- " + gone.String() + "\n"
+		}
+	}
+	if len(r.waiting) > 0 {
+		out += "Waiting Objects:\n"
+		for _, waiting := range r.waiting {
+			out += "- " + waiting.String() + "\n"
+		}
+	}
+	return out
+}
+
+func (r *phaseTeardownResult) GetName() string {
+	return r.name
 }
 
 // IsComplete returns true when all objects have been deleted,
@@ -123,25 +130,19 @@ func (e *PhaseEngine) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.PhaseAccessor,
 ) (PhaseTeardownResult, error) {
-	res := &phaseTeardownResult{}
+	res := &phaseTeardownResult{name: phase.GetName()}
 
 	for _, o := range phase.GetObjects() {
-		gone, err := e.objectEngine.Teardown(ctx, owner, revision, &o)
-
-		if IsTeardownRejectedDueToOwnerOrRevisionChange(err) {
-			// not deleted, but not "our" problem anymore.
-			res.gone = append(res.gone, types.ToObjectRef(&o))
-			continue
-		}
+		gone, err := e.objectEngine.Teardown(ctx, owner, revision, o.Object)
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
 		if gone {
-			res.gone = append(res.gone, types.ToObjectRef(&o))
+			res.gone = append(res.gone, types.ToObjectRef(o.Object))
 		} else {
-			res.waiting = append(res.waiting, types.ToObjectRef(&o))
+			res.waiting = append(res.waiting, types.ToObjectRef(o.Object))
 		}
 	}
 	return res, nil
@@ -152,14 +153,14 @@ func (e *PhaseEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase Phase,
+	phase types.PhaseAccessor,
 ) (PhaseResult, error) {
 	pres := &phaseResult{
 		name: phase.GetName(),
 	}
 
 	// Preflight
-	violation, err := e.phaseValidator.Validate(ctx, owner, &phase)
+	violation, err := e.phaseValidator.Validate(ctx, owner, phase)
 	if err != nil {
 		return pres, fmt.Errorf("validating: %w", err)
 	}
@@ -169,7 +170,7 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Reconcile
-	for _, obj := range phase.Objects {
+	for _, obj := range phase.GetObjects() {
 		ores, err := e.objectEngine.Reconcile(ctx, owner, revision, obj.Object, obj.Opts...)
 		if err != nil {
 			return pres, fmt.Errorf("reconciling object: %w", err)
@@ -196,6 +197,8 @@ type PhaseResult interface {
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
+	// HasProgressed returns true when all objects have been progressed to a newer revision.
+	HasProgressed() bool
 	String() string
 }
 
@@ -224,10 +227,14 @@ func (r *phaseResult) GetObjects() []ObjectResult {
 }
 
 // InTransition returns true if the Phase has not yet fully rolled out,
-// if the phase has objects progressed to a new revision or
+// if the phase has some objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *phaseResult) InTransistion() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
+		return false
+	}
+	if r.HasProgressed() {
+		// If all objects have progressed, we are done transitioning.
 		return false
 	}
 	for _, o := range r.objects {
@@ -239,8 +246,19 @@ func (r *phaseResult) InTransistion() bool {
 	return false
 }
 
+// HasProgressed returns true when all objects have been progressed to a newer revision.
+func (r *phaseResult) HasProgressed() bool {
+	var numProgressed int
+	for _, o := range r.objects {
+		if o.Action() == ActionProgressed {
+			numProgressed++
+		}
+	}
+	return numProgressed == len(r.objects)
+}
+
 // IsComplete returns true when all objects have
-// successfully been reconciled and pass their probes.
+// successfully been reconciled and pass their progress probes.
 func (r *phaseResult) IsComplete() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
 		return false
@@ -249,7 +267,7 @@ func (r *phaseResult) IsComplete() bool {
 		if o.Action() == ActionCollision {
 			return false
 		}
-		if !o.Probe().Success {
+		if probe, ok := o.Probes()[types.ProgressProbeType]; ok && !probe.Success {
 			return false
 		}
 	}
