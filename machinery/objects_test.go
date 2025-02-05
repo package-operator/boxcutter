@@ -27,9 +27,10 @@ const (
 	testSystemPrefix = "testtest.xxx"
 )
 
-//nolint:maintidx
+//nolint:maintidx,dupl
 func TestObjectEngine(t *testing.T) {
 	t.Parallel()
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -818,6 +819,7 @@ func TestObjectEngine(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -852,6 +854,7 @@ func TestObjectEngine(t *testing.T) {
 			case ObjectResultRecovered:
 				assert.Equal(t, test.expectedObject, r.Object())
 			}
+
 			assert.Equal(t, test.expectedAction, res.Action())
 		})
 	}
@@ -859,6 +862,7 @@ func TestObjectEngine(t *testing.T) {
 
 func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Parallel()
+
 	oe := &ObjectEngine{}
 	owner := &unstructured.Unstructured{}
 	desired := &unstructured.Unstructured{}
@@ -880,6 +884,7 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 
 func TestObjectEngine_Teardown(t *testing.T) {
 	t.Parallel()
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -1055,6 +1060,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
@@ -1076,6 +1082,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			)
 
 			ctx := context.Background()
+
 			deleted, err := oe.Teardown(ctx, owner, 1, obj)
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
@@ -1089,6 +1096,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 
 func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	t.Parallel()
+
 	oe := &ObjectEngine{}
 	owner := &unstructured.Unstructured{}
 	desired := &unstructured.Unstructured{}
@@ -1121,5 +1129,6 @@ func (m *comperatorMock) Compare(
 	desiredObject, actualObject Object,
 ) (CompareResult, error) {
 	args := m.Called(owner, desiredObject, actualObject)
+
 	return args.Get(0).(CompareResult), args.Error(1)
 }

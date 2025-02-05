@@ -104,11 +104,14 @@ func newTrackingCache(
 			}
 		}
 	}
+
 	c, err := cache.New(config, opts)
 	if err != nil {
 		return nil, err
 	}
+
 	wehc.Cache = c
+
 	return wehc, nil
 }
 
@@ -131,6 +134,7 @@ func (c *trackingCache) Start(ctx context.Context) error {
 			for _, errCh := range c.waitingForSync[res.gvk] {
 				errCh <- res.err
 			}
+
 			delete(c.waitingForSync, res.gvk)
 			delete(c.cacheWaitInFlight, res.gvk)
 
@@ -181,11 +185,13 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 				for _, errCh := range errChs {
 					errCh <- err
 				}
+
 				delete(c.waitingForSync, waitingGvk)
 				close(c.cacheWaitInFlight[waitingGvk])
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -194,6 +200,7 @@ func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) 
 	if err != nil {
 		return err
 	}
+
 	return c.ensureCacheSyncForGVK(ctx, gvk)
 }
 
@@ -204,6 +211,7 @@ func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.Obj
 	}
 	// We need the non-list GVK, so chop off the "List" from the end of the kind.
 	gvk.Kind = strings.TrimSuffix(gvk.Kind, "List")
+
 	return c.ensureCacheSyncForGVK(ctx, gvk)
 }
 
@@ -217,12 +225,14 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				// -> don't start another WaitForCacheSync
 				log.V(-1).Info("new call waiting for WaitForCacheSync already in flight")
 				c.waitingForSync[gvk] = append(c.waitingForSync[gvk], errCh)
+
 				return
 			}
 
 			i, err := c.Cache.GetInformerForKind(ctx, gvk, cache.BlockUntilSynced(false))
 			if err != nil {
 				errCh <- err
+
 				return
 			}
 
@@ -231,6 +241,7 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				c.knownInformers.Insert(gvk)
 				if err := c.cacheSourcer.handleNewInformer(i); err != nil {
 					errCh <- err
+
 					return
 				}
 			}
@@ -244,6 +255,7 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				if toolscache.WaitForCacheSync(stopCh, i.HasSynced) {
 					log.V(-1).Info("informer synced successfully")
 					c.informerSyncCh <- informerSyncResponse{gvk: gvk, err: nil}
+
 					return
 				}
 				log.V(-1).Info("wait for informer sync canceled")
@@ -267,9 +279,11 @@ func (c *trackingCache) Get(
 ) error {
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
+
 	if err := c.ensureCacheSync(ctx, obj); err != nil {
 		return err
 	}
+
 	return c.Cache.Get(ctx, key, obj, opts...)
 }
 
@@ -279,9 +293,11 @@ func (c *trackingCache) List(
 ) error {
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
+
 	if err := c.ensureCacheSyncList(ctx, list); err != nil {
 		return err
 	}
+
 	return c.Cache.List(ctx, list, opts...)
 }
 
@@ -291,9 +307,11 @@ func (c *trackingCache) GetInformer(
 ) (cache.Informer, error) {
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
+
 	if err := c.ensureCacheSync(ctx, obj); err != nil {
 		return nil, err
 	}
+
 	return c.Cache.GetInformer(ctx, obj, opts...)
 }
 
@@ -303,9 +321,11 @@ func (c *trackingCache) GetInformerForKind(
 ) (cache.Informer, error) {
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
+
 	if err := c.ensureCacheSyncForGVK(ctx, gvk); err != nil {
 		return nil, err
 	}
+
 	return c.Cache.GetInformerForKind(ctx, gvk, opts...)
 }
 
@@ -325,6 +345,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 			err := c.Cache.RemoveInformer(ctx, obj)
 			if err != nil {
 				errCh <- err
+
 				return
 			}
 
@@ -364,6 +385,7 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 				err := c.Cache.RemoveInformer(ctx, obj)
 				if err != nil {
 					errCh <- err
+
 					return
 				}
 				close(c.cacheWaitInFlight[gvkToStop])

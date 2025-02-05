@@ -16,6 +16,7 @@ var testScheme = scheme.Scheme
 
 func TestOwnerStrategyNative_RemoveOwner(t *testing.T) {
 	t.Parallel()
+
 	obj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cm1",
@@ -42,6 +43,7 @@ func TestOwnerStrategyNative_RemoveOwner(t *testing.T) {
 
 func TestOwnerStrategyNative_SetOwnerReference(t *testing.T) {
 	t.Parallel()
+
 	s := NewNative(testScheme)
 	obj := &corev1.Secret{}
 	cm1 := &corev1.ConfigMap{
@@ -74,6 +76,7 @@ func TestOwnerStrategyNative_SetOwnerReference(t *testing.T) {
 
 func TestOwnerStrategyNative_SetControllerReference(t *testing.T) {
 	t.Parallel()
+
 	s := NewNative(testScheme)
 	obj := &corev1.Secret{}
 	cm1 := &corev1.ConfigMap{
@@ -114,6 +117,7 @@ func TestOwnerStrategyNative_SetControllerReference(t *testing.T) {
 
 func TestOwnerStrategyNative_IsController(t *testing.T) {
 	t.Parallel()
+
 	s := NewNative(testScheme)
 	obj := &corev1.Secret{}
 	cm1 := &corev1.ConfigMap{
@@ -133,12 +137,14 @@ func TestOwnerStrategyNative_IsController(t *testing.T) {
 			UID:       types.UID("56789"),
 		},
 	}
+
 	assert.True(t, s.IsController(cm1, obj))
 	assert.False(t, s.IsController(cm2, obj))
 }
 
 func TestOwnerStrategyNative_IsOwner(t *testing.T) {
 	t.Parallel()
+
 	s := NewNative(testScheme)
 	obj := &corev1.Secret{}
 	cm1 := &corev1.ConfigMap{
@@ -159,12 +165,14 @@ func TestOwnerStrategyNative_IsOwner(t *testing.T) {
 			UID:       types.UID("56789"),
 		},
 	}
+
 	assert.True(t, s.IsOwner(cm1, obj))
 	assert.False(t, s.IsOwner(cm2, obj))
 }
 
 func TestOwnerStrategyNative_ReleaseController(t *testing.T) {
 	t.Parallel()
+
 	s := NewNative(testScheme)
 	obj := &corev1.Secret{}
 	owner := &corev1.ConfigMap{}
@@ -180,6 +188,7 @@ func TestOwnerStrategyNative_ReleaseController(t *testing.T) {
 
 	s.ReleaseController(obj)
 	ownerRefs = obj.GetOwnerReferences()
+
 	if assert.Len(t, ownerRefs, 1) && assert.NotNil(t, ownerRefs[0].Controller) {
 		assert.False(t, *ownerRefs[0].Controller)
 	}

@@ -33,5 +33,6 @@ type ownerStrategy interface {
 // does not perform an out-of-bounds check.
 func remove[T any](s []T, i int) []T {
 	s[i] = s[len(s)-1]
+
 	return s[:len(s)-1]
 }

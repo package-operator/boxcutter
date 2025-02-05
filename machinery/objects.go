@@ -87,6 +87,7 @@ func (e *ObjectEngine) Teardown(
 	if revision == 0 {
 		panic("owner revision must be set and start at 1")
 	}
+
 	if len(owner.GetUID()) == 0 {
 		panic("owner must be persisted to cluster, empty UID")
 	}
@@ -100,6 +101,7 @@ func (e *ObjectEngine) Teardown(
 
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
+
 	err = e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
@@ -108,10 +110,12 @@ func (e *ObjectEngine) Teardown(
 		// Consider the object deleted.
 		return true, nil
 	}
+
 	if errors.IsNotFound(err) {
 		// Object is gone, yay!
 		return true, nil
 	}
+
 	if err != nil {
 		return false, fmt.Errorf("getting object before deletion: %w", err)
 	}
@@ -121,11 +125,13 @@ func (e *ObjectEngine) Teardown(
 	if err != nil {
 		return false, fmt.Errorf("getting object revision: %w", err)
 	}
+
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
 	if actualRevision != revision || ctrlSit != ctrlSituationIsController {
 		// Remove us from owners list:
 		patch := actualObject.DeepCopyObject().(Object)
 		e.ownerStrategy.RemoveOwner(owner, patch)
+
 		return true, e.writer.Patch(ctx, patch, client.MergeFrom(actualObject))
 	}
 
@@ -157,12 +163,14 @@ func (e *ObjectEngine) Reconcile(
 	for _, opt := range opts {
 		opt.ApplyToObjectOptions(&options)
 	}
+
 	options.Default()
 
 	// Sanity checks.
 	if revision == 0 {
 		panic("owner revision must be set and start at 1")
 	}
+
 	if len(owner.GetUID()) == 0 {
 		panic("owner must be persistet to cluster, empty UID")
 	}
@@ -174,6 +182,7 @@ func (e *ObjectEngine) Reconcile(
 	// Copy because some client actions will modify the object.
 	desiredObject = desiredObject.DeepCopyObject().(Object)
 	e.setObjectRevision(desiredObject, revision)
+
 	if err := e.ownerStrategy.SetControllerReference(
 		owner, desiredObject,
 	); err != nil {
@@ -182,9 +191,11 @@ func (e *ObjectEngine) Reconcile(
 
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
+
 	err := e.cache.Get(
 		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
 	)
+
 	switch {
 	case errors.IsNotFound(err):
 		// Object might still already exist on the cluster,
@@ -201,12 +212,15 @@ func (e *ObjectEngine) Reconcile(
 			// but excluded by the cache selector.
 			return nil, &CreateCollisionError{msg: err.Error()}
 		}
+
 		if err != nil {
 			return nil, fmt.Errorf("creating resource: %w", err)
 		}
+
 		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
+
 		return newObjectResultCreated(
 			desiredObject, options.Probes), nil
 
@@ -232,6 +246,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	// Before doing anything else, we have to figure out
 	// who owns and controls the object.
 	ctrlSit, actualOwner := e.detectOwner(owner, actualObject, options.PreviousOwners)
+
 	compareRes, err := e.comperator.Compare(owner, desiredObject, actualObject)
 	if err != nil {
 		return nil, fmt.Errorf("diverge check: %w", err)
@@ -242,6 +257,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	if err != nil {
 		return nil, fmt.Errorf("getting revision of object: %w", err)
 	}
+
 	if actualObjectRevision > revision {
 		// Leave object alone.
 		// It's already owned by a later revision.
@@ -262,6 +278,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 				actualObject, compareRes, options.Probes,
 			), nil
 		}
+
 		if !compareRes.IsConflict() && modified {
 			// No conflict with another controller, but modifications needed.
 			err := e.patch(
@@ -272,6 +289,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 				// Might be a Conflict if object already exists.
 				return nil, fmt.Errorf("patching (modified): %w", err)
 			}
+
 			return newObjectResultUpdated(
 				desiredObject, compareRes, options.Probes,
 			), nil
@@ -304,11 +322,13 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if err != nil {
 			return nil, fmt.Errorf("patching (conflict): %w", err)
 		}
+
 		if options.Paused {
 			return newObjectResultRecovered(
 				actualObject, compareRes, options.Probes,
 			), nil
 		}
+
 		return newObjectResultRecovered(
 			desiredObject, compareRes, options.Probes,
 		), nil
@@ -338,7 +358,9 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 	case ctrlSituationPreviousIsController:
 		// no extra operation
+		break
 	}
+
 	// A previous revision is current controller.
 	// This means we want to take control, but
 	// retain older revisions ownerReferences,
@@ -350,6 +372,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	e.setObjectRevision(desiredObject, revision)
 	e.ownerStrategy.CopyOwnerReferences(actualObject, desiredObject)
 	e.ownerStrategy.ReleaseController(desiredObject)
+
 	if err := e.ownerStrategy.SetControllerReference(
 		owner, desiredObject,
 	); err != nil {
@@ -366,11 +389,13 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Might be a Conflict if object already exists.
 		return nil, fmt.Errorf("patching (owner change): %w", err)
 	}
+
 	if options.Paused {
 		return newObjectResultUpdated(
 			actualObject, compareRes, options.Probes,
 		), nil
 	}
+
 	return newObjectResultUpdated(
 		desiredObject, compareRes, options.Probes,
 	), nil
@@ -383,6 +408,7 @@ func (e *ObjectEngine) create(
 	if options.Paused {
 		return nil
 	}
+
 	return e.writer.Create(ctx, obj, opts...)
 }
 
@@ -396,6 +422,7 @@ func (e *ObjectEngine) patch(
 	if options.Paused {
 		return nil
 	}
+
 	if err := e.migrateFieldManagersToSSA(ctx, obj); err != nil {
 		return err
 	}
@@ -404,6 +431,7 @@ func (e *ObjectEngine) patch(
 		client.FieldOwner(e.fieldOwner),
 	}
 	o = append(o, opts...)
+
 	return e.writer.Patch(ctx, obj, patch, o...)
 }
 
@@ -457,6 +485,7 @@ func (e *ObjectEngine) setObjectRevision(obj client.Object, revision int64) {
 	if a == nil {
 		a = map[string]string{}
 	}
+
 	a[e.revisionAnnotation()] = strconv.FormatInt(revision, 10)
 	obj.SetAnnotations(a)
 }
@@ -467,9 +496,11 @@ func (e *ObjectEngine) getObjectRevision(obj client.Object) (int64, error) {
 	if a == nil {
 		return 0, nil
 	}
+
 	if len(a[e.revisionAnnotation()]) == 0 {
 		return 0, nil
 	}
+
 	return strconv.ParseInt(a[e.revisionAnnotation()], 10, 64)
 }
 
@@ -480,6 +511,7 @@ func (e *ObjectEngine) migrateFieldManagersToSSA(
 ) error {
 	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
 		object, sets.New(e.fieldOwner), e.fieldOwner)
+
 	switch {
 	case err != nil:
 		return err
@@ -493,6 +525,7 @@ func (e *ObjectEngine) migrateFieldManagersToSSA(
 		machinerytypes.JSONPatchType, patch)); err != nil {
 		return fmt.Errorf("update field managers: %w", err)
 	}
+
 	return nil
 }
 

@@ -34,10 +34,13 @@ type eventHandler struct {
 func (e cacheSettings) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
 	e.source.mu.Lock()
 	defer e.source.mu.Unlock()
+
 	if e.source.blockNew {
 		panic("Trying to add EventHandlers to managedcache.CacheSource after manager start")
 	}
+
 	e.source.handlers = append(e.source.handlers, eventHandler{ctx, queue, e.handler, e.predicates})
+
 	return nil
 }
 
@@ -55,12 +58,14 @@ func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predica
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	if e.blockNew {
 		panic("Trying to add EventHandlers to managedcache.CacheSource after manager start")
 	}
 
 	s := cacheSettings{e, handler, predicates}
 	e.settings = append(e.settings, s)
+
 	return s
 }
 
@@ -86,5 +91,6 @@ func (e *cacheSource) handleNewInformer(informer cache.Informer) error {
 			return err
 		}
 	}
+
 	return nil
 }

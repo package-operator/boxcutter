@@ -47,6 +47,7 @@ func (s *OwnerStrategyAnnotation) GetController(obj metav1.Object) (
 			return ref.ToMetaV1OwnerRef(), true
 		}
 	}
+
 	return metav1.OwnerReference{}, false
 }
 
@@ -70,6 +71,7 @@ func (s *OwnerStrategyAnnotation) EnqueueRequestForOwner(
 		// programmer error and can't be recovered at runtime anyways.
 		panic(err)
 	}
+
 	return a
 }
 
@@ -96,6 +98,7 @@ func (s *OwnerStrategyAnnotation) SetOwnerReference(owner, obj metav1.Object) er
 	} else {
 		ownerRefs = append(ownerRefs, ownerRef)
 	}
+
 	s.setOwnerReferences(obj, ownerRefs)
 
 	return nil
@@ -127,6 +130,7 @@ func (s *OwnerStrategyAnnotation) SetControllerReference(owner, obj metav1.Objec
 	if err != nil {
 		return err
 	}
+
 	ownerRef := annotationOwnerRef{
 		APIVersion: gvk.GroupVersion().String(),
 		Kind:       gvk.Kind,
@@ -142,6 +146,7 @@ func (s *OwnerStrategyAnnotation) SetControllerReference(owner, obj metav1.Objec
 	} else {
 		ownerRefs = append(ownerRefs, ownerRef)
 	}
+
 	s.setOwnerReferences(obj, ownerRefs)
 
 	return nil
@@ -155,6 +160,7 @@ func (s *OwnerStrategyAnnotation) IsOwner(owner, obj metav1.Object) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -170,6 +176,7 @@ func (s *OwnerStrategyAnnotation) IsController(
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -178,13 +185,16 @@ func (s *OwnerStrategyAnnotation) RemoveOwner(owner, obj metav1.Object) {
 	ownerRefComp := s.ownerRefForCompare(owner)
 	ownerRefs := s.getOwnerReferences(obj)
 	foundIndex := -1
+
 	for i, ownerRef := range ownerRefs {
 		if s.referSameObject(ownerRefComp, ownerRef) {
 			// remove owner
 			foundIndex = i
+
 			break
 		}
 	}
+
 	if foundIndex != -1 {
 		s.setOwnerReferences(obj, remove(ownerRefs, foundIndex))
 	}
@@ -196,6 +206,7 @@ func (s *OwnerStrategyAnnotation) ReleaseController(obj metav1.Object) {
 	for i := range ownerRefs {
 		ownerRefs[i].Controller = nil
 	}
+
 	s.setOwnerReferences(obj, ownerRefs)
 }
 
@@ -204,6 +215,7 @@ func (s *OwnerStrategyAnnotation) getOwnerReferences(obj metav1.Object) []annota
 	if annotations == nil {
 		return nil
 	}
+
 	if len(annotations[s.annotationKey]) == 0 {
 		return nil
 	}
@@ -221,10 +233,12 @@ func (s *OwnerStrategyAnnotation) setOwnerReferences(obj metav1.Object, owners [
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
+
 	j, err := json.Marshal(owners)
 	if err != nil {
 		panic(err)
 	}
+
 	annotations[s.annotationKey] = string(j)
 	obj.SetAnnotations(annotations)
 }
@@ -235,6 +249,7 @@ func (s *OwnerStrategyAnnotation) indexOf(ownerRefs []annotationOwnerRef, ownerR
 			return i
 		}
 	}
+
 	return -1
 }
 
@@ -250,12 +265,14 @@ func (s *OwnerStrategyAnnotation) ownerRefForCompare(owner metav1.Object) annota
 	if err != nil {
 		panic(err)
 	}
+
 	ref := annotationOwnerRef{
 		APIVersion: gvk.GroupVersion().String(),
 		Kind:       gvk.Kind,
 		UID:        owner.GetUID(),
 		Name:       owner.GetName(),
 	}
+
 	return ref
 }
 
@@ -339,6 +356,7 @@ func (e *AnnotationEnqueueRequestForOwner) Update(
 	for _, req := range e.getOwnerReconcileRequest(evt.ObjectOld) {
 		q.Add(req)
 	}
+
 	for _, req := range e.getOwnerReconcileRequest(evt.ObjectNew) {
 		q.Add(req)
 	}
@@ -365,6 +383,7 @@ func (e *AnnotationEnqueueRequestForOwner) Generic(
 func (e *AnnotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
 	ownerReferences := e.ownerStrategy.getOwnerReferences(object)
 	requests := make([]reconcile.Request, 0, len(ownerReferences))
+
 	for _, ownerRef := range ownerReferences {
 		ownerRefGV, err := schema.ParseGroupVersion(ownerRef.APIVersion)
 		if err != nil {
@@ -407,5 +426,6 @@ func (e *AnnotationEnqueueRequestForOwner) parseOwnerTypeGroupKind(scheme *runti
 	}
 	// Cache the Group and Kind for the OwnerType
 	e.ownerGK = schema.GroupKind{Group: kinds[0].Group, Kind: kinds[0].Kind}
+
 	return nil
 }

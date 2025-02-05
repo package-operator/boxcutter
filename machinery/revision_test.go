@@ -19,6 +19,7 @@ import (
 
 func TestRevisionEngine_Teardown(t *testing.T) {
 	t.Parallel()
+
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
@@ -55,6 +56,7 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	assert.Equal(t, []string{
 		"phase-1", "phase-2", "phase-3",
 	}, res.GetGonePhaseNames())
+
 	active, ok := res.GetActivePhaseName()
 	assert.False(t, ok)
 	assert.Empty(t, active)
@@ -64,6 +66,7 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 
 func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	t.Parallel()
+
 	pe := &phaseEngineMock{}
 	rv := &revisionValidatorMock{}
 	c := testutil.NewClient()
@@ -104,9 +107,8 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete())
-	assert.Equal(t, []string{
-		"phase-3", "phase-4",
-	}, res.GetGonePhaseNames())
+	assert.Equal(t, []string{"phase-3", "phase-4"}, res.GetGonePhaseNames())
+
 	active, ok := res.GetActivePhaseName()
 	assert.True(t, ok)
 	assert.Equal(t, "phase-2", active)
@@ -125,6 +127,7 @@ func (m *phaseEngineMock) Reconcile(
 	phase types.PhaseAccessor,
 ) (PhaseResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
+
 	return args.Get(0).(PhaseResult), args.Error(1)
 }
 
@@ -135,6 +138,7 @@ func (m *phaseEngineMock) Teardown(
 	phase types.PhaseAccessor,
 ) (PhaseTeardownResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
+
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
 }
 
@@ -146,11 +150,13 @@ func (m *revisionValidatorMock) Validate(
 	ctx context.Context, rev types.RevisionAccessor,
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
+
 	return args.Get(0).(validation.RevisionViolation), args.Error(1)
 }
 
 func TestRevisionResult_String(t *testing.T) {
 	t.Parallel()
+
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",

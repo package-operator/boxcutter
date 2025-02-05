@@ -27,6 +27,7 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 	if err != nil {
 		return err
 	}
+
 	env := sh.WithEnvironment{
 		"CGO_ENABLED": "1",
 		"KUBECONFIG":  kubeconfigPath,
@@ -46,6 +47,7 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 	if len(filter) > 0 {
 		f = "-run " + filter
 	}
+
 	goTestCmd := t.makeGoIntTestCmd("integration", f, jsonOutput)
 
 	err = shr.New(env).Bash(goTestCmd)
@@ -57,6 +59,7 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 	case eErr != nil:
 		return eErr
 	}
+
 	return nil
 }
 
@@ -65,12 +68,15 @@ func (t Test) Unit(_ context.Context, filter string) error {
 	if err := os.MkdirAll(filepath.Join(cacheDir, "unit"), 0o755); err != nil {
 		return err
 	}
+
 	gotestArgs := []string{"-coverprofile=" + filepath.Join(cacheDir, "unit", "cover.txt"), "-race", "-json"}
 	if len(filter) > 0 {
 		gotestArgs = append(gotestArgs, "-run="+filter)
 	}
+
 	argStr := strings.Join(gotestArgs, " ")
 	logPath := filepath.Join(cacheDir, "unit", "gotest.log")
+
 	return sh.New(
 		sh.WithEnvironment{"CGO_ENABLED": "1"},
 	).Bash(
