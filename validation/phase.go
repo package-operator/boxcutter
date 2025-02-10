@@ -58,6 +58,7 @@ func (v *PhaseValidator) Validate(
 		if err != nil {
 			return nil, err
 		}
+
 		if !vs.Empty() {
 			objects = append(objects, vs)
 		}
@@ -65,6 +66,7 @@ func (v *PhaseValidator) Validate(
 
 	// Duplicates.
 	objects = append(objects, checkForObjectDuplicates(phase)...)
+
 	return newPhaseViolation(phase.GetName(), msgs, compactObjectViolations(objects)), nil
 }
 
@@ -74,6 +76,7 @@ func validatePhaseName(phase types.PhaseAccessor) []string {
 			"phase name invalid: " + strings.Join(errMsgs, " and "),
 		}
 	}
+
 	return nil
 }
 
@@ -89,6 +92,7 @@ func checkForObjectDuplicates(phases ...types.PhaseAccessor) []ObjectViolation {
 	for _, phase := range phases {
 		for _, obj := range phase.GetObjects() {
 			ref := types.ToObjectRef(obj.Object)
+
 			otherPhase, ok := uniqueObjectsInPhase[ref]
 			if !ok {
 				continue
@@ -100,22 +104,26 @@ func checkForObjectDuplicates(phases ...types.PhaseAccessor) []ObjectViolation {
 					otherPhase: {},
 				}
 			}
+
 			conflicts[ref][phase.GetName()] = struct{}{}
 		}
 	}
 
 	ovs := make([]ObjectViolation, 0, len(conflicts))
+
 	for objRef, phasesMap := range conflicts {
 		var phases []string
 		for p := range phasesMap {
 			phases = append(phases, p)
 		}
+
 		slices.Sort(phases)
 		ov := newObjectViolationFromRef(objRef, []string{
 			"Duplicate object also found in phases " + strings.Join(phases, ", "),
 		})
 		ovs = append(ovs, ov)
 	}
+
 	return ovs
 }
 
@@ -131,5 +139,6 @@ func compactObjectViolations(ovs []ObjectViolation) []ObjectViolation {
 	for oref, msgs := range uniqueOVs {
 		out = append(out, newObjectViolationFromRef(oref, msgs))
 	}
+
 	return out
 }

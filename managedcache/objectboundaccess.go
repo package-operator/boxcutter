@@ -150,6 +150,7 @@ func (m *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 	ctx = logr.NewContext(ctx, m.log)
 
 	var wg sync.WaitGroup
+
 	doneCh := make(chan cacheDone)
 	defer close(doneCh)
 
@@ -158,6 +159,7 @@ func (m *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 		case done := <-doneCh:
 			// Remove accessor from list.
 			delete(m.accessors, done.uid)
+
 			if done.err != nil && !errors.Is(done.err, context.Canceled) {
 				return fmt.Errorf("cache for UID %s crashed: %w", done.uid, done.err)
 			}
@@ -186,6 +188,7 @@ func (m *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 			// So we don't have to manually cancel caches individually.
 			// Just wait for all to close to ensure they have gracefully shutdown.
 			wg.Wait()
+
 			return nil
 		}
 	}
@@ -220,6 +223,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 		log.Info("no users left, closing cache")
 		entry.cancel()
 		delete(m.accessors, owner.GetUID())
+
 		return nil
 	}
 
@@ -227,6 +231,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 	for _, gvks := range entry.users {
 		inUseGVKs.Insert(gvks.UnsortedList()...)
 	}
+
 	return entry.accessor.RemoveOtherInformers(ctx, inUseGVKs.UnsortedList()...)
 }
 
@@ -243,9 +248,11 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 	entry, ok := m.accessors[req.owner.GetUID()]
 	if ok {
 		log.V(-1).Info("reusing cache for owner")
+
 		if req.user != nil {
 			entry.users[req.owner.GetUID()] = req.gvks
 		}
+
 		return entry.accessor, m.gcCache(ctx, req.owner)
 	}
 
@@ -275,6 +282,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 		TrackingCache: ctrlcache,
 		Writer:        client,
 	}
+
 	entry = accessorEntry{
 		accessor: a,
 		users:    map[types.UID]sets.Set[schema.GroupVersionKind]{},
@@ -287,13 +295,17 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 			"usedForGVKs", req.gvks.UnsortedList(),
 		)
 	}
+
 	m.accessors[req.owner.GetUID()] = entry
+
 	log.V(-1).Info("starting new cache")
 	wg.Add(1)
+
 	go func(ctx context.Context, doneCh chan<- cacheDone) {
 		defer wg.Done()
 		doneCh <- cacheDone{uid: req.owner.GetUID(), err: ctrlcache.Start(ctx)}
 	}(ctx, doneCh)
+
 	return a, nil
 }
 
@@ -305,6 +317,7 @@ func (m *objectBoundAccessManagerImpl[T]) request(
 	if req.owner == zeroT {
 		panic("nil owner provided")
 	}
+
 	if len(req.owner.GetUID()) == 0 {
 		panic("owner without UID set")
 	}
@@ -340,11 +353,13 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 	user client.Object, usedFor []client.Object,
 ) (Accessor, error) {
 	gvks := sets.Set[schema.GroupVersionKind]{}
+
 	for _, obj := range usedFor {
 		gvk, err := apiutil.GVKForObject(obj, m.scheme)
 		if err != nil {
 			return nil, err
 		}
+
 		gvks.Insert(gvk)
 	}
 
@@ -353,6 +368,7 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 		user:  user,
 		gvks:  gvks,
 	}
+
 	return m.request(ctx, m.accessorRequestCh, req)
 }
 
@@ -366,5 +382,6 @@ func (m *objectBoundAccessManagerImpl[T]) FreeWithUser(ctx context.Context, owne
 		user:  user,
 	}
 	_, err := m.request(ctx, m.accessorStopCh, req)
+
 	return err
 }

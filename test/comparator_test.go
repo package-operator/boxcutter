@@ -236,6 +236,7 @@ Comparison:
 			updateFn: func(ctx context.Context, actualObj client.Object) error {
 				obj := actualObj.(*appsv1.Deployment)
 				obj.Spec.Replicas = ptr.To[int32](2)
+
 				return Client.Update(ctx, obj)
 			},
 			desiredObj: desiredDeployment.DeepCopy(),

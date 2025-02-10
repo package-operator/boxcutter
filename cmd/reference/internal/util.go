@@ -25,11 +25,13 @@ func latestRevisionNumber(prevRevisions []bctypes.RevisionAccessor) int64 {
 	if len(prevRevisions) == 0 {
 		return 0
 	}
+
 	return prevRevisions[len(prevRevisions)-1].GetRevisionNumber()
 }
 
 func prevJSON(prevRevisions []bctypes.RevisionAccessor) string {
 	data := make([]unstructured.Unstructured, 0, len(prevRevisions))
+
 	for _, rev := range prevRevisions {
 		refObj := rev.GetClientObject()
 		ref := unstructured.Unstructured{}
@@ -39,10 +41,12 @@ func prevJSON(prevRevisions []bctypes.RevisionAccessor) string {
 		ref.SetUID(refObj.GetUID())
 		data = append(data, ref)
 	}
+
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(dataJSON)
 }
 
@@ -52,5 +56,6 @@ func getOwner(obj client.Object) (metav1.OwnerReference, bool) {
 			return v, true
 		}
 	}
+
 	return metav1.OwnerReference{}, false
 }

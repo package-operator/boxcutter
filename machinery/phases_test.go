@@ -18,6 +18,7 @@ import (
 
 func TestPhaseEngine_Reconcile(t *testing.T) {
 	t.Parallel()
+
 	oe := &objectEngineMock{}
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
@@ -63,6 +64,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 
 func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	t.Parallel()
+
 	oe := &objectEngineMock{}
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
@@ -114,6 +116,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 
 func TestPhaseEngine_Teardown(t *testing.T) {
 	t.Parallel()
+
 	oe := &objectEngineMock{}
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
@@ -168,6 +171,7 @@ func (m *objectEngineMock) Reconcile(
 	opts ...types.ObjectOption,
 ) (ObjectResult, error) {
 	args := m.Called(ctx, owner, revision, desiredObject, opts)
+
 	return args.Get(0).(ObjectResult), args.Error(1)
 }
 
@@ -178,6 +182,7 @@ func (m *objectEngineMock) Teardown(
 	desiredObject Object,
 ) (objectDeleted bool, err error) {
 	args := m.Called(ctx, owner, revision, desiredObject)
+
 	return args.Bool(0), args.Error(1)
 }
 
@@ -191,6 +196,7 @@ func (m *phaseValidatorMock) Validate(
 	phase types.PhaseAccessor,
 ) (validation.PhaseViolation, error) {
 	args := m.Called(ctx, owner, phase)
+
 	return args.Get(0).(validation.PhaseViolation), args.Error(1)
 }
 
@@ -228,6 +234,7 @@ func TestPhaseResult(t *testing.T) {
 	t.Parallel()
 	t.Run("InTransistion", func(t *testing.T) {
 		t.Parallel()
+
 		tests := []struct {
 			name     string
 			pv       validation.PhaseViolation
@@ -272,6 +279,7 @@ func TestPhaseResult(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
+
 				pr := &phaseResult{
 					preflightViolation: test.pv,
 					objects:            test.res,
@@ -283,6 +291,7 @@ func TestPhaseResult(t *testing.T) {
 
 	t.Run("IsComplete", func(t *testing.T) {
 		t.Parallel()
+
 		failedProbeRes := newObjectResultCreated(nil, nil).(ObjectResultCreated)
 		failedProbeRes.probeResults[types.ProgressProbeType] = ObjectProbeResult{Success: false}
 
@@ -324,6 +333,7 @@ func TestPhaseResult(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
+
 				pr := &phaseResult{
 					preflightViolation: test.pv,
 					objects:            test.res,
@@ -336,6 +346,7 @@ func TestPhaseResult(t *testing.T) {
 
 func TestPhaseResult_String(t *testing.T) {
 	t.Parallel()
+
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",

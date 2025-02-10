@@ -19,6 +19,7 @@ import (
 
 const testFieldOwner = "test.testy"
 
+//nolint:dupl
 func TestComparator_Unstructured(t *testing.T) {
 	t.Parallel()
 
@@ -191,10 +192,12 @@ func TestComparator_Unstructured(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			res, err := d.Compare(owner, test.desired, test.actual)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedReport, res.String())
+
 			if res.Comparison != nil {
 				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
 			}
@@ -256,6 +259,7 @@ func TestComparator_Unstructured(t *testing.T) {
 	})
 }
 
+//nolint:dupl
 func TestComparator_Structured(t *testing.T) {
 	t.Parallel()
 
@@ -468,8 +472,10 @@ func TestComparator_Structured(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			res, err := d.Compare(owner, test.desired, test.actual)
 			require.NoError(t, err)
+
 			if res.Comparison != nil {
 				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
 			}
@@ -601,6 +607,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			cn, err := openAPICanonicalName(&test.obj)
 			require.NoError(t, err)
 			assert.Equal(t, test.cn, cn)

@@ -16,6 +16,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must not be empty",
 			))
 	}
+
 	if len(obj.GetKind()) == 0 {
 		errs = append(errs,
 			field.Required(
@@ -41,6 +42,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must be empty",
 			))
 	}
+
 	if len(obj.GetGenerateName()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
@@ -48,6 +50,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must be empty",
 			))
 	}
+
 	if len(obj.GetFinalizers()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
@@ -55,6 +58,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must be empty",
 			))
 	}
+
 	if len(obj.GetOwnerReferences()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
@@ -62,6 +66,7 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 				"must be empty",
 			))
 	}
+
 	if len(obj.GetResourceVersion()) > 0 {
 		errs = append(errs,
 			field.Forbidden(
@@ -74,5 +79,6 @@ func validateObjectMetadata(obj *unstructured.Unstructured) []string {
 	for _, e := range errs {
 		msgs = append(msgs, e.Error())
 	}
+
 	return msgs
 }

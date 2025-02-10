@@ -3,12 +3,11 @@ package ownerhandling
 import (
 	"fmt"
 
-	"k8s.io/utils/ptr"
-
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -38,6 +37,7 @@ func (s *OwnerStrategyNative) GetController(obj metav1.Object) (
 			return ref, true
 		}
 	}
+
 	return metav1.OwnerReference{}, false
 }
 
@@ -55,6 +55,7 @@ func (s *OwnerStrategyNative) IsOwner(owner, obj metav1.Object) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -70,6 +71,7 @@ func (s *OwnerStrategyNative) IsController(
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -78,12 +80,15 @@ func (s *OwnerStrategyNative) RemoveOwner(owner, obj metav1.Object) {
 	ownerRefComp := s.ownerRefForCompare(owner)
 	ownerRefs := obj.GetOwnerReferences()
 	foundIndex := -1
+
 	for i, ownerRef := range ownerRefs {
 		if s.referSameObject(ownerRefComp, ownerRef) {
 			foundIndex = i
+
 			break
 		}
 	}
+
 	if foundIndex != -1 {
 		obj.SetOwnerReferences(remove(ownerRefs, foundIndex))
 	}
@@ -95,6 +100,7 @@ func (s *OwnerStrategyNative) ReleaseController(obj metav1.Object) {
 	for i := range ownerRefs {
 		ownerRefs[i].Controller = ptr.To(false)
 	}
+
 	obj.SetOwnerReferences(ownerRefs)
 }
 
@@ -115,6 +121,7 @@ func (s *OwnerStrategyNative) EnqueueRequestForOwner(
 	if isController {
 		return handler.EnqueueRequestForOwner(s.scheme, mapper, ownerType, handler.OnlyControllerOwner())
 	}
+
 	return handler.EnqueueRequestForOwner(s.scheme, mapper, ownerType)
 }
 
@@ -130,12 +137,14 @@ func (s *OwnerStrategyNative) ownerRefForCompare(owner metav1.Object) metav1.Own
 	if err != nil {
 		panic(err)
 	}
+
 	ref := metav1.OwnerReference{
 		APIVersion: gvk.GroupVersion().String(),
 		Kind:       gvk.Kind,
 		UID:        owner.GetUID(),
 		Name:       owner.GetName(),
 	}
+
 	return ref
 }
 

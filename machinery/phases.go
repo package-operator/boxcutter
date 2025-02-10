@@ -93,12 +93,14 @@ func (r *phaseTeardownResult) String() string {
 			out += "- " + gone.String() + "\n"
 		}
 	}
+
 	if len(r.waiting) > 0 {
 		out += "Waiting Objects:\n"
 		for _, waiting := range r.waiting {
 			out += "- " + waiting.String() + "\n"
 		}
 	}
+
 	return out
 }
 
@@ -139,12 +141,14 @@ func (e *PhaseEngine) Teardown(
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
+
 		if gone {
 			res.gone = append(res.gone, types.ToObjectRef(o.Object))
 		} else {
 			res.waiting = append(res.waiting, types.ToObjectRef(o.Object))
 		}
 	}
+
 	return res, nil
 }
 
@@ -164,8 +168,10 @@ func (e *PhaseEngine) Reconcile(
 	if err != nil {
 		return pres, fmt.Errorf("validating: %w", err)
 	}
+
 	if !violation.Empty() {
 		pres.preflightViolation = violation
+
 		return pres, nil
 	}
 
@@ -175,6 +181,7 @@ func (e *PhaseEngine) Reconcile(
 		if err != nil {
 			return pres, fmt.Errorf("reconciling object: %w", err)
 		}
+
 		pres.objects = append(pres.objects, ores)
 	}
 
@@ -233,27 +240,32 @@ func (r *phaseResult) InTransistion() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
 		return false
 	}
+
 	if r.HasProgressed() {
 		// If all objects have progressed, we are done transitioning.
 		return false
 	}
+
 	for _, o := range r.objects {
 		switch o.Action() {
 		case ActionCollision, ActionProgressed:
 			return true
 		}
 	}
+
 	return false
 }
 
 // HasProgressed returns true when all objects have been progressed to a newer revision.
 func (r *phaseResult) HasProgressed() bool {
 	var numProgressed int
+
 	for _, o := range r.objects {
 		if o.Action() == ActionProgressed {
 			numProgressed++
 		}
 	}
+
 	return numProgressed == len(r.objects)
 }
 
@@ -263,14 +275,17 @@ func (r *phaseResult) IsComplete() bool {
 	if _, ok := r.GetPreflightViolation(); ok {
 		return false
 	}
+
 	for _, o := range r.objects {
 		if o.Action() == ActionCollision {
 			return false
 		}
+
 		if probe, ok := o.Probes()[types.ProgressProbeType]; ok && !probe.Success {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -289,5 +304,6 @@ func (r *phaseResult) String() string {
 	for _, ores := range r.objects {
 		out += "- " + strings.ReplaceAll(strings.TrimSpace(ores.String()), "\n", "\n  ") + "\n"
 	}
+
 	return out
 }

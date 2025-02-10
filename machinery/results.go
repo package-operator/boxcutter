@@ -76,6 +76,7 @@ func (r ObjectResultCreated) Success() bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -201,12 +202,14 @@ func (r normalResult) Success() bool {
 			return false
 		}
 	}
+
 	return true
 }
 
 // String returns a human readable description of the Result.
 func (r normalResult) String() string {
 	msg := reportStart(r)
+
 	return msg + r.compareResult.String()
 }
 
@@ -233,6 +236,7 @@ func (r ObjectResultCollision) Success() bool {
 func (r ObjectResultCollision) String() string {
 	msg := r.normalResult.String()
 	msg += fmt.Sprintf("Conflicting Owner: %s\n", r.conflictingOwner.String())
+
 	return msg
 }
 
@@ -287,13 +291,17 @@ func reportStart(or ObjectResult) string {
 
 	probes := or.Probes()
 	probeTypes := make([]string, 0, len(probes))
+
 	for k := range probes {
 		probeTypes = append(probeTypes, k)
 	}
+
 	sort.Strings(probeTypes)
+
 	if len(probeTypes) > 0 {
 		msg += "Probes:\n"
 	}
+
 	for _, probeType := range probeTypes {
 		probeRes := probes[probeType]
 		if probeRes.Success {
@@ -311,6 +319,7 @@ func reportStart(or ObjectResult) string {
 
 func runProbes(obj Object, probes map[string]types.Prober) map[string]ObjectProbeResult {
 	results := map[string]ObjectProbeResult{}
+
 	for t, probe := range probes {
 		s, msgs := probe.Probe(obj)
 		results[t] = ObjectProbeResult{
@@ -318,5 +327,6 @@ func runProbes(obj Object, probes map[string]types.Prober) map[string]ObjectProb
 			Messages: msgs,
 		}
 	}
+
 	return results
 }

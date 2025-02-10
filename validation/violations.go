@@ -75,6 +75,7 @@ func (v baseViolation) String() string {
 	for _, msg := range v.msgs {
 		out += fmt.Sprintf("- %s\n", msg)
 	}
+
 	return out
 }
 
@@ -92,6 +93,7 @@ func (v objectViolation) ObjectRef() types.ObjectRef {
 // and the context the error was encountered in, if available.
 func (v objectViolation) String() string {
 	out := v.obj.String() + ":\n"
+
 	return out + v.baseViolation.String()
 }
 
@@ -102,6 +104,7 @@ func newObjectViolation(obj client.Object, msgs []string) *objectViolation {
 	if obj != nil {
 		v.obj = types.ToObjectRef(obj)
 	}
+
 	return v
 }
 
@@ -140,10 +143,12 @@ func (v phaseViolation) String() string {
 	if len(v.phaseName) > 0 {
 		out += fmt.Sprintf("Phase %q:\n", v.phaseName)
 	}
+
 	out += v.baseViolation.String()
 	for _, o := range v.objects {
 		out += o.String()
 	}
+
 	return out
 }
 
@@ -175,6 +180,7 @@ func (v revisionViolation) String() string {
 	for _, o := range v.phases {
 		out += o.String()
 	}
+
 	return out
 }
 

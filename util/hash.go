@@ -33,6 +33,7 @@ func ComputeSHA256Hash(obj any, collisionCount *uint32) string {
 // ensuring the hash does not change when a pointer changes.
 func DeepHashObject(hasher hash.Hash, objectToWrite any) {
 	hasher.Reset()
+
 	printer := spew.ConfigState{
 		Indent:         " ",
 		SortKeys:       true,

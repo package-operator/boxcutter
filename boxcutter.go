@@ -120,6 +120,7 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 		opts.OwnerStrategy, comp, opts.FieldOwner, opts.SystemPrefix,
 	)
 	pe := machinery.NewPhaseEngine(oe, pval)
+
 	return machinery.NewRevisionEngine(pe, rval, opts.Writer), nil
 }
 
@@ -136,23 +137,30 @@ func validateRevisionEngineOpts(opts RevisionEngineOptions) error {
 	if opts.Scheme == nil {
 		return RevisionEngineOptionsError{msg: "scheme must be provided"}
 	}
+
 	if len(opts.FieldOwner) == 0 {
 		return RevisionEngineOptionsError{msg: "fieldOwner must be provided"}
 	}
+
 	if len(opts.SystemPrefix) == 0 {
 		return RevisionEngineOptionsError{msg: "systemPrefix must be provided"}
 	}
+
 	if opts.DiscoveryClient == nil {
 		return RevisionEngineOptionsError{msg: "discoveryClient must be provided"}
 	}
+
 	if opts.RestMapper == nil {
 		return RevisionEngineOptionsError{msg: "restMapper must be provided"}
 	}
+
 	if opts.Writer == nil {
 		return RevisionEngineOptionsError{msg: "writer must be provided"}
 	}
+
 	if opts.Reader == nil {
 		return RevisionEngineOptionsError{msg: "reader must be provided"}
 	}
+
 	return nil
 }

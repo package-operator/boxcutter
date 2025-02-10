@@ -89,11 +89,14 @@ func (c *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 			if err != nil {
 				return res, err
 			}
+
 			if err := c.removeFinalizer(ctx, cm, teardownFinalizer); err != nil {
 				return res, err
 			}
+
 			return res, err
 		}
+
 		return c.handleRevision(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				UID:       owner.UID,
@@ -105,6 +108,7 @@ func (c *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 	case "Deployment":
 		return c.handleDeployment(ctx, cm)
 	}
+
 	return res, nil
 }
 
@@ -118,13 +122,16 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 	}
 
 	existingRevisions := make([]boxcutter.RevisionAccessor, 0, len(existingRevisionsRaw.Items))
+
 	for _, rev := range existingRevisionsRaw.Items {
 		r, _, err := c.toRevision(cm.Name, &rev)
 		if err != nil {
 			return res, fmt.Errorf("to revision: %w", err)
 		}
+
 		existingRevisions = append(existingRevisions, r)
 	}
+
 	sort.Sort(revisionAscending(existingRevisions))
 
 	currentHash := util.ComputeSHA256Hash(cm.Data, nil)
@@ -134,8 +141,10 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 		currentRevision boxcutter.RevisionAccessor
 		prevRevisions   []boxcutter.RevisionAccessor
 	)
+
 	if len(existingRevisions) > 0 {
 		maybeCurrentObjectSet := existingRevisions[len(existingRevisions)-1]
+
 		annotations := maybeCurrentObjectSet.GetClientObject().GetAnnotations()
 		if annotations != nil {
 			if hash, ok := annotations[hashAnnotation]; ok &&
@@ -145,6 +154,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 			}
 		}
 	}
+
 	if currentRevision == nil {
 		// all ObjectSets are outdated.
 		prevRevisions = existingRevisions
@@ -171,6 +181,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 		if err := controllerutil.SetControllerReference(cm, newRevision, c.scheme); err != nil {
 			return res, fmt.Errorf("set ownerref: %w", err)
 		}
+
 		if err := c.client.Create(ctx, newRevision); err != nil {
 			return res, fmt.Errorf("creating new Revision: %w", err)
 		}
@@ -179,6 +190,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 	// Delete archived previous revisions over revisionHistory limit
 	numToDelete := len(prevRevisions) - revisionHistoryLimit
 	slices.Reverse(prevRevisions)
+
 	for _, prevRev := range prevRevisions {
 		if numToDelete <= 0 {
 			break
@@ -187,6 +199,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 		if err := client.IgnoreNotFound(c.client.Delete(ctx, prevRev.GetClientObject())); err != nil {
 			return res, fmt.Errorf("failed to delete revision (history limit): %w", err)
 		}
+
 		numToDelete--
 	}
 
@@ -200,7 +213,9 @@ func (c *Reconciler) handleRevision(
 	if err != nil {
 		return res, fmt.Errorf("converting CM to revision: %w", err)
 	}
+
 	var objects []client.Object
+
 	for _, phase := range revision.GetPhases() {
 		for _, pobj := range phase.GetObjects() {
 			objects = append(objects, pobj.Object)
@@ -265,11 +280,14 @@ func (c *Reconciler) handleRevision(
 	// Retry failing preflight checks with a flat 10s retry.
 	if _, ok := rres.GetPreflightViolation(); ok {
 		res.RequeueAfter = 10 * time.Second
+
 		return res, nil
 	}
+
 	for _, pres := range rres.GetPhases() {
 		if _, ok := pres.GetPreflightViolation(); ok {
 			res.RequeueAfter = 10 * time.Second
+
 			return res, nil
 		}
 	}
@@ -283,6 +301,7 @@ func (c *Reconciler) handleRevision(
 			}
 		}
 	}
+
 	return res, nil
 }
 
@@ -312,15 +331,20 @@ func (e RevisionNumberNotSetError) Error() string {
 func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	r boxcutter.RevisionAccessor, previous []client.Object, err error,
 ) {
-	var phases []string
+	var (
+		phases        []string
+		previousUnstr []unstructured.Unstructured
+		revision      int64
+	)
+
 	objects := map[string][]unstructured.Unstructured{}
-	var previousUnstr []unstructured.Unstructured
-	var revision int64
+
 	for k, v := range cm.Data {
 		if k == cmPhasesKey {
 			if err := json.Unmarshal([]byte(v), &phases); err != nil {
 				return nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
 			}
+
 			continue
 		}
 
@@ -329,7 +353,9 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 			if err != nil {
 				return nil, nil, fmt.Errorf("parsing revision: %w", err)
 			}
+
 			revision = i
+
 			continue
 		}
 
@@ -337,6 +363,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 			if err := json.Unmarshal([]byte(v), &previousUnstr); err != nil {
 				return nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
 			}
+
 			continue
 		}
 
@@ -344,6 +371,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		if len(parts) != 2 {
 			continue
 		}
+
 		phase := parts[0]
 
 		obj := unstructured.Unstructured{}
@@ -361,6 +389,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		if labels == nil {
 			labels = map[string]string{}
 		}
+
 		labels[deploymentLabel] = deployName
 		obj.SetLabels(labels)
 
@@ -402,6 +431,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 					if f != "yes" {
 						return false, []string{`.data.continue not set to "yes"`}
 					}
+
 					return true, nil
 				})),
 		}
@@ -416,6 +446,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 				Opts:   opts,
 			})
 		}
+
 		rev.Phases = append(rev.Phases, p)
 	}
 
@@ -436,6 +467,7 @@ func (c *Reconciler) ensureFinalizer(
 			"finalizers":      obj.GetFinalizers(),
 		},
 	}
+
 	patchJSON, err := json.Marshal(patch)
 	if err != nil {
 		return fmt.Errorf("marshalling patch to remove finalizer: %w", err)
@@ -444,6 +476,7 @@ func (c *Reconciler) ensureFinalizer(
 	if err := c.client.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patchJSON)); err != nil {
 		return fmt.Errorf("adding finalizer: %w", err)
 	}
+
 	return nil
 }
 
@@ -462,12 +495,15 @@ func (c *Reconciler) removeFinalizer(
 			"finalizers":      obj.GetFinalizers(),
 		},
 	}
+
 	patchJSON, err := json.Marshal(patch)
 	if err != nil {
 		return fmt.Errorf("marshalling patch to remove finalizer: %w", err)
 	}
+
 	if err := c.client.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patchJSON)); err != nil {
 		return fmt.Errorf("removing finalizer: %w", err)
 	}
+
 	return nil
 }

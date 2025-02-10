@@ -33,6 +33,7 @@ var (
 
 func TestObjectResultCreated(t *testing.T) {
 	t.Parallel()
+
 	or := newObjectResultCreated(resultExampleObj, failedExampleProbe)
 	assert.Equal(t, `Object Deployment.apps/v1 test/testi
 Action: "Created"
@@ -44,6 +45,7 @@ Probes:
 
 func TestNormalObjectResult(t *testing.T) {
 	t.Parallel()
+
 	or := newNormalObjectResult(
 		ActionProgressed, resultExampleObj,
 		CompareResult{

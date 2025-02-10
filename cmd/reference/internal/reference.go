@@ -51,6 +51,7 @@ func (r *Reference) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	cmselector := labels.NewSelector().Add(*req)
 
 	mgr, err := ctrl.NewManager(r.restConfig, ctrl.Options{
@@ -84,10 +85,12 @@ func (r *Reference) Start(ctx context.Context) error {
 		if err != nil {
 			return nil, o, err
 		}
+
 		req2, err := labels.NewRequirement(typeLabel, selection.DoesNotExist, []string{})
 		if err != nil {
 			return nil, o, err
 		}
+
 		dynSelector := labels.NewSelector().Add(*req1, *req2)
 
 		o.DefaultLabelSelector = dynSelector
@@ -102,8 +105,10 @@ func (r *Reference) Start(ctx context.Context) error {
 				"boxcutter:references",
 			},
 		}
+
 		return c, o, nil
 	}
+
 	mc := managedcache.NewObjectBoundAccessManager[*corev1.ConfigMap](
 		ctrl.Log,
 		mapper, r.restConfig, cache.Options{
