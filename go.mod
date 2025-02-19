@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/stretchr/testify v1.10.0
 	k8s.io/api v0.32.2
-	k8s.io/apiextensions-apiserver v0.32.1
+	k8s.io/apiextensions-apiserver v0.32.2
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2
 	k8s.io/kube-openapi v0.0.0-20241212222426-2c72e554b1e7
