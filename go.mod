@@ -22,8 +22,8 @@ require (
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/alessio/shellescape v1.4.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
@@ -82,6 +82,6 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	pkg.package-operator.run/cardboard/modules/kubeclients v0.0.4 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
-	sigs.k8s.io/kind v0.26.0 // indirect
+	sigs.k8s.io/kind v0.27.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
