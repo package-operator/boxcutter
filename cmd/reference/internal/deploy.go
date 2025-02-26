@@ -278,17 +278,17 @@ func (c *Reconciler) handleRevision(
 	_, _ = fmt.Fprintf(os.Stdout, "%q %s\n", revisionCM.Name, rres.String())
 
 	// Retry failing preflight checks with a flat 10s retry.
-	if _, ok := rres.GetPreflightViolation(); ok {
+	if err := rres.GetPreflightViolation(); err != nil {
 		res.RequeueAfter = 10 * time.Second
 
-		return res, nil
+		return res, nil //nolint:nilerr
 	}
 
 	for _, pres := range rres.GetPhases() {
-		if _, ok := pres.GetPreflightViolation(); ok {
+		if err := pres.GetPreflightViolation(); err != nil {
 			res.RequeueAfter = 10 * time.Second
 
-			return res, nil
+			return res, nil //nolint:nilerr
 		}
 	}
 

@@ -33,7 +33,7 @@ func NewRevisionEngine(
 }
 
 type revisionValidator interface {
-	Validate(_ context.Context, rev types.Revision) (validation.RevisionViolation, error)
+	Validate(_ context.Context, rev types.Revision) (*validation.RevisionError, error)
 }
 
 type phaseEngine interface {
@@ -56,7 +56,7 @@ type phaseEngine interface {
 type RevisionResult interface {
 	// GetPreflightViolation returns the preflight violation of the entire Revision.
 	// Revision preflight checks are not as extensive as phase-preflight checks.
-	GetPreflightViolation() (validation.RevisionViolation, bool)
+	GetPreflightViolation() *validation.RevisionError
 	// GetPhases returns results for individual phases.
 	GetPhases() []PhaseResult
 	// InTransition returns true if the Phase has not yet fully rolled out,
@@ -74,13 +74,12 @@ type RevisionResult interface {
 type revisionResult struct {
 	phases             []string
 	phasesResults      []PhaseResult
-	preflightViolation validation.RevisionViolation
+	preflightViolation *validation.RevisionError
 }
 
 // GetPreflightViolation returns the preflight violations.
-func (r *revisionResult) GetPreflightViolation() (validation.RevisionViolation, bool) {
-	return r.preflightViolation,
-		r.preflightViolation != nil && !r.preflightViolation.Empty()
+func (r *revisionResult) GetPreflightViolation() *validation.RevisionError {
+	return r.preflightViolation
 }
 
 // InTransition returns true if the Phase has not yet fully rolled out,
@@ -142,9 +141,9 @@ func (r *revisionResult) String() string {
 		r.IsComplete(), r.InTransistion(),
 	)
 
-	if v, ok := r.GetPreflightViolation(); ok {
+	if v := r.GetPreflightViolation(); v != nil {
 		out += "Preflight Violation:\n"
-		out += "  " + strings.ReplaceAll(v.String(), "\n", "\n  ") + "\n"
+		out += "  " + strings.ReplaceAll(v.Error(), "\n", "\n  ") + "\n"
 	}
 
 	phasesWithResults := map[string]struct{}{}
@@ -187,10 +186,10 @@ func (re *RevisionEngine) Reconcile(
 		return rres, fmt.Errorf("validating: %w", err)
 	}
 
-	if !violation.Empty() {
+	if violation != nil {
 		rres.preflightViolation = violation
 
-		return rres, nil
+		return rres, nil //nolint:nilerr
 	}
 
 	// Reconcile

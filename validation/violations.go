@@ -2,194 +2,94 @@ package validation
 
 import (
 	"fmt"
-	"strings"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Violation is a generic violation message without
-// detailed context information.
-type Violation interface {
-	// Message returns a single string describung the error.
-	Message() string
-	// Messages returns list of all individual error messages.
-	Messages() []string
-	// Empty returns true when no violation has been recorded.
-	Empty() bool
-	// String returns a human readable report of all violation messages
-	// and the context the error was encountered in, if available.
-	String() string
-}
-
-// PhaseViolation holds more information about violations
-// happening within the context of a phase.
-type PhaseViolation interface {
-	Violation
-	// PhaseName of the phase this violation was encountered.
-	PhaseName() string
-	// Objects returns object violations within the phase.
-	Objects() []ObjectViolation
-}
-
-// ObjectViolation holds more information about violations
-// happening with a specific object.
-// May be encountered in context of a phase.
-type ObjectViolation interface {
-	Violation
-	// ObjectRef triggering the violation.
-	ObjectRef() types.ObjectRef
-}
-
-// RevisionViolation holds information on revision violations.
-type RevisionViolation interface {
-	Violation
+// RevisionError holds information on revision violations.
+type RevisionError struct {
+	err error
 	// Phases returns all violations from individual phases.
-	Phases() []PhaseViolation
+	phases []PhaseError
 }
 
-type baseViolation struct {
-	msgs []string
-}
+func (e RevisionError) Error() string {
+	out := ""
 
-// Message returns a single string describung the error.
-func (v baseViolation) Message() string {
-	return strings.Join(v.msgs, ", ")
-}
+	if e.err != nil {
+		out += e.err.Error()
+	}
 
-// Messages returns list of all individual error messages.
-func (v baseViolation) Messages() []string {
-	return v.msgs
-}
-
-// Empty returns true when no violation has been recorded.
-func (v baseViolation) Empty() bool {
-	return len(v.msgs) == 0
-}
-
-// String returns a human readable report of all violation messages
-// and the context the error was encountered in, if available.
-func (v baseViolation) String() string {
-	var out string
-	for _, msg := range v.msgs {
-		out += fmt.Sprintf("- %s\n", msg)
+	for _, o := range e.phases {
+		out += o.Error()
 	}
 
 	return out
 }
 
-type objectViolation struct {
-	baseViolation
-	obj types.ObjectRef
+func newRevisionError(err error, phaseErrs []PhaseError) *RevisionError {
+	return &RevisionError{err, phaseErrs}
 }
 
-// ObjectRef triggering the violation.
-func (v objectViolation) ObjectRef() types.ObjectRef {
-	return v.obj
-}
-
-// String returns a human readable report of all violation messages
-// and the context the error was encountered in, if available.
-func (v objectViolation) String() string {
-	out := v.obj.String() + ":\n"
-
-	return out + v.baseViolation.String()
-}
-
-func newObjectViolation(obj client.Object, msgs []string) *objectViolation {
-	v := &objectViolation{
-		baseViolation: baseViolation{msgs: msgs},
-	}
-	if obj != nil {
-		v.obj = types.ToObjectRef(obj)
-	}
-
-	return v
-}
-
-func newObjectViolationFromRef(obj types.ObjectRef, msgs []string) *objectViolation {
-	return &objectViolation{
-		baseViolation: baseViolation{msgs: msgs},
-		obj:           obj,
-	}
-}
-
-type phaseViolation struct {
-	baseViolation
+// PhaseError holds more information about violations happening within the context of a phase.
+// May be encountered in context of a revision.
+type PhaseError struct {
+	// PhaseName of the phase this violation was encountered.
 	phaseName string
-	objects   []ObjectViolation
+	err       error
+	// Objects returns object violations within the phase.
+	objects []ObjectError
 }
 
-// PhaseName of the phase this violation was encountered.
-func (v phaseViolation) PhaseName() string {
-	return v.phaseName
-}
+func (e PhaseError) Error() string {
+	out := fmt.Sprintf("phase %q:\n", e.phaseName)
 
-// Objects returns object violations within the phase.
-func (v phaseViolation) Objects() []ObjectViolation {
-	return v.objects
-}
-
-// Empty returns true when no violation has been recorded.
-func (v phaseViolation) Empty() bool {
-	return len(v.msgs) == 0 && len(v.objects) == 0
-}
-
-// String returns a human readable report of all violation messages
-// and the context the error was encountered in, if available.
-func (v phaseViolation) String() string {
-	var out string
-	if len(v.phaseName) > 0 {
-		out += fmt.Sprintf("Phase %q:\n", v.phaseName)
+	if e.err != nil {
+		out += e.err.Error()
 	}
 
-	out += v.baseViolation.String()
-	for _, o := range v.objects {
-		out += o.String()
+	for _, o := range e.objects {
+		out += o.Error()
 	}
 
 	return out
 }
 
-func newPhaseViolation(
-	phaseName string, msgs []string,
-	objects []ObjectViolation,
-) *phaseViolation {
-	return &phaseViolation{
-		baseViolation: baseViolation{msgs: msgs},
-		phaseName:     phaseName,
-		objects:       objects,
-	}
+func newPhaseError(name string, err error, objErrs []ObjectError) *PhaseError {
+	return &PhaseError{name, err, objErrs}
 }
 
-type revisionViolation struct {
-	baseViolation
-	phases []PhaseViolation
+// NewPhaseErrorWithErrs creates a new PhaseError of the phase identenfied by name,
+// the given errors and no associated ObjectErrors.
+func NewPhaseErrorWithErrs(name string, err error) *PhaseError {
+	return &PhaseError{name, err, nil}
 }
 
-// Phases returns all violations from individual phases.
-func (v revisionViolation) Phases() []PhaseViolation {
-	return v.phases
+// ObjectError holds more information about violations happening with a specific object.
+// May be encountered in context of a phase.
+type ObjectError struct {
+	// ObjectRef triggering the violation.
+	objectRef types.ObjectRef
+
+	err error
 }
 
-// String returns a human readable report of all violation messages
-// and the context the error was encountered in, if available.
-func (v revisionViolation) String() string {
-	var out string
-	for _, o := range v.phases {
-		out += o.String()
+func (e ObjectError) Error() string {
+	out := fmt.Sprintf("phase %q:\n", e.objectRef)
+
+	if e.err != nil {
+		out += e.Error()
 	}
 
 	return out
 }
 
-func newRevisionViolation(
-	msgs []string,
-	phases []PhaseViolation,
-) *revisionViolation {
-	return &revisionViolation{
-		baseViolation: baseViolation{msgs: msgs},
-		phases:        phases,
-	}
+func newObjectErrorFromRef(ref types.ObjectRef, err error) *ObjectError {
+	return &ObjectError{ref, err}
+}
+
+func newObjectErrorFromObj(obj client.Object, err error) *ObjectError {
+	return &ObjectError{types.ToObjectRef(obj), err}
 }
