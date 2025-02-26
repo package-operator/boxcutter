@@ -36,9 +36,10 @@ func staticValidateMultiplePhases(phases ...types.PhaseAccessor) []PhaseViolatio
 		var ovs []ObjectViolation
 		ovs = append(ovs, commonViolations...)
 
-		for _, obj := range phase.GetObjects() {
-			if errs := validateObjectMetadata(obj.Object); len(errs) > 0 {
-				ovs = append(ovs, newObjectViolation(obj.Object, errs))
+		for _, o := range phase.GetObjects() {
+			obj := &o
+			if errs := validateObjectMetadata(obj); len(errs) > 0 {
+				ovs = append(ovs, newObjectViolation(obj, errs))
 			}
 		}
 

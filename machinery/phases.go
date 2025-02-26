@@ -137,15 +137,17 @@ func (e *PhaseEngine) Teardown(
 	res := &phaseTeardownResult{name: phase.GetName()}
 
 	for _, o := range phase.GetObjects() {
-		gone, err := e.objectEngine.Teardown(ctx, owner, revision, o.Object)
+		obj := &o
+
+		gone, err := e.objectEngine.Teardown(ctx, owner, revision, obj)
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
 
 		if gone {
-			res.gone = append(res.gone, types.ToObjectRef(o.Object))
+			res.gone = append(res.gone, types.ToObjectRef(obj))
 		} else {
-			res.waiting = append(res.waiting, types.ToObjectRef(o.Object))
+			res.waiting = append(res.waiting, types.ToObjectRef(obj))
 		}
 	}
 
@@ -158,7 +160,13 @@ func (e *PhaseEngine) Reconcile(
 	owner client.Object,
 	revision int64,
 	phase types.PhaseAccessor,
+	opts ...types.PhaseOption,
 ) (PhaseResult, error) {
+	var options types.PhaseOptions
+	for _, opt := range opts {
+		opt.ApplyToPhaseOptions(&options)
+	}
+
 	pres := &phaseResult{
 		name: phase.GetName(),
 	}
@@ -176,8 +184,16 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Reconcile
-	for _, obj := range phase.GetObjects() {
-		ores, err := e.objectEngine.Reconcile(ctx, owner, revision, obj.Object, obj.Opts...)
+	for _, o := range phase.GetObjects() {
+		obj := &o
+		objRef := types.ToObjectRef(obj)
+
+		opts := make([]types.ObjectOption, 0, len(options.DefaultObjectOptions)+len(options.ObjectOptions[objRef]))
+		opts = append(opts, options.DefaultObjectOptions...)
+		opts = append(opts, options.ObjectOptions[objRef]...)
+
+		ores, err := e.objectEngine.Reconcile(
+			ctx, owner, revision, obj, opts...)
 		if err != nil {
 			return pres, fmt.Errorf("reconciling object: %w", err)
 		}

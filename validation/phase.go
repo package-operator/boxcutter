@@ -53,8 +53,10 @@ func (v *PhaseValidator) Validate(
 	}
 
 	// Individual objects.
-	for _, obj := range phase.GetObjects() {
-		vs, err := v.ObjectValidator.Validate(ctx, owner, obj.Object)
+	for _, o := range phase.GetObjects() {
+		obj := &o
+
+		vs, err := v.ObjectValidator.Validate(ctx, owner, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -90,8 +92,9 @@ func checkForObjectDuplicates(phases ...types.PhaseAccessor) []ObjectViolation {
 	conflicts := map[types.ObjectRef]map[string]struct{}{}
 
 	for _, phase := range phases {
-		for _, obj := range phase.GetObjects() {
-			ref := types.ToObjectRef(obj.Object)
+		for _, o := range phase.GetObjects() {
+			obj := &o
+			ref := types.ToObjectRef(obj)
 
 			otherPhase, ok := uniqueObjectsInPhase[ref]
 			if !ok {

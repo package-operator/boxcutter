@@ -33,7 +33,7 @@ type PhaseAccessor interface {
 	// GetName returns the name of the phase.
 	GetName() string
 	// GetObjects returns the objects managed by the phase.
-	GetObjects() []PhaseObject
+	GetObjects() []unstructured.Unstructured
 }
 
 // RevisionAccessor represents multiple phases at a given point in time.
@@ -52,13 +52,7 @@ type RevisionAccessor interface {
 // Phase implements the PhaseAccessor interface.
 type Phase struct {
 	Name    string
-	Objects []PhaseObject
-}
-
-// PhaseObject represents an object and it's options.
-type PhaseObject struct {
-	Object *unstructured.Unstructured
-	Opts   []ObjectOption
+	Objects []unstructured.Unstructured
 }
 
 // GetName implements the PhaseAccessor interface.
@@ -67,7 +61,7 @@ func (p *Phase) GetName() string {
 }
 
 // GetObjects implements the PhaseAccessor interface.
-func (p *Phase) GetObjects() []PhaseObject {
+func (p *Phase) GetObjects() []unstructured.Unstructured {
 	return p.Objects
 }
 

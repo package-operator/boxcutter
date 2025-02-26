@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery"
 	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
@@ -31,50 +32,38 @@ func TestRevisionEngine(t *testing.T) {
 
 	obj1Probe := &stubProbe{success: false, messages: []string{"nope"}}
 	obj2Probe := &stubProbe{success: true}
+	obj1 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test-rev-obj-1",
+				"namespace": "default",
+			},
+		},
+	}
+	obj2 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "test-rev-obj-2",
+				"namespace": "default",
+			},
+		},
+	}
 	rev := &bctypes.Revision{
 		Name:     "rev-1",
 		Owner:    revOwner,
 		Revision: 1,
 		Phases: []bctypes.PhaseAccessor{
 			&bctypes.Phase{
-				Name: "phase-1",
-				Objects: []bctypes.PhaseObject{
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "v1",
-								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
-									"name":      "test-rev-obj-1",
-									"namespace": "default",
-								},
-							},
-						},
-						Opts: []bctypes.ObjectOption{
-							bctypes.WithProbe(bctypes.ProgressProbeType, obj1Probe),
-						},
-					},
-				},
+				Name:    "phase-1",
+				Objects: []unstructured.Unstructured{*obj1},
 			},
 			&bctypes.Phase{
-				Name: "phase-2",
-				Objects: []bctypes.PhaseObject{
-					{
-						Object: &unstructured.Unstructured{
-							Object: map[string]interface{}{
-								"apiVersion": "v1",
-								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
-									"name":      "test-rev-obj-2",
-									"namespace": "default",
-								},
-							},
-						},
-						Opts: []bctypes.ObjectOption{
-							bctypes.WithProbe(bctypes.ProgressProbeType, obj2Probe),
-						},
-					},
-				},
+				Name:    "phase-2",
+				Objects: []unstructured.Unstructured{*obj2},
 			},
 		},
 	}
@@ -102,7 +91,10 @@ func TestRevisionEngine(t *testing.T) {
 	// --------------
 
 	// 1st Run.
-	res, err := re.Reconcile(ctx, rev)
+	res, err := re.Reconcile(ctx, rev,
+		boxcutter.WithObjectOptions(obj1, bctypes.WithProbe(bctypes.ProgressProbeType, obj1Probe)),
+		boxcutter.WithObjectOptions(obj2, bctypes.WithProbe(bctypes.ProgressProbeType, obj2Probe)),
+	)
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete(), "Revision should not be complete.")

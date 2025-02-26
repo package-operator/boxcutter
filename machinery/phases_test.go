@@ -53,10 +53,8 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, &types.Phase{
 		Name: "test",
-		Objects: []types.PhaseObject{
-			{
-				Object: obj,
-			},
+		Objects: []unstructured.Unstructured{
+			*obj,
 		},
 	})
 	require.NoError(t, err)
@@ -101,10 +99,8 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	ctx := context.Background()
 	_, err := pe.Reconcile(ctx, owner, revision, &types.Phase{
 		Name: "test",
-		Objects: []types.PhaseObject{
-			{
-				Object: obj,
-			},
+		Objects: []unstructured.Unstructured{
+			*obj,
 		},
 	})
 	require.NoError(t, err)
@@ -148,9 +144,8 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	ctx := context.Background()
 	deleted, err := pe.Teardown(ctx, owner, revision, &types.Phase{
 		Name: "test",
-		Objects: []types.PhaseObject{
-			{Object: obj},
-			{Object: obj},
+		Objects: []unstructured.Unstructured{
+			*obj, *obj,
 		},
 	})
 	require.NoError(t, err)

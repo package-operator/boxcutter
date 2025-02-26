@@ -125,8 +125,9 @@ func (m *phaseEngineMock) Reconcile(
 	owner client.Object,
 	revision int64,
 	phase types.PhaseAccessor,
+	opts ...types.PhaseOption,
 ) (PhaseResult, error) {
-	args := m.Called(ctx, owner, revision, phase)
+	args := m.Called(ctx, owner, revision, phase, opts)
 
 	return args.Get(0).(PhaseResult), args.Error(1)
 }
