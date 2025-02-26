@@ -138,6 +138,7 @@ func (e *PhaseEngine) Teardown(
 
 	for _, o := range phase.GetObjects() {
 		obj := &o
+
 		gone, err := e.objectEngine.Teardown(ctx, owner, revision, obj)
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
@@ -185,7 +186,12 @@ func (e *PhaseEngine) Reconcile(
 	// Reconcile
 	for _, o := range phase.GetObjects() {
 		obj := &o
-		opts := append(options.DefaultObjectOptions, options.ObjectOptions[types.ToObjectRef(obj)]...)
+		objRef := types.ToObjectRef(obj)
+
+		opts := make([]types.ObjectOption, 0, len(options.DefaultObjectOptions)+len(options.ObjectOptions[objRef]))
+		opts = append(opts, options.DefaultObjectOptions...)
+		opts = append(opts, options.ObjectOptions[objRef]...)
+
 		ores, err := e.objectEngine.Reconcile(
 			ctx, owner, revision, obj, opts...)
 		if err != nil {

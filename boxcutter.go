@@ -26,11 +26,14 @@ type Revision = types.Revision
 // Phase represents a collection of objects lifecycled together.
 type Phase = types.Phase
 
-// PhaseObject represents an object and it's options.
-type PhaseObject = types.PhaseObject
-
 // ObjectOption is the common interface for object reconciliation options.
 type ObjectOption = types.ObjectOption
+
+// PhaseOption is the common interface for phase reconciliation options.
+type PhaseOption = types.PhaseOption
+
+// RevisionOption is the common interface for revision reconciliation options.
+type RevisionOption = types.RevisionOption
 
 // WithPreviousOwners is a list of known objects allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
@@ -67,6 +70,12 @@ var ProbeFunc = types.ProbeFunc
 
 // WithProbe registers the given probe to evaluate state of objects.
 var WithProbe = types.WithProbe
+
+// WithObjectOptions applies the given options only to the given object.
+var WithObjectOptions = types.WithObjectOptions
+
+// WithPhaseOptions applies the given options only to a phase with matching name.
+var WithPhaseOptions = types.WithPhaseOptions
 
 // ProgressProbeType is a well-known probe type used to guard phase progression.
 const ProgressProbeType = types.ProgressProbeType

@@ -42,6 +42,7 @@ type phaseEngine interface {
 		owner client.Object,
 		revision int64,
 		phase types.PhaseAccessor,
+		opts ...types.PhaseOption,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
@@ -168,7 +169,13 @@ func (r *revisionResult) String() string {
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
 	ctx context.Context, rev types.RevisionAccessor,
+	opts ...types.RevisionOption,
 ) (RevisionResult, error) {
+	var options types.RevisionOptions
+	for _, opt := range opts {
+		opt.ApplyToRevisionOptions(&options)
+	}
+
 	rres := &revisionResult{}
 	for _, p := range rev.GetPhases() {
 		rres.phases = append(rres.phases, p.GetName())
@@ -188,7 +195,11 @@ func (re *RevisionEngine) Reconcile(
 
 	// Reconcile
 	for _, phase := range rev.GetPhases() {
-		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase)
+		opts := make([]types.PhaseOption, 0, len(options.DefaultPhaseOptions)+len(options.PhaseOptions[phase.GetName()]))
+		opts = append(opts, options.DefaultPhaseOptions...)
+		opts = append(opts, options.PhaseOptions[phase.GetName()]...)
+
+		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase, opts...)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
