@@ -150,6 +150,7 @@ func TestRevisionEngine(t *testing.T) {
 	if assert.True(t, ok) {
 		assert.Equal(t, "phase-2", phaseName)
 	}
+
 	assert.False(t, tres.IsComplete(), "Deletion is not complete\n"+tres.String())
 	require.NoError(t, Client.Get(ctx, client.ObjectKey{Name: "test-rev-obj-1", Namespace: "default"}, cm),
 		"test-rev-obj-1 should still be present")
@@ -166,6 +167,7 @@ func TestRevisionEngine(t *testing.T) {
 	if assert.True(t, ok) {
 		assert.Equal(t, "phase-1", phaseName)
 	}
+
 	assert.False(t, tres.IsComplete(), "Deletion is not complete\n"+tres.String())
 
 	// Third Try.

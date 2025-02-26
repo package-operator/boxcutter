@@ -22,26 +22,33 @@ func NewRevisionValidator() *RevisionValidator {
 // Validate a revision compromising of multiple phases.
 func (v *RevisionValidator) Validate(_ context.Context, rev types.RevisionAccessor) (RevisionViolation, error) {
 	pvs := staticValidateMultiplePhases(rev.GetPhases()...)
+
 	return newRevisionViolation(nil, pvs), nil
 }
 
 func staticValidateMultiplePhases(phases ...types.PhaseAccessor) []PhaseViolation {
 	commonViolations := checkForObjectDuplicates(phases...)
 	pvs := []PhaseViolation{}
+
 	for _, phase := range phases {
 		phaseMsgs := validatePhaseName(phase)
+
 		var ovs []ObjectViolation
 		ovs = append(ovs, commonViolations...)
+
 		for _, obj := range phase.GetObjects() {
 			if errs := validateObjectMetadata(obj.Object); len(errs) > 0 {
 				ovs = append(ovs, newObjectViolation(obj.Object, errs))
 			}
 		}
+
 		if len(phaseMsgs) == 0 && len(ovs) == 0 {
 			continue
 		}
+
 		pvs = append(pvs, *newPhaseViolation(
 			phase.GetName(), phaseMsgs, compactObjectViolations(ovs)))
 	}
+
 	return pvs
 }

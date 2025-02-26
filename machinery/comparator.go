@@ -68,6 +68,7 @@ type defaultOpenAPIAccessor struct {
 
 func (a *defaultOpenAPIAccessor) Get(gv schema.GroupVersion) (*spec3.OpenAPI, error) {
 	r := openapi3.NewRoot(a.c)
+
 	return r.GVSpec(gv)
 }
 
@@ -98,6 +99,7 @@ func (d CompareResult) String() string {
 	if len(d.ConflictingMangers) != 0 {
 		fmt.Fprintln(&out, "Conflicts:")
 	}
+
 	for _, c := range d.ConflictingMangers {
 		fmt.Fprintf(&out, "- %q\n", c.Manager)
 		c.Fields.Iterate(func(p fieldpath.Path) {
@@ -108,6 +110,7 @@ func (d CompareResult) String() string {
 	if len(d.OtherManagers) != 0 {
 		fmt.Fprintln(&out, "Other:")
 	}
+
 	for _, c := range d.OtherManagers {
 		fmt.Fprintf(&out, "- %q\n", c.Manager)
 		c.Fields.Iterate(func(p fieldpath.Path) {
@@ -119,6 +122,7 @@ func (d CompareResult) String() string {
 		printAdded := d.Comparison.Added != nil && !d.Comparison.Added.Empty()
 		printModified := d.Comparison.Modified != nil && !d.Comparison.Modified.Empty()
 		printRemoved := d.Comparison.Removed != nil && !d.Comparison.Removed.Empty()
+
 		if printAdded || printModified || printRemoved {
 			fmt.Fprintln(&out, "Comparison:")
 		}
@@ -158,13 +162,16 @@ func (d CompareResult) Modified() []string {
 	if d.Comparison == nil {
 		return nil
 	}
+
 	var out []string
+
 	d.Comparison.Modified.Iterate(func(p fieldpath.Path) {
 		out = append(out, p.String())
 	})
 	d.Comparison.Removed.Iterate(func(p fieldpath.Path) {
 		out = append(out, p.String())
 	})
+
 	return out
 }
 
@@ -176,12 +183,14 @@ func (d *Comparator) Compare(
 	if err := ensureGVKIsSet(desiredObject, d.scheme); err != nil {
 		return res, err
 	}
+
 	if err := ensureGVKIsSet(actualObject, d.scheme); err != nil {
 		return res, err
 	}
 
 	desiredGVK := desiredObject.GetObjectKind().GroupVersionKind()
 	actualGVK := actualObject.GetObjectKind().GroupVersionKind()
+
 	if desiredGVK != actualGVK {
 		panic("desired and actual must have same GVK")
 	}
@@ -191,12 +200,14 @@ func (d *Comparator) Compare(
 	if err != nil {
 		return res, fmt.Errorf("API accessor: %w", err)
 	}
+
 	ss, err := schemaconv.ToSchemaFromOpenAPI(s.Components.Schemas, false)
 	if err != nil {
 		return res, fmt.Errorf("schema from OpenAPI: %w", err)
 	}
 
 	var parser typed.Parser
+
 	ss.CopyInto(&parser.Schema)
 
 	// Extrapolate a field set from desired.
@@ -204,18 +215,22 @@ func (d *Comparator) Compare(
 	if err := d.ownerStrategy.SetControllerReference(owner, desiredObject); err != nil {
 		return res, err
 	}
+
 	tName, err := openAPICanonicalName(desiredObject)
 	if err != nil {
 		return res, err
 	}
+
 	typedDesired, err := getTyped(&parser, tName, desiredObject)
 	if err != nil {
 		return res, fmt.Errorf("desired object: %w", err)
 	}
+
 	res.DesiredFieldSet, err = typedDesired.ToFieldSet()
 	if err != nil {
 		return res, fmt.Errorf("desired to field set: %w", err)
 	}
+
 	res.DesiredFieldSet = res.DesiredFieldSet.Difference(stripSet)
 
 	// Get "our" managed fields on actual.
@@ -227,6 +242,7 @@ func (d *Comparator) Compare(
 			if err := fs.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
 				return res, fmt.Errorf("field set for actual: %w", err)
 			}
+
 			fs = res.DesiredFieldSet.Intersection(fs)
 			if fs.Empty() {
 				continue
@@ -237,8 +253,10 @@ func (d *Comparator) Compare(
 				Fields:  fs,
 			})
 		}
+
 		return res, nil
 	}
+
 	actualFieldSet := &fieldpath.Set{}
 	if err := actualFieldSet.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
 		return res, fmt.Errorf("field set for actual: %w", err)
@@ -259,6 +277,7 @@ func (d *Comparator) Compare(
 		if err := fs.FromJSON(bytes.NewReader(mf.FieldsV1.Raw)); err != nil {
 			return res, fmt.Errorf("field set for actual: %w", err)
 		}
+
 		c := CompareResultManagedFields{
 			Manager: mf.Manager,
 			Fields:  fs.Intersection(diff),
@@ -274,6 +293,7 @@ func (d *Comparator) Compare(
 		if o.Fields.Empty() {
 			continue
 		}
+
 		res.OtherManagers = append(res.OtherManagers, o)
 	}
 
@@ -283,10 +303,12 @@ func (d *Comparator) Compare(
 	}
 
 	actualValues := typedActual.RemoveItems(stripSet)
+
 	res.Comparison, err = typedDesired.RemoveItems(stripSet).Compare(actualValues)
 	if err != nil {
 		return res, fmt.Errorf("compare: %w", err)
 	}
+
 	return res, nil
 }
 
@@ -309,6 +331,7 @@ func getTyped(
 			return typedDesired, fmt.Errorf("from structured: %w", err)
 		}
 	}
+
 	return typedDesired, nil
 }
 
@@ -322,6 +345,7 @@ func findManagedFields(fieldOwner string, accessor metav1.Object) (metav1.Manage
 			return mf, true
 		}
 	}
+
 	return metav1.ManagedFieldsEntry{}, false
 }
 
@@ -362,7 +386,9 @@ func openAPICanonicalName(obj client.Object) (string, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	var schemaTypeName string
+
 	o, err := existingAPIScheme.New(gvk)
+
 	switch {
 	case err != nil && runtime.IsNotRegisteredError(err):
 		// Assume CRD, when GVK is not part of core APIs.
@@ -372,6 +398,7 @@ func openAPICanonicalName(obj client.Object) (string, error) {
 	default:
 		schemaTypeName = util.GetCanonicalTypeName(o)
 	}
+
 	return util.ToRESTFriendlyName(schemaTypeName), nil
 }
 
@@ -379,10 +406,13 @@ func ensureGVKIsSet(obj client.Object, scheme *runtime.Scheme) error {
 	if !obj.GetObjectKind().GroupVersionKind().Empty() {
 		return nil
 	}
+
 	gvk, err := apiutil.GVKForObject(obj, scheme)
 	if err != nil {
 		return err
 	}
+
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
+
 	return nil
 }

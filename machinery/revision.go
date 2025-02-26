@@ -90,22 +90,26 @@ func (r *revisionResult) InTransistion() bool {
 		// not all phases have been acted on.
 		return true
 	}
+
 	for _, p := range r.phasesResults {
 		if p.InTransistion() {
 			return true
 		}
 	}
+
 	return false
 }
 
 // HasProgressed returns true when all phases have been progressed to a newer revision.
 func (r *revisionResult) HasProgressed() bool {
 	var numProgressed int
+
 	for _, p := range r.phasesResults {
 		if p.HasProgressed() {
 			numProgressed++
 		}
 	}
+
 	return numProgressed == len(r.phases)
 }
 
@@ -116,11 +120,13 @@ func (r *revisionResult) IsComplete() bool {
 		// not all phases have been acted on.
 		return false
 	}
+
 	for _, p := range r.phasesResults {
 		if !p.IsComplete() {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -142,6 +148,7 @@ func (r *revisionResult) String() string {
 
 	phasesWithResults := map[string]struct{}{}
 	out += "Phases:\n"
+
 	for _, ores := range r.phasesResults {
 		phasesWithResults[ores.GetName()] = struct{}{}
 		out += "- " + strings.TrimSpace(strings.ReplaceAll(ores.String(), "\n", "\n  ")) + "\n"
@@ -151,6 +158,7 @@ func (r *revisionResult) String() string {
 		if _, ok := phasesWithResults[p]; ok {
 			continue
 		}
+
 		out += fmt.Sprintf("- Phase %q (Pending)\n", p)
 	}
 
@@ -171,8 +179,10 @@ func (re *RevisionEngine) Reconcile(
 	if err != nil {
 		return rres, fmt.Errorf("validating: %w", err)
 	}
+
 	if !violation.Empty() {
 		rres.preflightViolation = violation
+
 		return rres, nil
 	}
 
@@ -182,6 +192,7 @@ func (re *RevisionEngine) Reconcile(
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
+
 		rres.phasesResults = append(rres.phasesResults, pres)
 		if !pres.IsComplete() {
 			// Wait
@@ -262,6 +273,7 @@ func (r *revisionTeardownResult) String() string {
 			out += "- " + waiting + "\n"
 		}
 	}
+
 	if len(r.gone) > 0 {
 		out += "Gone Phases:\n"
 		for _, gone := range r.gone {
@@ -271,10 +283,12 @@ func (r *revisionTeardownResult) String() string {
 
 	phasesWithResults := map[string]struct{}{}
 	out += "Phases:\n"
+
 	for _, ores := range r.phases {
 		phasesWithResults[ores.GetName()] = struct{}{}
 		out += "- " + strings.TrimSpace(strings.ReplaceAll(ores.String(), "\n", "\n  ")) + "\n"
 	}
+
 	return out
 }
 
@@ -306,6 +320,7 @@ func (re *RevisionEngine) Teardown(
 		res.phases = append(res.phases, pres)
 		if pres.IsComplete() {
 			res.gone = append(res.gone, p.GetName())
+
 			continue
 		}
 
@@ -315,11 +330,14 @@ func (re *RevisionEngine) Teardown(
 				res.waiting = append(res.waiting, p.GetName())
 			}
 		}
+
 		slices.Reverse(res.gone)
+
 		return res, nil
 	}
 
 	slices.Reverse(res.gone)
 	res.active = ""
+
 	return res, nil
 }
