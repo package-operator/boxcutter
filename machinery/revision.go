@@ -33,7 +33,7 @@ func NewRevisionEngine(
 }
 
 type revisionValidator interface {
-	Validate(_ context.Context, rev types.RevisionAccessor) (validation.RevisionViolation, error)
+	Validate(_ context.Context, rev types.Revision) (validation.RevisionViolation, error)
 }
 
 type phaseEngine interface {
@@ -41,14 +41,14 @@ type phaseEngine interface {
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase types.PhaseAccessor,
+		phase types.Phase,
 		opts ...types.PhaseOption,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
-		phase types.PhaseAccessor,
+		phase types.Phase,
 	) (PhaseTeardownResult, error)
 }
 
@@ -168,7 +168,7 @@ func (r *revisionResult) String() string {
 
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
-	ctx context.Context, rev types.RevisionAccessor,
+	ctx context.Context, rev types.Revision,
 	opts ...types.RevisionOption,
 ) (RevisionResult, error) {
 	var options types.RevisionOptions
@@ -199,7 +199,7 @@ func (re *RevisionEngine) Reconcile(
 		opts = append(opts, options.DefaultPhaseOptions...)
 		opts = append(opts, options.PhaseOptions[phase.GetName()]...)
 
-		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), phase, opts...)
+		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetOwner(), rev.GetRevisionNumber(), phase, opts...)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
@@ -305,7 +305,7 @@ func (r *revisionTeardownResult) String() string {
 
 // Teardown ensures the given revision is safely removed from the cluster.
 func (re *RevisionEngine) Teardown(
-	ctx context.Context, rev types.RevisionAccessor,
+	ctx context.Context, rev types.Revision,
 ) (RevisionTeardownResult, error) {
 	res := &revisionTeardownResult{}
 
@@ -323,7 +323,7 @@ func (re *RevisionEngine) Teardown(
 		delete(waiting, p.GetName())
 		res.active = p.GetName()
 
-		pres, err := re.phaseEngine.Teardown(ctx, rev.GetClientObject(), rev.GetRevisionNumber(), p)
+		pres, err := re.phaseEngine.Teardown(ctx, rev.GetOwner(), rev.GetRevisionNumber(), p)
 		if err != nil {
 			return nil, fmt.Errorf("teardown phase: %w", err)
 		}

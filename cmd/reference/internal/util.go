@@ -10,7 +10,7 @@ import (
 	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 )
 
-type revisionAscending []bctypes.RevisionAccessor
+type revisionAscending []bctypes.Revision
 
 func (a revisionAscending) Len() int      { return len(a) }
 func (a revisionAscending) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
@@ -21,7 +21,7 @@ func (a revisionAscending) Less(i, j int) bool {
 	return iObj.GetRevisionNumber() < jObj.GetRevisionNumber()
 }
 
-func latestRevisionNumber(prevRevisions []bctypes.RevisionAccessor) int64 {
+func latestRevisionNumber(prevRevisions []bctypes.Revision) int64 {
 	if len(prevRevisions) == 0 {
 		return 0
 	}
@@ -29,11 +29,11 @@ func latestRevisionNumber(prevRevisions []bctypes.RevisionAccessor) int64 {
 	return prevRevisions[len(prevRevisions)-1].GetRevisionNumber()
 }
 
-func prevJSON(prevRevisions []bctypes.RevisionAccessor) string {
+func prevJSON(prevRevisions []bctypes.Revision) string {
 	data := make([]unstructured.Unstructured, 0, len(prevRevisions))
 
 	for _, rev := range prevRevisions {
-		refObj := rev.GetClientObject()
+		refObj := rev.GetOwner()
 		ref := unstructured.Unstructured{}
 		ref.SetGroupVersionKind(refObj.GetObjectKind().GroupVersionKind())
 		ref.SetName(refObj.GetName())

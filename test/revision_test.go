@@ -17,7 +17,6 @@ import (
 
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery"
-	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
@@ -52,16 +51,16 @@ func TestRevisionEngine(t *testing.T) {
 			},
 		},
 	}
-	rev := &bctypes.Revision{
+	rev := boxcutter.Revision{
 		Name:     "rev-1",
 		Owner:    revOwner,
 		Revision: 1,
-		Phases: []bctypes.PhaseAccessor{
-			&bctypes.Phase{
+		Phases: []boxcutter.Phase{
+			{
 				Name:    "phase-1",
 				Objects: []unstructured.Unstructured{*obj1},
 			},
-			&bctypes.Phase{
+			{
 				Name:    "phase-2",
 				Objects: []unstructured.Unstructured{*obj2},
 			},
@@ -92,8 +91,8 @@ func TestRevisionEngine(t *testing.T) {
 
 	// 1st Run.
 	res, err := re.Reconcile(ctx, rev,
-		boxcutter.WithObjectOptions(obj1, bctypes.WithProbe(bctypes.ProgressProbeType, obj1Probe)),
-		boxcutter.WithObjectOptions(obj2, bctypes.WithProbe(bctypes.ProgressProbeType, obj2Probe)),
+		boxcutter.WithObjectOptions(obj1, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj1Probe)),
+		boxcutter.WithObjectOptions(obj2, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj2Probe)),
 	)
 	require.NoError(t, err)
 

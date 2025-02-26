@@ -40,7 +40,7 @@ func NewNamespacedPhaseValidator(
 
 // Validate runs validation of the phase and its objects.
 func (v *PhaseValidator) Validate(
-	ctx context.Context, owner client.Object, phase types.PhaseAccessor,
+	ctx context.Context, owner client.Object, phase types.Phase,
 ) (PhaseViolation, error) {
 	var objects []ObjectViolation // errors of objects within.
 
@@ -72,7 +72,7 @@ func (v *PhaseValidator) Validate(
 	return newPhaseViolation(phase.GetName(), msgs, compactObjectViolations(objects)), nil
 }
 
-func validatePhaseName(phase types.PhaseAccessor) []string {
+func validatePhaseName(phase types.Phase) []string {
 	if errMsgs := phaseNameValid(phase.GetName()); len(errMsgs) > 0 {
 		return []string{
 			"phase name invalid: " + strings.Join(errMsgs, " and "),
@@ -86,7 +86,7 @@ func phaseNameValid(phaseName string) (errs []string) {
 	return validation.IsDNS1035Label(phaseName)
 }
 
-func checkForObjectDuplicates(phases ...types.PhaseAccessor) []ObjectViolation {
+func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 	// remember unique objects and the phase we found them first in.
 	uniqueObjectsInPhase := map[types.ObjectRef]string{}
 	conflicts := map[types.ObjectRef]map[string]struct{}{}

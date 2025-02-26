@@ -34,13 +34,13 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		},
 	}
 
-	rev := &types.Revision{
+	rev := types.Revision{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []types.PhaseAccessor{
-			&types.Phase{Name: "phase-1"},
-			&types.Phase{Name: "phase-2"},
-			&types.Phase{Name: "phase-3"},
+		Phases: []types.Phase{
+			{Name: "phase-1"},
+			{Name: "phase-2"},
+			{Name: "phase-3"},
 		},
 	}
 
@@ -81,14 +81,14 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 		},
 	}
 
-	rev := &types.Revision{
+	rev := types.Revision{
 		Owner:    owner,
 		Revision: 3,
-		Phases: []types.PhaseAccessor{
-			&types.Phase{Name: "phase-1"},
-			&types.Phase{Name: "phase-2"},
-			&types.Phase{Name: "phase-3"},
-			&types.Phase{Name: "phase-4"},
+		Phases: []types.Phase{
+			{Name: "phase-1"},
+			{Name: "phase-2"},
+			{Name: "phase-3"},
+			{Name: "phase-4"},
 		},
 	}
 
@@ -124,7 +124,7 @@ func (m *phaseEngineMock) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase types.PhaseAccessor,
+	phase types.Phase,
 	opts ...types.PhaseOption,
 ) (PhaseResult, error) {
 	args := m.Called(ctx, owner, revision, phase, opts)
@@ -136,7 +136,7 @@ func (m *phaseEngineMock) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase types.PhaseAccessor,
+	phase types.Phase,
 ) (PhaseTeardownResult, error) {
 	args := m.Called(ctx, owner, revision, phase)
 
@@ -148,7 +148,7 @@ type revisionValidatorMock struct {
 }
 
 func (m *revisionValidatorMock) Validate(
-	ctx context.Context, rev types.RevisionAccessor,
+	ctx context.Context, rev types.Revision,
 ) (validation.RevisionViolation, error) {
 	args := m.Called(ctx, rev)
 
