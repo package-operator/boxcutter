@@ -4,6 +4,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type PhaseOptions struct {
+	// DefaultObjectOptions applying to all objects in the phase.
+	DefaultObjectOptions []ObjectOption
+	// ObjectOptions maps ObjectOptions for specific objects.s
+	ObjectOptions map[ObjectRef][]ObjectOption
+}
+
+type PhaseOption interface {
+	ApplyToPhaseOptions(opts *PhaseOptions)
+}
+
 // ObjectOptions holds configuration options changing object reconciliation.
 type ObjectOptions struct {
 	CollisionProtection CollisionProtection
@@ -54,27 +65,42 @@ const (
 // WithCollisionProtection instructs the given CollisionProtection setting to be used.
 type WithCollisionProtection CollisionProtection
 
-// ApplyToObjectOptions implements Option.
+// ApplyToObjectOptions implements ObjectOption.
 func (p WithCollisionProtection) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.CollisionProtection = CollisionProtection(p)
+}
+
+// ApplyToPhaseOptions implements PhaseOption.
+func (p WithCollisionProtection) ApplyToPhaseOptions(opts *PhaseOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
 }
 
 // WithPreviousOwners is a list of known objects allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
 type WithPreviousOwners []client.Object
 
-// ApplyToObjectOptions implements Option.
+// ApplyToObjectOptions implements ObjectOption.
 func (p WithPreviousOwners) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.PreviousOwners = p
+}
+
+// ApplyToPhaseOptions implements PhaseOption.
+func (p WithPreviousOwners) ApplyToPhaseOptions(opts *PhaseOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
 }
 
 // WithPaused skips reconciliation and just reports status information.
 // Can also be described as dry-run, as no modification will occur.
 type WithPaused struct{}
 
-// ApplyToObjectOptions implements Option.
+// ApplyToObjectOptions implements ObjectOption.
 func (p WithPaused) ApplyToObjectOptions(opts *ObjectOptions) {
 	opts.Paused = true
+}
+
+// ApplyToPhaseOptions implements PhaseOption.
+func (p WithPaused) ApplyToPhaseOptions(opts *PhaseOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
 }
 
 // ProgressProbeType is a well-known probe type used to guard phase progression.
@@ -99,9 +125,9 @@ func (p *probeFn) Probe(obj client.Object) (success bool, messages []string) {
 }
 
 // WithProbe registers the given probe to evaluate state of objects.
-func WithProbe(t string, probe Prober) ObjectOption {
-	return OptionFn{
-		Fn: func(opts *ObjectOptions) {
+func WithProbe(t string, probe Prober) *optionFn {
+	return &optionFn{
+		fn: func(opts *ObjectOptions) {
 			if opts.Probes == nil {
 				opts.Probes = map[string]Prober{}
 			}
@@ -110,12 +136,33 @@ func WithProbe(t string, probe Prober) ObjectOption {
 	}
 }
 
-// OptionFn implements the ObjectOption interface for functions.
-type OptionFn struct {
-	Fn func(opts *ObjectOptions)
+type withObjectOptions struct {
+	obj  ObjectRef
+	opts []ObjectOption
 }
 
-// ApplyToObjectOptions implements Option.
-func (p OptionFn) ApplyToObjectOptions(opts *ObjectOptions) {
-	p.Fn(opts)
+func WithObjectOptions(obj client.Object, opts ...ObjectOption) *withObjectOptions {
+	return &withObjectOptions{
+		obj:  ToObjectRef(obj),
+		opts: opts,
+	}
+}
+
+// ApplyToPhaseOptions implements PhaseOption.
+func (p *withObjectOptions) ApplyToPhaseOptions(opts *PhaseOptions) {
+	opts.ObjectOptions[p.obj] = p.opts
+}
+
+type optionFn struct {
+	fn func(opts *ObjectOptions)
+}
+
+// ApplyToObjectOptions implements ObjectOption.
+func (p *optionFn) ApplyToObjectOptions(opts *ObjectOptions) {
+	p.fn(opts)
+}
+
+// ApplyToPhaseOptions implements PhaseOption.
+func (p *optionFn) ApplyToPhaseOptions(opts *PhaseOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
 }
