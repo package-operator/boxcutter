@@ -35,7 +35,7 @@ type phaseValidator interface {
 	Validate(
 		ctx context.Context,
 		owner client.Object,
-		phase types.PhaseAccessor,
+		phase types.Phase,
 	) (validation.PhaseViolation, error)
 }
 
@@ -132,7 +132,7 @@ func (e *PhaseEngine) Teardown(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase types.PhaseAccessor,
+	phase types.Phase,
 ) (PhaseTeardownResult, error) {
 	res := &phaseTeardownResult{name: phase.GetName()}
 
@@ -159,7 +159,7 @@ func (e *PhaseEngine) Reconcile(
 	ctx context.Context,
 	owner client.Object,
 	revision int64,
-	phase types.PhaseAccessor,
+	phase types.Phase,
 	opts ...types.PhaseOption,
 ) (PhaseResult, error) {
 	var options types.PhaseOptions

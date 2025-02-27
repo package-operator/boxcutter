@@ -28,67 +28,53 @@ func (oid ObjectRef) String() string {
 	return fmt.Sprintf("%s %s", oid.GroupVersionKind, oid.ObjectKey)
 }
 
-// PhaseAccessor represents a collection of objects lifecycled together.
-type PhaseAccessor interface {
-	// GetName returns the name of the phase.
-	GetName() string
-	// GetObjects returns the objects managed by the phase.
-	GetObjects() []unstructured.Unstructured
-}
-
-// RevisionAccessor represents multiple phases at a given point in time.
-type RevisionAccessor interface {
-	// GetName returns the name of the revision for reporting and logging.
-	GetName() string
-	// GetClientObject returns the underlying Kubernetes object backing this revision.
-	GetClientObject() client.Object
-	// GetRevisionNumber returns the revisions "generation" to order revisions over time.
-	GetRevisionNumber() int64
-	// GetPhases returns the Phases that make up the revision.
-	// Phases will get reconciled in-order and torn down in reverse-order.
-	GetPhases() []PhaseAccessor
-}
-
-// Phase implements the PhaseAccessor interface.
+// Phase represents a named collection of objects.
 type Phase struct {
-	Name    string
+	// Name of the Phase.
+	Name string
+	// Objects contained in the phase.
 	Objects []unstructured.Unstructured
 }
 
-// GetName implements the PhaseAccessor interface.
+// GetName returns the name of the phase.
 func (p *Phase) GetName() string {
 	return p.Name
 }
 
-// GetObjects implements the PhaseAccessor interface.
+// GetObjects returns the objects contained in the phase.
 func (p *Phase) GetObjects() []unstructured.Unstructured {
 	return p.Objects
 }
 
-// Revision implements the RevisionAccessor interface.
+// Revision represents the version of a content collection consisting of phases.
 type Revision struct {
-	Name     string
-	Owner    client.Object
+	// Name of the Revision.
+	Name string
+	// Owner object will be added as OwnerReference
+	// to all objects managed by this revision.
+	Owner client.Object
+	// Revision number.
 	Revision int64
-	Phases   []PhaseAccessor
+	// Ordered list of phases.
+	Phases []Phase
 }
 
-// GetName implements the RevisionAccessor interface.
+// GetName returns the name of the revision.
 func (r *Revision) GetName() string {
 	return r.Name
 }
 
-// GetClientObject implements the RevisionAccessor interface.
-func (r *Revision) GetClientObject() client.Object {
+// GetOwner returns the owning object.
+func (r *Revision) GetOwner() client.Object {
 	return r.Owner
 }
 
-// GetRevisionNumber implements the RevisionAccessor interface.
+// GetRevisionNumber returns the current revision number.
 func (r *Revision) GetRevisionNumber() int64 {
 	return r.Revision
 }
 
-// GetPhases implements the RevisionAccessor interface.
-func (r *Revision) GetPhases() []PhaseAccessor {
+// GetPhases returns the phases a revision is made up of.
+func (r *Revision) GetPhases() []Phase {
 	return r.Phases
 }

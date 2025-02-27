@@ -20,13 +20,13 @@ func NewRevisionValidator() *RevisionValidator {
 }
 
 // Validate a revision compromising of multiple phases.
-func (v *RevisionValidator) Validate(_ context.Context, rev types.RevisionAccessor) (RevisionViolation, error) {
+func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) (RevisionViolation, error) {
 	pvs := staticValidateMultiplePhases(rev.GetPhases()...)
 
 	return newRevisionViolation(nil, pvs), nil
 }
 
-func staticValidateMultiplePhases(phases ...types.PhaseAccessor) []PhaseViolation {
+func staticValidateMultiplePhases(phases ...types.Phase) []PhaseViolation {
 	commonViolations := checkForObjectDuplicates(phases...)
 	pvs := []PhaseViolation{}
 

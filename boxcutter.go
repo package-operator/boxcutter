@@ -14,12 +14,6 @@ import (
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
-// RevisionAccessor represents multiple phases at a given point in time.
-type RevisionAccessor = types.RevisionAccessor
-
-// PhaseAccessor represents a collection of objects lifecycled together.
-type PhaseAccessor = types.PhaseAccessor
-
 // Revision represents multiple phases at a given point in time.
 type Revision = types.Revision
 

@@ -51,7 +51,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
 	ctx := context.Background()
-	_, err := pe.Reconcile(ctx, owner, revision, &types.Phase{
+	_, err := pe.Reconcile(ctx, owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -97,7 +97,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
 	ctx := context.Background()
-	_, err := pe.Reconcile(ctx, owner, revision, &types.Phase{
+	_, err := pe.Reconcile(ctx, owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -142,7 +142,7 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 		Return(true, nil)
 
 	ctx := context.Background()
-	deleted, err := pe.Teardown(ctx, owner, revision, &types.Phase{
+	deleted, err := pe.Teardown(ctx, owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj, *obj,
@@ -188,7 +188,7 @@ type phaseValidatorMock struct {
 func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
 	owner client.Object,
-	phase types.PhaseAccessor,
+	phase types.Phase,
 ) (validation.PhaseViolation, error) {
 	args := m.Called(ctx, owner, phase)
 
