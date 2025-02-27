@@ -2,6 +2,8 @@ package validation
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -39,17 +41,15 @@ func NewNamespacedPhaseValidator(
 }
 
 // Validate runs validation of the phase and its objects.
-func (v *PhaseValidator) Validate(
-	ctx context.Context, owner client.Object, phase types.Phase,
-) (PhaseViolation, error) {
-	var objects []ObjectViolation // errors of objects within.
+func (v *PhaseValidator) Validate(ctx context.Context, owner client.Object, phase types.Phase) (*PhaseError, error) {
+	var objects []ObjectError // errors of objects within.
 
 	// Phase name.
-	var msgs []string
+	var errs []error
 	if len(phase.GetName()) > 0 {
 		// TODO: This is due to ObjectSetPhases not knowing their phase name.
 		// Not sure this is the best way to deal with this...
-		msgs = validatePhaseName(phase)
+		errs = append(errs, validatePhaseName(phase))
 	}
 
 	// Individual objects.
@@ -57,36 +57,30 @@ func (v *PhaseValidator) Validate(
 		obj := &o
 
 		vs, err := v.ObjectValidator.Validate(ctx, owner, obj)
-		if err != nil {
-			return nil, err
-		}
 
-		if !vs.Empty() {
-			objects = append(objects, vs)
+		switch {
+		case err != nil:
+			return nil, err
+		case vs != nil:
+			objects = append(objects, *vs)
 		}
 	}
 
 	// Duplicates.
 	objects = append(objects, checkForObjectDuplicates(phase)...)
 
-	return newPhaseViolation(phase.GetName(), msgs, compactObjectViolations(objects)), nil
+	return newPhaseError(phase.GetName(), errors.Join(errs...), compactObjectErrors(objects)), nil
 }
 
-func validatePhaseName(phase types.Phase) []string {
-	if errMsgs := phaseNameValid(phase.GetName()); len(errMsgs) > 0 {
-		return []string{
-			"phase name invalid: " + strings.Join(errMsgs, " and "),
-		}
+func validatePhaseName(phase types.Phase) error {
+	if errMsgs := validation.IsDNS1035Label(phase.GetName()); len(errMsgs) > 0 {
+		return fmt.Errorf("phase name invalid: %v", strings.Join(errMsgs, " and "))
 	}
 
 	return nil
 }
 
-func phaseNameValid(phaseName string) (errs []string) {
-	return validation.IsDNS1035Label(phaseName)
-}
-
-func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
+func checkForObjectDuplicates(phases ...types.Phase) []ObjectError {
 	// remember unique objects and the phase we found them first in.
 	uniqueObjectsInPhase := map[types.ObjectRef]string{}
 	conflicts := map[types.ObjectRef]map[string]struct{}{}
@@ -112,7 +106,7 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 		}
 	}
 
-	ovs := make([]ObjectViolation, 0, len(conflicts))
+	ovs := make([]ObjectError, 0, len(conflicts))
 
 	for objRef, phasesMap := range conflicts {
 		var phases []string
@@ -121,26 +115,31 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 		}
 
 		slices.Sort(phases)
-		ov := newObjectViolationFromRef(objRef, []string{
-			"Duplicate object also found in phases " + strings.Join(phases, ", "),
-		})
-		ovs = append(ovs, ov)
+		ov := newObjectErrorFromRef(
+			objRef,
+			fmt.Errorf("duplicate object also found in phases %s", strings.Join(phases, ", ")),
+		)
+		ovs = append(ovs, *ov)
 	}
 
 	return ovs
 }
 
-// merges ObjectViolations targeting the same object.
-func compactObjectViolations(ovs []ObjectViolation) []ObjectViolation {
-	uniqueOVs := map[types.ObjectRef][]string{}
+// merges ObjectErrors targeting the same object.
+func compactObjectErrors(ovs []ObjectError) []ObjectError {
+	uniqueOVs := map[types.ObjectRef][]error{}
 	for _, ov := range ovs {
-		uniqueOVs[ov.ObjectRef()] = append(
-			uniqueOVs[ov.ObjectRef()], ov.Messages()...)
+		uniqueOVs[ov.objectRef] = append(uniqueOVs[ov.objectRef], ov.err)
 	}
 
-	out := make([]ObjectViolation, 0, len(uniqueOVs))
-	for oref, msgs := range uniqueOVs {
-		out = append(out, newObjectViolationFromRef(oref, msgs))
+	out := make([]ObjectError, 0, len(uniqueOVs))
+
+	for oref, errs := range uniqueOVs {
+		if len(errs) == 1 {
+			out = append(out, *newObjectErrorFromRef(oref, errs[0]))
+		} else {
+			out = append(out, *newObjectErrorFromRef(oref, errors.Join(errs...)))
+		}
 	}
 
 	return out

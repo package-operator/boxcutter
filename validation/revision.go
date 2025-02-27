@@ -20,35 +20,34 @@ func NewRevisionValidator() *RevisionValidator {
 }
 
 // Validate a revision compromising of multiple phases.
-func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) (RevisionViolation, error) {
+func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) (*RevisionError, error) {
 	pvs := staticValidateMultiplePhases(rev.GetPhases()...)
 
-	return newRevisionViolation(nil, pvs), nil
+	return newRevisionError(nil, pvs), nil
 }
 
-func staticValidateMultiplePhases(phases ...types.Phase) []PhaseViolation {
+func staticValidateMultiplePhases(phases ...types.Phase) []PhaseError {
 	commonViolations := checkForObjectDuplicates(phases...)
-	pvs := []PhaseViolation{}
+	pvs := []PhaseError{}
 
 	for _, phase := range phases {
 		phaseMsgs := validatePhaseName(phase)
 
-		var ovs []ObjectViolation
+		var ovs []ObjectError
 		ovs = append(ovs, commonViolations...)
 
 		for _, o := range phase.GetObjects() {
 			obj := &o
-			if errs := validateObjectMetadata(obj); len(errs) > 0 {
-				ovs = append(ovs, newObjectViolation(obj, errs))
+			if err := validateObjectMetadata(obj); err != nil {
+				ovs = append(ovs, *newObjectErrorFromObj(obj, err))
 			}
 		}
 
-		if len(phaseMsgs) == 0 && len(ovs) == 0 {
+		if phaseMsgs != nil && len(ovs) == 0 {
 			continue
 		}
 
-		pvs = append(pvs, *newPhaseViolation(
-			phase.GetName(), phaseMsgs, compactObjectViolations(ovs)))
+		pvs = append(pvs, *newPhaseError(phase.GetName(), phaseMsgs, compactObjectErrors(ovs)))
 	}
 
 	return pvs

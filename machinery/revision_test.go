@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,12 +148,10 @@ type revisionValidatorMock struct {
 	mock.Mock
 }
 
-func (m *revisionValidatorMock) Validate(
-	ctx context.Context, rev types.Revision,
-) (validation.RevisionViolation, error) {
+func (m *revisionValidatorMock) Validate(ctx context.Context, rev types.Revision) (*validation.RevisionError, error) {
 	args := m.Called(ctx, rev)
 
-	return args.Get(0).(validation.RevisionViolation), args.Error(1)
+	return args.Get(0).(*validation.RevisionError), args.Error(1)
 }
 
 func TestRevisionResult_String(t *testing.T) {
@@ -174,7 +173,7 @@ func TestRevisionResult_String(t *testing.T) {
 		phasesResults: []PhaseResult{
 			&phaseResult{
 				name:               "phase-1",
-				preflightViolation: &phaseViolationStub{msg: "xxx"},
+				preflightViolation: validation.NewPhaseErrorWithErrs("testphase", errors.New("xxx")),
 				objects: []ObjectResult{
 					newObjectResultCreated(obj, nil),
 				},
@@ -190,6 +189,7 @@ Phases:
   Complete: false
   In Transition: false
   Preflight Violation:
+    phase "testphase":
     xxx
   Objects:
   - Object Secret.v1 test/testi

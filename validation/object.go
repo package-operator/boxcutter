@@ -60,51 +60,51 @@ func NewNamespacedObjectValidator(
 func (d *ObjectValidator) Validate(
 	ctx context.Context, owner client.Object,
 	obj *unstructured.Unstructured,
-) (ObjectViolation, error) {
+) (*ObjectError, error) {
 	// Static validation.
-	if msgs := validateObjectMetadata(obj); len(msgs) > 0 {
-		return newObjectViolation(obj, msgs), nil
+	if err := validateObjectMetadata(obj); err != nil {
+		return newObjectErrorFromObj(obj, err), nil
 	}
 
 	if !d.allowNamespaceEscalation {
 		// Ensure we are not leaving the namespace we are operating in.
-		if vs := validateNamespace(d.restMapper, owner.GetNamespace(), obj); !vs.Empty() {
+		if vs := validateNamespace(d.restMapper, owner.GetNamespace(), obj); vs != nil {
 			return vs, nil
 		}
 	}
 
 	// Dry run against API server to catch any other surprises.
-	return validateDryRun(ctx, d.writer, obj), nil
+	return validateDryRun(ctx, d.writer, obj)
 }
 
 func validateNamespace(
 	restMapper restMapper,
 	namespace string,
 	obj *unstructured.Unstructured,
-) *objectViolation {
+) *ObjectError {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if meta.IsNoMatchError(err) {
 		// API does not exist in the cluster.
-		return newObjectViolation(obj, []string{"not registered on the api server"})
+		return newObjectErrorFromObj(obj, errors.New("not registered on the api server"))
 	}
 
 	// shortcut if Namespaces are not limited.
 	if len(namespace) == 0 {
-		return newObjectViolation(nil, nil)
+		return nil
 	}
 
 	switch mapping.Scope {
 	case meta.RESTScopeRoot:
-		return newObjectViolation(obj, []string{"object must be namespace-scoped"})
+		return newObjectErrorFromObj(obj, errors.New("object must be namespace-scoped"))
 
 	case meta.RESTScopeNamespace:
 		if obj.GetNamespace() == namespace {
-			return newObjectViolation(obj, nil)
+			return nil
 		}
 
-		return newObjectViolation(obj, []string{fmt.Sprintf("object must belong to namespace %q", namespace)})
+		return newObjectErrorFromObj(obj, fmt.Errorf("object must belong to namespace %q", namespace))
 	}
 
 	panic(fmt.Sprintf("unexpected REST Mapping Scope %q", mapping.Scope))
@@ -114,10 +114,10 @@ func validateDryRun(
 	ctx context.Context,
 	w client.Writer,
 	obj *unstructured.Unstructured,
-) *objectViolation {
+) (*ObjectError, error) {
 	objectPatch, mErr := json.Marshal(obj)
 	if mErr != nil {
-		return newObjectViolation(obj, []string{fmt.Sprintf("creating patch: %s", mErr)})
+		return newObjectErrorFromObj(obj, fmt.Errorf("creating patch: %w", mErr)), nil
 	}
 
 	patch := client.RawPatch(types.ApplyPatchType, objectPatch)
@@ -132,7 +132,7 @@ func validateDryRun(
 
 	switch {
 	case err == nil:
-		return newObjectViolation(nil, nil)
+		return nil, nil //nolint:nilnil
 
 	case errors.As(err, &apiErr):
 		switch apiErr.Status().Reason {
@@ -147,7 +147,7 @@ func validateDryRun(
 			metav1.StatusReasonUnsupportedMediaType,
 			metav1.StatusReasonNotAcceptable,
 			metav1.StatusReasonNotFound:
-			return newObjectViolation(obj, []string{err.Error()})
+			return newObjectErrorFromObj(obj, err), nil
 		case "":
 			logr.FromContextOrDiscard(ctx).Info("API status error with empty reason string", "err", apiErr.Status())
 
@@ -155,10 +155,10 @@ func validateDryRun(
 				apiErr.Status().Message,
 				"failed to create typed patch object",
 			) {
-				return newObjectViolation(obj, []string{err.Error()})
+				return newObjectErrorFromObj(obj, err), nil
 			}
 		}
 	}
 
-	return newObjectViolation(nil, nil)
+	return nil, nil //nolint:nilnil
 }

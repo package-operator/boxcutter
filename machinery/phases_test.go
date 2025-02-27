@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
-		Return(&phaseViolationStub{}, nil)
+		Return(&validation.PhaseError{}, nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
@@ -90,9 +91,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
-		Return(&phaseViolationStub{
-			msg: "xxx",
-		}, nil)
+		Return(validation.NewPhaseErrorWithErrs("testphase", errors.New("xxx")), nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
@@ -189,40 +188,10 @@ func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
 	owner client.Object,
 	phase types.Phase,
-) (validation.PhaseViolation, error) {
+) (*validation.PhaseError, error) {
 	args := m.Called(ctx, owner, phase)
 
-	return args.Get(0).(validation.PhaseViolation), args.Error(1)
-}
-
-type phaseViolationStub struct {
-	phaseName string
-	objects   []validation.ObjectViolation
-	msg       string
-}
-
-func (s *phaseViolationStub) PhaseName() string {
-	return s.phaseName
-}
-
-func (s *phaseViolationStub) Objects() []validation.ObjectViolation {
-	return s.objects
-}
-
-func (s *phaseViolationStub) Empty() bool {
-	return len(s.msg) == 0 && len(s.objects) == 0
-}
-
-func (s *phaseViolationStub) Message() string {
-	return s.msg
-}
-
-func (s *phaseViolationStub) Messages() []string {
-	return []string{s.msg}
-}
-
-func (s *phaseViolationStub) String() string {
-	return s.msg
+	return args.Get(0).(*validation.PhaseError), args.Error(1)
 }
 
 func TestPhaseResult(t *testing.T) {
@@ -232,7 +201,7 @@ func TestPhaseResult(t *testing.T) {
 
 		tests := []struct {
 			name     string
-			pv       validation.PhaseViolation
+			pv       *validation.PhaseError
 			res      []ObjectResult
 			expected bool
 		}{
@@ -254,7 +223,7 @@ func TestPhaseResult(t *testing.T) {
 			},
 			{
 				name:     "false - preflight violation",
-				pv:       &phaseViolationStub{msg: "xxx"},
+				pv:       validation.NewPhaseErrorWithErrs("testphase", errors.New("xxx")),
 				res:      []ObjectResult{},
 				expected: false,
 			},
@@ -292,7 +261,7 @@ func TestPhaseResult(t *testing.T) {
 
 		tests := []struct {
 			name     string
-			pv       validation.PhaseViolation
+			pv       *validation.PhaseError
 			res      []ObjectResult
 			expected bool
 		}{
@@ -305,7 +274,7 @@ func TestPhaseResult(t *testing.T) {
 			},
 			{
 				name:     "false - preflight violation",
-				pv:       &phaseViolationStub{msg: "xxx"},
+				pv:       validation.NewPhaseErrorWithErrs("testphase", errors.New("xxx")),
 				res:      []ObjectResult{},
 				expected: false,
 			},
@@ -355,7 +324,7 @@ func TestPhaseResult_String(t *testing.T) {
 
 	r := phaseResult{
 		name:               "phase-1",
-		preflightViolation: &phaseViolationStub{msg: "xxx"},
+		preflightViolation: validation.NewPhaseErrorWithErrs("testphase", errors.New("xxx")),
 		objects: []ObjectResult{
 			newObjectResultCreated(obj, nil),
 		},
@@ -365,6 +334,7 @@ func TestPhaseResult_String(t *testing.T) {
 Complete: false
 In Transition: false
 Preflight Violation:
+  phase "testphase":
   xxx
 Objects:
 - Object Secret.v1 test/testi

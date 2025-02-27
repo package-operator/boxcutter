@@ -6,6 +6,7 @@ linters:
     #- containedctx     # Context.Context within a struct (as opposed to a func parameter) is nasty for many reasons, but actually sometimes useful.
     #- cyclop           # Cyclo complexity already calculated by other linters.
     #- depguard         # We do not restrict imports.
+    #- err113           # Not that useful/false positives.
     #- exhaustive       # Not that useful/false positives.
     #- exhaustruct      # Not that useful/false positives.
     #- forcetypeassert  # We want a panic in situations when a type is asserted.
@@ -17,7 +18,7 @@ linters:
     #- godox            # Not that useful/false positives.
     #- inamedparam      # Not that useful.
     #- ireturn          # Not that useful/false positives.
-    #- mnd            # The annoy is strong.
+    #- mnd              # The annoy is strong.
     #- nonamedreturns   # Named return good return.
     #- testpackage      # Could be nice in the future.
     #- varnamelen       # Not that useful/false positives.
@@ -35,7 +36,6 @@ linters:
     - dupl
     - dupword
     - durationcheck
-    - err113
     - errcheck
     - errchkjson
     - errname
@@ -99,7 +99,6 @@ linters:
     - stylecheck
     - tagalign
     - tagliatelle
-    - tenv
     - testableexamples
     - testifylint
     - thelper
