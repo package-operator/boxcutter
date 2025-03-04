@@ -20,7 +20,7 @@ import (
 )
 
 //nolint:maintidx
-func TestComperator(t *testing.T) {
+func TestComparator(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(
 		os, DiscoveryClient, Scheme, fieldOwner)
