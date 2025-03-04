@@ -379,11 +379,9 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 			return nil, nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
 		}
 
-		// Default namespace to the owners namespace
-		if len(obj.GetNamespace()) == 0 {
-			obj.SetNamespace(
-				cm.GetNamespace())
-		}
+		// Force namespace to the owner's namespace.
+		obj.SetNamespace(
+			cm.GetNamespace())
 
 		labels := obj.GetLabels()
 		if labels == nil {
