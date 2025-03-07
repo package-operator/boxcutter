@@ -22,14 +22,15 @@ func TestWithOwnerReference(t *testing.T) {
 		if controller {
 			name = "Controller"
 		}
+
 		t.Run(name, func(t *testing.T) {
 			ctx := logr.NewContext(context.Background(), testr.New(t))
 
-			owner := newConfigMap("default", "test-preflight-validation-owner-reference-owner", map[string]string{})
+			owner := newConfigMap("test-preflight-validation-owner-reference-owner", map[string]string{})
 			require.NoError(t, Client.Create(ctx, owner))
 			cleanupOnSuccess(ctx, t, owner)
 
-			invalid := newConfigMap("default", "test-preflight-validation-owner-reference-cm", map[string]string{
+			invalid := newConfigMap("test-preflight-validation-owner-reference-cm", map[string]string{
 				"banana": "bread",
 			})
 			invalid.OwnerReferences = []metav1.OwnerReference{

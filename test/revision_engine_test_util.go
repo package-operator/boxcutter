@@ -24,5 +24,6 @@ func newTestRevisionEngine() revisionEngine {
 		Reader:          Client,
 	})
 	must(err)
+
 	return re
 }

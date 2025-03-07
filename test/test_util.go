@@ -38,6 +38,7 @@ func cleanupOnSuccess(ctx context.Context, t *testing.T, obj client.Object) {
 func mustGVKForObject(obj client.Object) schema.GroupVersionKind {
 	gvk, err := apiutil.GVKForObject(obj, Scheme)
 	must(err)
+
 	return gvk
 }
 
@@ -47,6 +48,7 @@ func toUns(obj client.Object) unstructured.Unstructured {
 	must(setTypeMeta(obj, Scheme))
 	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	must(err)
+
 	return unstructured.Unstructured{
 		Object: raw,
 	}
@@ -76,6 +78,7 @@ func setTypeMeta(o runtime.Object, scheme *runtime.Scheme) error {
 	if !fieldFound {
 		return errors.New("TypeMeta field is missing on input value")
 	}
+
 	if !typeMetaType.AssignableTo(fieldType.Type) {
 		return fmt.Errorf("field is having wrong type: %s", fieldType.Type)
 	}
@@ -85,6 +88,7 @@ func setTypeMeta(o runtime.Object, scheme *runtime.Scheme) error {
 	if err != nil {
 		return err
 	}
+
 	typeMeta := metav1.TypeMeta{
 		Kind:       gvk.Kind,
 		APIVersion: gvk.GroupVersion().String(),
@@ -97,10 +101,10 @@ func setTypeMeta(o runtime.Object, scheme *runtime.Scheme) error {
 	return nil
 }
 
-func newConfigMap(namespace, name string, data map[string]string) *corev1.ConfigMap {
+func newConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
+			Namespace: "default",
 			Name:      name,
 		},
 		Data: data,

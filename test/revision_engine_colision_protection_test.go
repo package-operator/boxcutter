@@ -22,11 +22,11 @@ import (
 func TestCollisionProtectionPreventUnowned(t *testing.T) {
 	ctx := logr.NewContext(context.Background(), testr.New(t))
 
-	owner := newConfigMap("default", "test-collision-prevention-prevent-unowned-cm-owner", map[string]string{})
+	owner := newConfigMap("test-collision-prevention-prevent-unowned-cm-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, owner))
 	cleanupOnSuccess(ctx, t, owner)
 
-	existing := newConfigMap("default", "test-collision-prevention-prevent-unowned-cm", map[string]string{
+	existing := newConfigMap("test-collision-prevention-prevent-unowned-cm", map[string]string{
 		"banana": "bread",
 	})
 	colliding := existing.DeepCopy()
@@ -68,23 +68,23 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 func TestCollisionProtectionPreventOwned(t *testing.T) {
 	ctx := logr.NewContext(context.Background(), testr.New(t))
 
-	existingOwner := newConfigMap("default", "test-collision-prevention-prevent-owned-owner", map[string]string{})
+	existingOwner := newConfigMap("test-collision-prevention-prevent-owned-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, existingOwner))
 	cleanupOnSuccess(ctx, t, existingOwner)
 
-	existing := newConfigMap("default", "test-collision-prevention-prevent-owned-cm", map[string]string{
+	existing := newConfigMap("test-collision-prevention-prevent-owned-cm", map[string]string{
 		"banana": "bread",
 	})
 	require.NoError(t, controllerutil.SetControllerReference(existingOwner, existing, Scheme))
 	require.NoError(t, Client.Create(ctx, existing))
 	cleanupOnSuccess(ctx, t, existing)
 
-	colliding := newConfigMap("default", "test-collision-prevention-prevent-owned-cm", map[string]string{
+	colliding := newConfigMap("test-collision-prevention-prevent-owned-cm", map[string]string{
 		"banana": "bread",
 		"apple":  "pie",
 	})
 
-	owner := newConfigMap("default", "test-collision-prevention-prevent-owned-cm-owner", map[string]string{})
+	owner := newConfigMap("test-collision-prevention-prevent-owned-cm-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, owner))
 	cleanupOnSuccess(ctx, t, owner)
 
@@ -123,6 +123,7 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 		type hasConflictingOwner interface {
 			ConflictingOwner() (*metav1.OwnerReference, bool)
 		}
+
 		hco, ok := object.(hasConflictingOwner)
 		require.True(t, ok)
 		conflictingOwner, ok := hco.ConflictingOwner()
