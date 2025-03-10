@@ -329,7 +329,7 @@ func (e RevisionNumberNotSetError) Error() string {
 }
 
 func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
-	r *boxcutter.Revision, opts []boxcutter.RevisionOption, previous []client.Object, err error,
+	r *boxcutter.Revision, opts []boxcutter.RevisionReconcileOption, previous []client.Object, err error,
 ) {
 	var (
 		phases        []string
@@ -417,7 +417,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		rev.Phases = append(rev.Phases, p)
 	}
 
-	opts = []boxcutter.RevisionOption{
+	opts = []boxcutter.RevisionReconcileOption{
 		boxcutter.WithPreviousOwners(previous),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,

@@ -42,13 +42,14 @@ type phaseEngine interface {
 		owner client.Object,
 		revision int64,
 		phase types.Phase,
-		opts ...types.PhaseOption,
+		opts ...types.PhaseReconcileOption,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object,
 		revision int64,
 		phase types.Phase,
+		opts ...types.PhaseTeardownOption,
 	) (PhaseTeardownResult, error)
 }
 
@@ -169,11 +170,11 @@ func (r *revisionResult) String() string {
 // Reconcile runs actions to bring actual state closer to desired.
 func (re *RevisionEngine) Reconcile(
 	ctx context.Context, rev types.Revision,
-	opts ...types.RevisionOption,
+	opts ...types.RevisionReconcileOption,
 ) (RevisionResult, error) {
-	var options types.RevisionOptions
+	var options types.RevisionReconcileOptions
 	for _, opt := range opts {
-		opt.ApplyToRevisionOptions(&options)
+		opt.ApplyToRevisionReconcileOptions(&options)
 	}
 
 	rres := &revisionResult{}
@@ -195,11 +196,9 @@ func (re *RevisionEngine) Reconcile(
 
 	// Reconcile
 	for _, phase := range rev.GetPhases() {
-		opts := make([]types.PhaseOption, 0, len(options.DefaultPhaseOptions)+len(options.PhaseOptions[phase.GetName()]))
-		opts = append(opts, options.DefaultPhaseOptions...)
-		opts = append(opts, options.PhaseOptions[phase.GetName()]...)
-
-		pres, err := re.phaseEngine.Reconcile(ctx, rev.GetOwner(), rev.GetRevisionNumber(), phase, opts...)
+		pres, err := re.phaseEngine.Reconcile(
+			ctx, rev.GetOwner(), rev.GetRevisionNumber(),
+			phase, options.ForPhase(phase.GetName())...)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
@@ -306,7 +305,13 @@ func (r *revisionTeardownResult) String() string {
 // Teardown ensures the given revision is safely removed from the cluster.
 func (re *RevisionEngine) Teardown(
 	ctx context.Context, rev types.Revision,
+	opts ...types.RevisionTeardownOption,
 ) (RevisionTeardownResult, error) {
+	var options types.RevisionTeardownOptions
+	for _, opt := range opts {
+		opt.ApplyToRevisionTeardownOptions(&options)
+	}
+
 	res := &revisionTeardownResult{}
 
 	waiting := map[string]struct{}{}
@@ -323,7 +328,9 @@ func (re *RevisionEngine) Teardown(
 		delete(waiting, p.GetName())
 		res.active = p.GetName()
 
-		pres, err := re.phaseEngine.Teardown(ctx, rev.GetOwner(), rev.GetRevisionNumber(), p)
+		pres, err := re.phaseEngine.Teardown(
+			ctx, rev.GetOwner(), rev.GetRevisionNumber(),
+			p, options.ForPhase(p.GetName())...)
 		if err != nil {
 			return nil, fmt.Errorf("teardown phase: %w", err)
 		}

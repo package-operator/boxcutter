@@ -82,7 +82,15 @@ func (e *ObjectEngine) Teardown(
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
 	desiredObject Object,
+	opts ...types.ObjectTeardownOption,
 ) (objectGone bool, err error) {
+	var options types.ObjectTeardownOptions
+	for _, opt := range opts {
+		opt.ApplyToObjectTeardownOptions(&options)
+	}
+
+	options.Default()
+
 	// Sanity checks.
 	if revision == 0 {
 		panic("owner revision must be set and start at 1")
@@ -157,11 +165,11 @@ func (e *ObjectEngine) Reconcile(
 	owner client.Object, // Owner of the object.
 	revision int64, // Revision number, must start at 1.
 	desiredObject Object,
-	opts ...types.ObjectOption,
+	opts ...types.ObjectReconcileOption,
 ) (ObjectResult, error) {
-	var options types.ObjectOptions
+	var options types.ObjectReconcileOptions
 	for _, opt := range opts {
-		opt.ApplyToObjectOptions(&options)
+		opt.ApplyToObjectReconcileOptions(&options)
 	}
 
 	options.Default()
@@ -240,7 +248,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	revision int64,
 	desiredObject Object,
 	actualObject Object,
-	options types.ObjectOptions,
+	options types.ObjectReconcileOptions,
 ) (ObjectResult, error) {
 	// An object already exists on the cluster.
 	// Before doing anything else, we have to figure out
@@ -403,7 +411,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 func (e *ObjectEngine) create(
 	ctx context.Context, obj client.Object,
-	options types.ObjectOptions, opts ...client.CreateOption,
+	options types.ObjectReconcileOptions, opts ...client.CreateOption,
 ) error {
 	if options.Paused {
 		return nil
@@ -416,7 +424,7 @@ func (e *ObjectEngine) patch(
 	ctx context.Context,
 	obj Object,
 	patch client.Patch,
-	options types.ObjectOptions,
+	options types.ObjectReconcileOptions,
 	opts ...client.PatchOption,
 ) error {
 	if options.Paused {

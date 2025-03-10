@@ -51,7 +51,7 @@ func TestObjectEngine(t *testing.T) {
 		name          string
 		revision      int64
 		desiredObject *unstructured.Unstructured
-		opts          []types.ObjectOption
+		opts          []types.ObjectReconcileOption
 
 		mockSetup func(
 			*cacheMock,
@@ -75,7 +75,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{
+			opts: []types.ObjectReconcileOption{
 				types.WithCollisionProtection(types.CollisionProtectionIfNoController),
 			},
 
@@ -216,7 +216,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{},
+			opts: []types.ObjectReconcileOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -285,7 +285,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{},
+			opts: []types.ObjectReconcileOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -374,7 +374,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{},
+			opts: []types.ObjectReconcileOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -471,7 +471,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{},
+			opts: []types.ObjectReconcileOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -566,7 +566,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{},
+			opts: []types.ObjectReconcileOption{},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -657,7 +657,7 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectOption{
+			opts: []types.ObjectReconcileOption{
 				types.WithPreviousOwners{oldOwner},
 			},
 

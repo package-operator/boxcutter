@@ -45,20 +45,21 @@ type objectEngine interface {
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
 		desiredObject Object,
-		opts ...types.ObjectOption,
+		opts ...types.ObjectReconcileOption,
 	) (ObjectResult, error)
 	Teardown(
 		ctx context.Context,
 		owner client.Object, // Owner of the object.
 		revision int64, // Revision number, must start at 1.
 		desiredObject Object,
+		opts ...types.ObjectTeardownOption,
 	) (objectGone bool, err error)
 }
 
 // PhaseObject represents an object and it's options.
 type PhaseObject struct {
 	Object *unstructured.Unstructured
-	Opts   []types.ObjectOption
+	Opts   []types.ObjectReconcileOption
 }
 
 // PhaseTeardownResult interface to access results of phase teardown.
@@ -133,13 +134,20 @@ func (e *PhaseEngine) Teardown(
 	owner client.Object,
 	revision int64,
 	phase types.Phase,
+	opts ...types.PhaseTeardownOption,
 ) (PhaseTeardownResult, error) {
+	var options types.PhaseTeardownOptions
+	for _, opt := range opts {
+		opt.ApplyToPhaseTeardownOptions(&options)
+	}
+
 	res := &phaseTeardownResult{name: phase.GetName()}
 
 	for _, o := range phase.GetObjects() {
 		obj := &o
 
-		gone, err := e.objectEngine.Teardown(ctx, owner, revision, obj)
+		gone, err := e.objectEngine.Teardown(
+			ctx, owner, revision, obj, options.ForObject(obj)...)
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
@@ -160,11 +168,11 @@ func (e *PhaseEngine) Reconcile(
 	owner client.Object,
 	revision int64,
 	phase types.Phase,
-	opts ...types.PhaseOption,
+	opts ...types.PhaseReconcileOption,
 ) (PhaseResult, error) {
-	var options types.PhaseOptions
+	var options types.PhaseReconcileOptions
 	for _, opt := range opts {
-		opt.ApplyToPhaseOptions(&options)
+		opt.ApplyToPhaseReconcileOptions(&options)
 	}
 
 	pres := &phaseResult{
@@ -186,14 +194,9 @@ func (e *PhaseEngine) Reconcile(
 	// Reconcile
 	for _, o := range phase.GetObjects() {
 		obj := &o
-		objRef := types.ToObjectRef(obj)
-
-		opts := make([]types.ObjectOption, 0, len(options.DefaultObjectOptions)+len(options.ObjectOptions[objRef]))
-		opts = append(opts, options.DefaultObjectOptions...)
-		opts = append(opts, options.ObjectOptions[objRef]...)
 
 		ores, err := e.objectEngine.Reconcile(
-			ctx, owner, revision, obj, opts...)
+			ctx, owner, revision, obj, options.ForObject(obj)...)
 		if err != nil {
 			return pres, fmt.Errorf("reconciling object: %w", err)
 		}
