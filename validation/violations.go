@@ -12,7 +12,7 @@ import (
 // Violation is a generic violation message without
 // detailed context information.
 type Violation interface {
-	// Message returns a single string describung the error.
+	// Message returns a single string describing the error.
 	Message() string
 	// Messages returns list of all individual error messages.
 	Messages() []string

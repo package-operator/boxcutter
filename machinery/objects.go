@@ -25,7 +25,7 @@ type ObjectEngine struct {
 	cache         client.Reader
 	writer        client.Writer
 	ownerStrategy objectEngineOwnerStrategy
-	comperator    comperator
+	comparator    comparator
 
 	fieldOwner   string
 	systemPrefix string
@@ -37,7 +37,7 @@ func NewObjectEngine(
 	cache client.Reader,
 	writer client.Writer,
 	ownerStrategy objectEngineOwnerStrategy,
-	comperator comperator,
+	comparator comparator,
 
 	fieldOwner string,
 	systemPrefix string,
@@ -47,7 +47,7 @@ func NewObjectEngine(
 		cache:         cache,
 		writer:        writer,
 		ownerStrategy: ownerStrategy,
-		comperator:    comperator,
+		comparator:    comparator,
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
@@ -69,7 +69,7 @@ type objectEngineOwnerStrategy interface {
 	RemoveOwner(owner, obj metav1.Object)
 }
 
-type comperator interface {
+type comparator interface {
 	Compare(
 		owner client.Object,
 		desiredObject, actualObject Object,
@@ -247,7 +247,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	// who owns and controls the object.
 	ctrlSit, actualOwner := e.detectOwner(owner, actualObject, options.PreviousOwners)
 
-	compareRes, err := e.comperator.Compare(owner, desiredObject, actualObject)
+	compareRes, err := e.comparator.Compare(owner, desiredObject, actualObject)
 	if err != nil {
 		return nil, fmt.Errorf("diverge check: %w", err)
 	}

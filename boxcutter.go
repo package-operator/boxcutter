@@ -92,7 +92,7 @@ type RevisionEngineOptions struct {
 	Scheme          *runtime.Scheme
 	FieldOwner      string
 	SystemPrefix    string
-	DiscoveryClient *discovery.DiscoveryClient
+	DiscoveryClient discovery.DiscoveryInterface
 	RestMapper      meta.RESTMapper
 	Writer          client.Writer
 	Reader          client.Reader

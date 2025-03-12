@@ -120,16 +120,19 @@ issues:
   exclude-dirs: []
   exclude-rules:
   # Integration tests MUST NOT run in parallel.
-    - path: 'test\/.+\.go'
-      linters: [paralleltest]
-    # Do not require comments on private packages and
-    # do not check their style.
-    - path: 'internal/'
-      text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
-    - path: 'cmd/'
-      text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
-    - path: 'integration/'
-      text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
+  - path: 'test\/.+\.go'
+    linters: [paralleltest]
+  # Disable lll for comments.
+  - path: '\.go$'
+    linters: [lll]
+  # Do not require comments on private packages and
+  # do not check their style.
+  - path: 'internal/'
+    text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
+  - path: 'cmd/'
+    text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
+  - path: 'integration/'
+    text: '((comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)|exported (.+) should have comment( \(or a comment on this block\))? or be unexported|package comment should be of the form "(.+)...|comment on exported (.+) should be of the form "(.+)..."|should have a package comment)'
   include:
     - EXC0001 # Check errors returned by io.Closer.
     - EXC0002 # Require docs on exported pkg.

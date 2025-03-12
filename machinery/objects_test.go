@@ -56,7 +56,7 @@ func TestObjectEngine(t *testing.T) {
 		mockSetup func(
 			*cacheMock,
 			*testutil.CtrlClient,
-			*comperatorMock,
+			*comparatorMock,
 		)
 
 		expectedAction Action
@@ -81,7 +81,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -156,7 +156,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				// Mock setup
 				cache.
@@ -220,7 +220,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -289,7 +289,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -378,7 +378,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -475,7 +475,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -570,7 +570,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -663,7 +663,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -761,7 +761,7 @@ func TestObjectEngine(t *testing.T) {
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comperatorMock,
+				ddm *comparatorMock,
 			) {
 				actualObject := &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -823,7 +823,7 @@ func TestObjectEngine(t *testing.T) {
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
-			divergeDetector := &comperatorMock{}
+			divergeDetector := &comparatorMock{}
 
 			oe := NewObjectEngine(
 				scheme.Scheme,
@@ -1064,7 +1064,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
 			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
-			divergeDetector := &comperatorMock{}
+			divergeDetector := &comparatorMock{}
 
 			cache.
 				On("Watch", mock.Anything, mock.Anything, mock.Anything).
@@ -1120,11 +1120,11 @@ type cacheMock struct {
 	testutil.CtrlClient
 }
 
-type comperatorMock struct {
+type comparatorMock struct {
 	mock.Mock
 }
 
-func (m *comperatorMock) Compare(
+func (m *comparatorMock) Compare(
 	owner client.Object,
 	desiredObject, actualObject Object,
 ) (CompareResult, error) {
