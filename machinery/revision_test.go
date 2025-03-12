@@ -150,10 +150,10 @@ type revisionValidatorMock struct {
 
 func (m *revisionValidatorMock) Validate(
 	ctx context.Context, rev types.Revision,
-) (validation.RevisionViolation, error) {
+) error {
 	args := m.Called(ctx, rev)
 
-	return args.Get(0).(validation.RevisionViolation), args.Error(1)
+	return args.Error(0)
 }
 
 func TestRevisionResult_String(t *testing.T) {
@@ -174,8 +174,10 @@ func TestRevisionResult_String(t *testing.T) {
 		phases: []string{"phase-1", "phase-2"},
 		phasesResults: []PhaseResult{
 			&phaseResult{
-				name:               "phase-1",
-				preflightViolation: &phaseViolationStub{msg: "xxx"},
+				name: "phase-1",
+				validationError: &validation.PhaseValidationError{
+					PhaseError: errTest,
+				},
 				objects: []ObjectResult{
 					newObjectResultCreated(obj, nil),
 				},
@@ -190,8 +192,8 @@ Phases:
 - Phase "phase-1"
   Complete: false
   In Transition: false
-  Preflight Violation:
-    xxx
+  Validation Errors:
+  - AAAAAAh
   Objects:
   - Object Secret.v1 test/testi
     Action: "Created"

@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -33,7 +34,7 @@ func NewRevisionEngine(
 }
 
 type revisionValidator interface {
-	Validate(_ context.Context, rev types.Revision) (validation.RevisionViolation, error)
+	Validate(_ context.Context, rev types.Revision) error
 }
 
 type phaseEngine interface {
@@ -55,9 +56,9 @@ type phaseEngine interface {
 
 // RevisionResult holds details about the revision reconciliation run.
 type RevisionResult interface {
-	// GetPreflightViolation returns the preflight violation of the entire Revision.
+	// GetValidationError returns the preflight validation error, if one was encountered.
 	// Revision preflight checks are not as extensive as phase-preflight checks.
-	GetPreflightViolation() (validation.RevisionViolation, bool)
+	GetValidationError() *validation.RevisionValidationError
 	// GetPhases returns results for individual phases.
 	GetPhases() []PhaseResult
 	// InTransition returns true if the Phase has not yet fully rolled out,
@@ -73,30 +74,34 @@ type RevisionResult interface {
 }
 
 type revisionResult struct {
-	phases             []string
-	phasesResults      []PhaseResult
-	preflightViolation validation.RevisionViolation
+	phases          []string
+	phasesResults   []PhaseResult
+	validationError *validation.RevisionValidationError
 }
 
-// GetPreflightViolation returns the preflight violations.
-func (r *revisionResult) GetPreflightViolation() (validation.RevisionViolation, bool) {
-	return r.preflightViolation,
-		r.preflightViolation != nil && !r.preflightViolation.Empty()
+// GetValidationError returns the preflight validation
+// error, if one was encountered.
+func (r *revisionResult) GetValidationError() *validation.RevisionValidationError {
+	return r.validationError
 }
 
 // InTransition returns true if the Phase has not yet fully rolled out,
 // if the phase has objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *revisionResult) InTransistion() bool {
-	if len(r.phasesResults) < len(r.phases) {
-		// not all phases have been acted on.
-		return true
-	}
-
 	for _, p := range r.phasesResults {
 		if p.InTransistion() {
 			return true
 		}
+	}
+
+	if r.validationError != nil {
+		return false
+	}
+
+	if len(r.phasesResults) < len(r.phases) {
+		// not all phases have been acted on.
+		return true
 	}
 
 	return false
@@ -143,9 +148,11 @@ func (r *revisionResult) String() string {
 		r.IsComplete(), r.InTransistion(),
 	)
 
-	if v, ok := r.GetPreflightViolation(); ok {
-		out += "Preflight Violation:\n"
-		out += "  " + strings.ReplaceAll(v.String(), "\n", "\n  ") + "\n"
+	if err := r.GetValidationError(); err != nil {
+		out += "Validation Errors:\n"
+		for _, err := range err.Unwrap() {
+			out += "- " + err.Error() + "\n"
+		}
 	}
 
 	phasesWithResults := map[string]struct{}{}
@@ -183,15 +190,15 @@ func (re *RevisionEngine) Reconcile(
 	}
 
 	// Preflight
-	violation, err := re.revisionValidator.Validate(ctx, rev)
-	if err != nil {
+	if err := re.revisionValidator.Validate(ctx, rev); err != nil {
+		var rerr *validation.RevisionValidationError
+		if errors.As(err, &rerr) {
+			rres.validationError = rerr
+
+			return rres, nil
+		}
+
 		return rres, fmt.Errorf("validating: %w", err)
-	}
-
-	if !violation.Empty() {
-		rres.preflightViolation = violation
-
-		return rres, nil
 	}
 
 	// Reconcile

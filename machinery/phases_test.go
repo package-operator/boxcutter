@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,8 @@ import (
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/validation"
 )
+
+var errTest = errors.New("AAAAAAh")
 
 func TestPhaseEngine_Reconcile(t *testing.T) {
 	t.Parallel()
@@ -46,7 +49,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
-		Return(&phaseViolationStub{}, nil)
+		Return(nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
@@ -90,9 +93,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
-		Return(&phaseViolationStub{
-			msg: "xxx",
-		}, nil)
+		Return(validation.PhaseValidationError{})
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
@@ -190,40 +191,10 @@ func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
 	owner client.Object,
 	phase types.Phase,
-) (validation.PhaseViolation, error) {
+) error {
 	args := m.Called(ctx, owner, phase)
 
-	return args.Get(0).(validation.PhaseViolation), args.Error(1)
-}
-
-type phaseViolationStub struct {
-	phaseName string
-	objects   []validation.ObjectViolation
-	msg       string
-}
-
-func (s *phaseViolationStub) PhaseName() string {
-	return s.phaseName
-}
-
-func (s *phaseViolationStub) Objects() []validation.ObjectViolation {
-	return s.objects
-}
-
-func (s *phaseViolationStub) Empty() bool {
-	return len(s.msg) == 0 && len(s.objects) == 0
-}
-
-func (s *phaseViolationStub) Message() string {
-	return s.msg
-}
-
-func (s *phaseViolationStub) Messages() []string {
-	return []string{s.msg}
-}
-
-func (s *phaseViolationStub) String() string {
-	return s.msg
+	return args.Error(0)
 }
 
 func TestPhaseResult(t *testing.T) {
@@ -233,7 +204,7 @@ func TestPhaseResult(t *testing.T) {
 
 		tests := []struct {
 			name     string
-			pv       validation.PhaseViolation
+			pv       *validation.PhaseValidationError
 			res      []ObjectResult
 			expected bool
 		}{
@@ -254,8 +225,11 @@ func TestPhaseResult(t *testing.T) {
 				expected: true,
 			},
 			{
-				name:     "false - preflight violation",
-				pv:       &phaseViolationStub{msg: "xxx"},
+				name: "false - preflight violation",
+				pv: &validation.PhaseValidationError{
+					PhaseName:  "xxx",
+					PhaseError: errTest,
+				},
 				res:      []ObjectResult{},
 				expected: false,
 			},
@@ -277,8 +251,7 @@ func TestPhaseResult(t *testing.T) {
 				t.Parallel()
 
 				pr := &phaseResult{
-					preflightViolation: test.pv,
-					objects:            test.res,
+					objects: test.res,
 				}
 				assert.Equal(t, test.expected, pr.InTransistion())
 			})
@@ -293,7 +266,7 @@ func TestPhaseResult(t *testing.T) {
 
 		tests := []struct {
 			name     string
-			pv       validation.PhaseViolation
+			pv       *validation.PhaseValidationError
 			res      []ObjectResult
 			expected bool
 		}{
@@ -306,7 +279,7 @@ func TestPhaseResult(t *testing.T) {
 			},
 			{
 				name:     "false - preflight violation",
-				pv:       &phaseViolationStub{msg: "xxx"},
+				pv:       &validation.PhaseValidationError{},
 				res:      []ObjectResult{},
 				expected: false,
 			},
@@ -331,8 +304,8 @@ func TestPhaseResult(t *testing.T) {
 				t.Parallel()
 
 				pr := &phaseResult{
-					preflightViolation: test.pv,
-					objects:            test.res,
+					validationError: test.pv,
+					objects:         test.res,
 				}
 				assert.Equal(t, test.expected, pr.IsComplete())
 			})
@@ -355,8 +328,11 @@ func TestPhaseResult_String(t *testing.T) {
 	}
 
 	r := phaseResult{
-		name:               "phase-1",
-		preflightViolation: &phaseViolationStub{msg: "xxx"},
+		name: "phase-1",
+		validationError: &validation.PhaseValidationError{
+			PhaseName:  "banana",
+			PhaseError: errTest,
+		},
 		objects: []ObjectResult{
 			newObjectResultCreated(obj, nil),
 		},
@@ -365,8 +341,8 @@ func TestPhaseResult_String(t *testing.T) {
 	assert.Equal(t, `Phase "phase-1"
 Complete: false
 In Transition: false
-Preflight Violation:
-  xxx
+Validation Errors:
+- AAAAAAh
 Objects:
 - Object Secret.v1 test/testi
   Action: "Created"
