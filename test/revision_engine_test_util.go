@@ -11,8 +11,8 @@ import (
 )
 
 type revisionEngine interface {
-	Teardown(ctx context.Context, rev types.Revision) (machinery.RevisionTeardownResult, error)
-	Reconcile(ctx context.Context, rev types.Revision, opts ...types.RevisionOption) (machinery.RevisionResult, error)
+	Teardown(ctx context.Context, rev types.Revision, opts ...types.RevisionTeardownOption) (machinery.RevisionTeardownResult, error)
+	Reconcile(ctx context.Context, rev types.Revision, opts ...types.RevisionReconcileOption) (machinery.RevisionResult, error)
 }
 
 func newTestRevisionEngine() revisionEngine {

@@ -91,8 +91,8 @@ func TestRevisionEngine(t *testing.T) {
 
 	// 1st Run.
 	res, err := re.Reconcile(ctx, rev,
-		boxcutter.WithObjectOptions(obj1, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj1Probe)),
-		boxcutter.WithObjectOptions(obj2, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj2Probe)),
+		boxcutter.WithObjectReconcileOptions(obj1, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj1Probe)),
+		boxcutter.WithObjectReconcileOptions(obj2, boxcutter.WithProbe(boxcutter.ProgressProbeType, obj2Probe)),
 	)
 	require.NoError(t, err)
 

@@ -20,14 +20,14 @@ type Revision = types.Revision
 // Phase represents a collection of objects lifecycled together.
 type Phase = types.Phase
 
-// ObjectOption is the common interface for object reconciliation options.
-type ObjectOption = types.ObjectOption
+// ObjectReconcileOption is the common interface for object reconciliation options.
+type ObjectReconcileOption = types.ObjectReconcileOption
 
-// PhaseOption is the common interface for phase reconciliation options.
-type PhaseOption = types.PhaseOption
+// PhaseReconcileOption is the common interface for phase reconciliation options.
+type PhaseReconcileOption = types.PhaseReconcileOption
 
-// RevisionOption is the common interface for revision reconciliation options.
-type RevisionOption = types.RevisionOption
+// RevisionReconcileOption is the common interface for revision reconciliation options.
+type RevisionReconcileOption = types.RevisionReconcileOption
 
 // WithPreviousOwners is a list of known objects allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
@@ -65,11 +65,17 @@ var ProbeFunc = types.ProbeFunc
 // WithProbe registers the given probe to evaluate state of objects.
 var WithProbe = types.WithProbe
 
-// WithObjectOptions applies the given options only to the given object.
-var WithObjectOptions = types.WithObjectOptions
+// WithObjectReconcileOptions applies the given options only to the given object.
+var WithObjectReconcileOptions = types.WithObjectReconcileOptions
 
-// WithPhaseOptions applies the given options only to a phase with matching name.
-var WithPhaseOptions = types.WithPhaseOptions
+// WithObjectTeardownOptions applies the given options only to the given object.
+var WithObjectTeardownOptions = types.WithObjectTeardownOptions
+
+// WithPhaseReconcileOptions applies the given options only to the given Phase.
+var WithPhaseReconcileOptions = types.WithPhaseReconcileOptions
+
+// WithPhaseTeardownOptions applies the given options only to the given Phase.
+var WithPhaseTeardownOptions = types.WithPhaseTeardownOptions
 
 // ProgressProbeType is a well-known probe type used to guard phase progression.
 const ProgressProbeType = types.ProgressProbeType

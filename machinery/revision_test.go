@@ -45,7 +45,7 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	}
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{}, nil)
 
 	ctx := context.Background()
@@ -93,11 +93,11 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	}
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(&phaseTeardownResult{}, nil)
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{waiting: []types.ObjectRef{
 			{},
 		}}, nil)
@@ -125,7 +125,7 @@ func (m *phaseEngineMock) Reconcile(
 	owner client.Object,
 	revision int64,
 	phase types.Phase,
-	opts ...types.PhaseOption,
+	opts ...types.PhaseReconcileOption,
 ) (PhaseResult, error) {
 	args := m.Called(ctx, owner, revision, phase, opts)
 
@@ -137,8 +137,9 @@ func (m *phaseEngineMock) Teardown(
 	owner client.Object,
 	revision int64,
 	phase types.Phase,
+	opts ...types.PhaseTeardownOption,
 ) (PhaseTeardownResult, error) {
-	args := m.Called(ctx, owner, revision, phase)
+	args := m.Called(ctx, owner, revision, phase, opts)
 
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
 }

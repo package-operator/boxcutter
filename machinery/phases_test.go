@@ -138,7 +138,7 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 
 	var revision int64 = 1
 
-	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything).
+	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything, mock.Anything).
 		Return(true, nil)
 
 	ctx := context.Background()
@@ -163,7 +163,7 @@ func (m *objectEngineMock) Reconcile(
 	owner client.Object,
 	revision int64,
 	desiredObject Object,
-	opts ...types.ObjectOption,
+	opts ...types.ObjectReconcileOption,
 ) (ObjectResult, error) {
 	args := m.Called(ctx, owner, revision, desiredObject, opts)
 
@@ -175,8 +175,9 @@ func (m *objectEngineMock) Teardown(
 	owner client.Object,
 	revision int64,
 	desiredObject Object,
+	opts ...types.ObjectTeardownOption,
 ) (objectDeleted bool, err error) {
-	args := m.Called(ctx, owner, revision, desiredObject)
+	args := m.Called(ctx, owner, revision, desiredObject, opts)
 
 	return args.Bool(0), args.Error(1)
 }
