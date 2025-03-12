@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 
@@ -41,41 +42,59 @@ func NewNamespacedPhaseValidator(
 // Validate runs validation of the phase and its objects.
 func (v *PhaseValidator) Validate(
 	ctx context.Context, owner client.Object, phase types.Phase,
-) (PhaseViolation, error) {
-	var objects []ObjectViolation // errors of objects within.
+) error {
+	phaseError := validatePhaseName(phase)
 
-	// Phase name.
-	var msgs []string
-	if len(phase.GetName()) > 0 {
-		// TODO: This is due to ObjectSetPhases not knowing their phase name.
-		// Not sure this is the best way to deal with this...
-		msgs = validatePhaseName(phase)
-	}
+	var (
+		objectErrors []ObjectValidationError
+		errs         []error
+	)
 
-	// Individual objects.
 	for _, o := range phase.GetObjects() {
 		obj := &o
 
-		vs, err := v.ObjectValidator.Validate(ctx, owner, obj)
-		if err != nil {
-			return nil, err
+		err := v.ObjectValidator.Validate(ctx, owner, obj)
+		if err == nil {
+			continue
 		}
 
-		if !vs.Empty() {
-			objects = append(objects, vs)
+		var oerr ObjectValidationError
+		if errors.As(err, &oerr) {
+			objectErrors = append(objectErrors, oerr)
+		} else {
+			errs = append(errs, err)
 		}
 	}
 
-	// Duplicates.
-	objects = append(objects, checkForObjectDuplicates(phase)...)
+	if len(errs) > 0 {
+		// unknown errors duing ObjectValidation
+		return errors.Join(errs...)
+	}
 
-	return newPhaseViolation(phase.GetName(), msgs, compactObjectViolations(objects)), nil
+	objectErrors = append(objectErrors, checkForObjectDuplicates(phase)...)
+
+	return NewPhaseValidationError(
+		phase.GetName(), phaseError, compactObjectViolations(objectErrors)...)
 }
 
-func validatePhaseName(phase types.Phase) []string {
+// PhaseNameInvalidError is returned when the phase name does not validate.
+type PhaseNameInvalidError struct {
+	// Name of the phase.
+	PhaseName string
+	// Error messages describing why the phase name is invalid.
+	ErrorMessages []string
+}
+
+// Error implements the error interface.
+func (e PhaseNameInvalidError) Error() string {
+	return "phase name invalid: " + strings.Join(e.ErrorMessages, ", ")
+}
+
+func validatePhaseName(phase types.Phase) error {
 	if errMsgs := phaseNameValid(phase.GetName()); len(errMsgs) > 0 {
-		return []string{
-			"phase name invalid: " + strings.Join(errMsgs, " and "),
+		return PhaseNameInvalidError{
+			PhaseName:     phase.GetName(),
+			ErrorMessages: errMsgs,
 		}
 	}
 
@@ -86,7 +105,17 @@ func phaseNameValid(phaseName string) (errs []string) {
 	return validation.IsDNS1035Label(phaseName)
 }
 
-func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
+// PhaseObjectDuplicationError is returned when an object is present
+// multiple times in a phase or across multiple phases.
+type PhaseObjectDuplicationError struct {
+	PhaseNames []string
+}
+
+func (e PhaseObjectDuplicationError) Error() string {
+	return "duplicate object also found in phases " + strings.Join(e.PhaseNames, ", ")
+}
+
+func checkForObjectDuplicates(phases ...types.Phase) []ObjectValidationError {
 	// remember unique objects and the phase we found them first in.
 	uniqueObjectsInPhase := map[types.ObjectRef]string{}
 	conflicts := map[types.ObjectRef]map[string]struct{}{}
@@ -112,7 +141,7 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 		}
 	}
 
-	ovs := make([]ObjectViolation, 0, len(conflicts))
+	ovs := make([]ObjectValidationError, 0, len(conflicts))
 
 	for objRef, phasesMap := range conflicts {
 		var phases []string
@@ -121,9 +150,14 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 		}
 
 		slices.Sort(phases)
-		ov := newObjectViolationFromRef(objRef, []string{
-			"Duplicate object also found in phases " + strings.Join(phases, ", "),
-		})
+		ov := ObjectValidationError{
+			ObjectRef: objRef,
+			Errors: []error{
+				PhaseObjectDuplicationError{
+					PhaseNames: phases,
+				},
+			},
+		}
 		ovs = append(ovs, ov)
 	}
 
@@ -131,16 +165,18 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectViolation {
 }
 
 // merges ObjectViolations targeting the same object.
-func compactObjectViolations(ovs []ObjectViolation) []ObjectViolation {
-	uniqueOVs := map[types.ObjectRef][]string{}
+func compactObjectViolations(ovs []ObjectValidationError) []ObjectValidationError {
+	uniqueOVs := map[types.ObjectRef][]error{}
 	for _, ov := range ovs {
-		uniqueOVs[ov.ObjectRef()] = append(
-			uniqueOVs[ov.ObjectRef()], ov.Messages()...)
+		uniqueOVs[ov.ObjectRef] = append(
+			uniqueOVs[ov.ObjectRef], ov.Errors...)
 	}
 
-	out := make([]ObjectViolation, 0, len(uniqueOVs))
-	for oref, msgs := range uniqueOVs {
-		out = append(out, newObjectViolationFromRef(oref, msgs))
+	out := make([]ObjectValidationError, 0, len(uniqueOVs))
+	for oref, errs := range uniqueOVs {
+		out = append(out, ObjectValidationError{
+			ObjectRef: oref, Errors: errs,
+		})
 	}
 
 	return out

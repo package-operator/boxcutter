@@ -2,6 +2,8 @@ package validation
 
 import (
 	"context"
+	"errors"
+	"slices"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
 )
@@ -20,36 +22,55 @@ func NewRevisionValidator() *RevisionValidator {
 }
 
 // Validate a revision compromising of multiple phases.
-func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) (RevisionViolation, error) {
+func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) error {
 	pvs := staticValidateMultiplePhases(rev.GetPhases()...)
 
-	return newRevisionViolation(nil, pvs), nil
+	return NewRevisionValidationError(
+		rev.GetName(), rev.GetRevisionNumber(),
+		pvs...,
+	)
 }
 
-func staticValidateMultiplePhases(phases ...types.Phase) []PhaseViolation {
-	commonViolations := checkForObjectDuplicates(phases...)
-	pvs := []PhaseViolation{}
+func staticValidateMultiplePhases(phases ...types.Phase) []PhaseValidationError {
+	dups := checkForObjectDuplicates(phases...)
+
+	//nolint:prealloc
+	var phaseErrors []PhaseValidationError
 
 	for _, phase := range phases {
-		phaseMsgs := validatePhaseName(phase)
+		var objectErrors []ObjectValidationError
 
-		var ovs []ObjectViolation
-		ovs = append(ovs, commonViolations...)
+		for _, obj := range phase.Objects {
+			oe := NewObjectValidationError(
+				types.ToObjectRef(&obj),
+				validateObjectMetadata(&obj)...,
+			)
+			if oe == nil {
+				continue
+			}
 
-		for _, o := range phase.GetObjects() {
-			obj := &o
-			if errs := validateObjectMetadata(obj); len(errs) > 0 {
-				ovs = append(ovs, newObjectViolation(obj, errs))
+			//nolint:errorlint
+			objectErrors = append(objectErrors, *oe.(*ObjectValidationError))
+		}
+
+		for _, dup := range dups {
+			var de PhaseObjectDuplicationError
+			if errors.As(dup, &de) && slices.Contains(de.PhaseNames, phase.GetName()) {
+				objectErrors = append(objectErrors, dup)
 			}
 		}
 
-		if len(phaseMsgs) == 0 && len(ovs) == 0 {
+		pe := NewPhaseValidationError(
+			phase.GetName(), validatePhaseName(phase), objectErrors...)
+		if pe == nil {
 			continue
 		}
 
-		pvs = append(pvs, *newPhaseViolation(
-			phase.GetName(), phaseMsgs, compactObjectViolations(ovs)))
+		// NewPhaseValidationError only returns *PhaseValidationError, but it has to return error
+		// due to golangs interface comparison where (*PhaseValidation)(nil) != (error)(nil)
+		//nolint:errorlint
+		phaseErrors = append(phaseErrors, *pe.(*PhaseValidationError))
 	}
 
-	return pvs
+	return phaseErrors
 }

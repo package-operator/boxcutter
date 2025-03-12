@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,7 +37,7 @@ type phaseValidator interface {
 		ctx context.Context,
 		owner client.Object,
 		phase types.Phase,
-	) (validation.PhaseViolation, error)
+	) error
 }
 
 type objectEngine interface {
@@ -180,15 +181,16 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Preflight
-	violation, err := e.phaseValidator.Validate(ctx, owner, phase)
+	err := e.phaseValidator.Validate(ctx, owner, phase)
 	if err != nil {
+		var perr validation.PhaseValidationError
+		if errors.As(err, &perr) {
+			pres.validationError = &perr
+
+			return pres, nil
+		}
+
 		return pres, fmt.Errorf("validating: %w", err)
-	}
-
-	if !violation.Empty() {
-		pres.preflightViolation = violation
-
-		return pres, nil
 	}
 
 	// Reconcile
@@ -211,9 +213,9 @@ func (e *PhaseEngine) Reconcile(
 type PhaseResult interface {
 	// GetName returns the name of the phase.
 	GetName() string
-	// GetPreflightViolation returns the preflight
-	// violation, if one was encountered.
-	GetPreflightViolation() (validation.PhaseViolation, bool)
+	// GetValidationError returns the preflight validation
+	// error, if one was encountered.
+	GetValidationError() *validation.PhaseValidationError
 	// GetObjects returns results for individual objects.
 	GetObjects() []ObjectResult
 	// InTransition returns true if the Phase has not yet fully rolled out,
@@ -230,9 +232,9 @@ type PhaseResult interface {
 
 // phaseResult contains information of the state of a reconcile operation.
 type phaseResult struct {
-	name               string
-	preflightViolation validation.PhaseViolation
-	objects            []ObjectResult
+	name            string
+	validationError *validation.PhaseValidationError
+	objects         []ObjectResult
 }
 
 // GetName returns the name of the phase.
@@ -240,11 +242,10 @@ func (r *phaseResult) GetName() string {
 	return r.name
 }
 
-// GetPreflightViolation returns the preflight
-// violation, if one was encountered.
-func (r *phaseResult) GetPreflightViolation() (validation.PhaseViolation, bool) {
-	return r.preflightViolation,
-		r.preflightViolation != nil && !r.preflightViolation.Empty()
+// GetValidationError returns the preflight validation
+// error, if one was encountered.
+func (r *phaseResult) GetValidationError() *validation.PhaseValidationError {
+	return r.validationError
 }
 
 // GetObjects returns results for individual objects.
@@ -256,7 +257,7 @@ func (r *phaseResult) GetObjects() []ObjectResult {
 // if the phase has some objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *phaseResult) InTransistion() bool {
-	if _, ok := r.GetPreflightViolation(); ok {
+	if err := r.GetValidationError(); err != nil {
 		return false
 	}
 
@@ -291,7 +292,7 @@ func (r *phaseResult) HasProgressed() bool {
 // IsComplete returns true when all objects have
 // successfully been reconciled and pass their progress probes.
 func (r *phaseResult) IsComplete() bool {
-	if _, ok := r.GetPreflightViolation(); ok {
+	if err := r.GetValidationError(); err != nil {
 		return false
 	}
 
@@ -314,9 +315,11 @@ func (r *phaseResult) String() string {
 		r.name, r.IsComplete(), r.InTransistion(),
 	)
 
-	if v, ok := r.GetPreflightViolation(); ok {
-		out += "Preflight Violation:\n"
-		out += "  " + strings.ReplaceAll(strings.TrimSpace(v.String()), "\n", "\n  ") + "\n"
+	if err := r.GetValidationError(); err != nil {
+		out += "Validation Errors:\n"
+		for _, err := range err.Unwrap() {
+			out += "- " + err.Error() + "\n"
+		}
 	}
 
 	out += "Objects:\n"

@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/validation"
 )
 
 func TestWithOwnerReference(t *testing.T) {
@@ -60,25 +61,20 @@ func TestWithOwnerReference(t *testing.T) {
 					},
 				},
 			})
+
 			require.NoError(t, err)
 			assert.False(t, res.IsComplete())
 			assert.False(t, res.InTransistion())
-			require.Len(t, res.GetPhases(), 1)
 
-			phaseViolation, ok := res.GetPhases()[0].GetPreflightViolation()
-			require.True(t, ok)
-			// What is it with GetPreflightViolation().Messages() being empty?
-			assert.False(t, phaseViolation.Empty())
-			assert.Equal(t, "simple", phaseViolation.PhaseName())
-			assert.Len(t, phaseViolation.Objects(), 1)
-			objectViolation := phaseViolation.Objects()[0]
-			assert.False(t, objectViolation.Empty())
+			var objValErr validation.ObjectValidationError
+
+			require.ErrorAs(t, res.GetValidationError(), &objValErr)
 			assert.Equal(t, types.ObjectRef{
 				GroupVersionKind: mustGVKForObject(invalid),
 				ObjectKey:        client.ObjectKeyFromObject(invalid),
-			}, objectViolation.ObjectRef())
-			require.Len(t, objectViolation.Messages(), 1)
-			assert.Equal(t, "metadata.ownerReferences: Forbidden: must be empty", objectViolation.Messages()[0])
+			}, objValErr.ObjectRef)
+			require.Len(t, objValErr.Errors, 1)
+			assert.Equal(t, "metadata.ownerReferences: Forbidden: must be empty", objValErr.Errors[0].Error())
 		})
 	}
 }
