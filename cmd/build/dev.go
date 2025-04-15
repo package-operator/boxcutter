@@ -14,7 +14,7 @@ type Dev struct{}
 func (dev *Dev) PreCommit(ctx context.Context, args []string) error {
 	self := run.Meth1(dev, dev.PreCommit, args)
 
-	return mgr.ParallelDeps(ctx, self,
+	return mgr.SerialDeps(ctx, self,
 		run.Meth(lint, lint.glciFix),
 		run.Meth(lint, lint.goModTidyAll),
 	)
