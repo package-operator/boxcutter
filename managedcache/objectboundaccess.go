@@ -24,7 +24,7 @@ import (
 
 // ObjectBoundAccessManager manages caches and clients bound to objects.
 // Each object instance will receive it's own cache and client instance.
-type ObjectBoundAccessManager[T refType] interface {
+type ObjectBoundAccessManager[T RefType] interface {
 	manager.Runnable
 	// Get returns a TrackingCache for the provided object if one exists.
 	// If one does not exist, a new Cache is created and returned.
@@ -59,7 +59,7 @@ type Accessor interface {
 }
 
 // NewObjectBoundAccessManager returns a new ObjectBoundAccessManager for T.
-func NewObjectBoundAccessManager[T refType](
+func NewObjectBoundAccessManager[T RefType](
 	log logr.Logger,
 	mapConfig ConfigMapperFunc[T],
 	baseRestConfig *rest.Config,
@@ -82,20 +82,21 @@ func NewObjectBoundAccessManager[T refType](
 	}
 }
 
-type refType interface {
+// RefType constrains the owner type of an ObjectBoundAccessManager.
+type RefType interface {
 	client.Object
 	comparable
 }
 
 // ConfigMapperFunc applies changes to rest.Config and cache.Options based on the given object.
-type ConfigMapperFunc[T refType] func(
+type ConfigMapperFunc[T RefType] func(
 	context.Context, T, *rest.Config, cache.Options) (*rest.Config, cache.Options, error)
 
 type newClientFunc func(config *rest.Config, opts client.Options) (client.Client, error)
 
 var _ ObjectBoundAccessManager[client.Object] = (*objectBoundAccessManagerImpl[client.Object])(nil)
 
-type objectBoundAccessManagerImpl[T refType] struct {
+type objectBoundAccessManagerImpl[T RefType] struct {
 	log              logr.Logger
 	scheme           *runtime.Scheme
 	restMapper       meta.RESTMapper
@@ -117,7 +118,7 @@ type accessorEntry struct {
 	cancel   func()
 }
 
-type accessorRequest[T refType] struct {
+type accessorRequest[T RefType] struct {
 	owner      T
 	user       client.Object
 	gvks       sets.Set[schema.GroupVersionKind]
