@@ -251,7 +251,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 		log.V(-1).Info("reusing cache for owner")
 
 		if req.user != nil {
-			entry.users[req.owner.GetUID()] = req.gvks
+			entry.users[req.user.GetUID()] = req.gvks
 		}
 
 		return entry.accessor, m.gcCache(ctx, req.owner)
