@@ -229,7 +229,12 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				return
 			}
 
-			i, err := c.Cache.GetInformerForKind(ctx, gvk, cache.BlockUntilSynced(false))
+			i, err := c.Cache.GetInformer(ctx, &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": gvk.GroupVersion().String(),
+					"kind":       gvk.Kind,
+				},
+			}, cache.BlockUntilSynced(false))
 			if err != nil {
 				errCh <- err
 
