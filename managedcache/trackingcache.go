@@ -3,6 +3,7 @@ package managedcache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -10,14 +11,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -45,7 +44,6 @@ type cacheSourcer interface {
 type trackingCache struct {
 	cache.Cache
 	log          logr.Logger
-	scheme       *runtime.Scheme
 	restMapper   meta.RESTMapper
 	cacheSourcer cacheSourcer
 
@@ -81,7 +79,6 @@ func newTrackingCache(
 ) (TrackingCache, error) {
 	wehc := &trackingCache{
 		log:          log.WithName("TrackingCache"),
-		scheme:       opts.Scheme,
 		restMapper:   opts.Mapper,
 		cacheSourcer: cacheSourcer,
 
@@ -196,23 +193,31 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 }
 
 func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) error {
-	gvk, err := apiutil.GVKForObject(obj, c.scheme)
+	gvk, err := gvkForObject(obj)
 	if err != nil {
 		return err
 	}
 
-	return c.ensureCacheSyncForGVK(ctx, gvk)
+	if err := c.ensureCacheSyncForGVK(ctx, gvk); err != nil {
+		return fmt.Errorf("ensuring cache sync for GVK: %w", err)
+	}
+
+	return nil
 }
 
 func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.ObjectList) error {
-	gvk, err := apiutil.GVKForObject(list, c.scheme)
+	gvk, err := gvkForObject(list)
 	if err != nil {
 		return err
 	}
 	// We need the non-list GVK, so chop off the "List" from the end of the kind.
 	gvk.Kind = strings.TrimSuffix(gvk.Kind, "List")
 
-	return c.ensureCacheSyncForGVK(ctx, gvk)
+	if err := c.ensureCacheSyncForGVK(ctx, gvk); err != nil {
+		return fmt.Errorf("ensuring cache sync for (list) GVK: %w", err)
+	}
+
+	return nil
 }
 
 func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
@@ -229,12 +234,9 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				return
 			}
 
-			i, err := c.Cache.GetInformer(ctx, &unstructured.Unstructured{
-				Object: map[string]any{
-					"apiVersion": gvk.GroupVersion().String(),
-					"kind":       gvk.Kind,
-				},
-			}, cache.BlockUntilSynced(false))
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(gvk)
+			i, err := c.Cache.GetInformer(ctx, obj, cache.BlockUntilSynced(false))
 			if err != nil {
 				errCh <- err
 
@@ -289,7 +291,12 @@ func (c *trackingCache) Get(
 		return err
 	}
 
-	return c.Cache.Get(ctx, key, obj, opts...)
+	err := c.Cache.Get(ctx, key, obj, opts...)
+	if err != nil {
+		return fmt.Errorf("getting object: %w", err)
+	}
+
+	return nil
 }
 
 func (c *trackingCache) List(
@@ -338,7 +345,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
-	gvk, err := apiutil.GVKForObject(obj, c.scheme)
+	gvk, err := gvkForObject(obj)
 	if err != nil {
 		return err
 	}
