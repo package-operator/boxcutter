@@ -8,14 +8,12 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -28,7 +26,7 @@ type ObjectBoundAccessManager[T RefType] interface {
 	manager.Runnable
 	// Get returns a TrackingCache for the provided object if one exists.
 	// If one does not exist, a new Cache is created and returned.
-	Get(context.Context, T) (Accessor, error)
+	Get(ctx context.Context, owner T) (Accessor, error)
 
 	// GetWithUser returns a TrackingCache for the provided object if one exist.
 	// If one does not exist, a new Cache is created and returned.
@@ -42,14 +40,14 @@ type ObjectBoundAccessManager[T RefType] interface {
 
 	// Free will stop and remove a TrackingCache for
 	// the provided object, if one exists.
-	Free(context.Context, T) error
+	Free(ctx context.Context, owner T) error
 
 	// FreeWithUser informs the manager that the given user no longer needs
 	// a cache scoped to owner T. If the cache has no active users, it will be stopped.
 	FreeWithUser(ctx context.Context, owner T, user client.Object) error
 
 	// Source returns a controller-runtime source to watch from a controller.
-	Source(handler.EventHandler, ...predicate.Predicate) source.Source
+	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
 }
 
 // Accessor provides write and cached read access to the cluster.
@@ -67,7 +65,6 @@ func NewObjectBoundAccessManager[T RefType](
 ) ObjectBoundAccessManager[T] {
 	return &objectBoundAccessManagerImpl[T]{
 		log:              log.WithName("ObjectBoundAccessManager"),
-		scheme:           baseCacheOptions.Scheme,
 		restMapper:       baseCacheOptions.Mapper,
 		mapConfig:        mapConfig,
 		baseRestConfig:   baseRestConfig,
@@ -98,7 +95,6 @@ var _ ObjectBoundAccessManager[client.Object] = (*objectBoundAccessManagerImpl[c
 
 type objectBoundAccessManagerImpl[T RefType] struct {
 	log              logr.Logger
-	scheme           *runtime.Scheme
 	restMapper       meta.RESTMapper
 	mapConfig        ConfigMapperFunc[T]
 	baseRestConfig   *rest.Config
@@ -269,7 +265,6 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 	}
 
 	client, err := m.newClient(restConfig, client.Options{
-		Scheme:     m.baseCacheOptions.Scheme,
 		Mapper:     m.baseCacheOptions.Mapper,
 		HTTPClient: m.baseCacheOptions.HTTPClient,
 	})
@@ -356,7 +351,7 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 	gvks := sets.Set[schema.GroupVersionKind]{}
 
 	for _, obj := range usedFor {
-		gvk, err := apiutil.GVKForObject(obj, m.scheme)
+		gvk, err := gvkForObject(obj)
 		if err != nil {
 			return nil, err
 		}
