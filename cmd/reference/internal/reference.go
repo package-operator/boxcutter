@@ -112,7 +112,7 @@ func (r *Reference) Start(ctx context.Context) error {
 	mc := managedcache.NewObjectBoundAccessManager[*corev1.ConfigMap](
 		ctrl.Log,
 		mapper, r.restConfig, cache.Options{
-			Scheme: r.scheme, Mapper: mgr.GetRESTMapper(),
+			Mapper: mgr.GetRESTMapper(),
 		})
 	if err := mgr.Add(mc); err != nil {
 		return fmt.Errorf("adding managedcache: %w", err)
