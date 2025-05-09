@@ -14,10 +14,23 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/structured-merge-diff/v4/fieldpath"
 
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
+
+// sanitizeCompareResult ensures that the managed field list of kube-controller-manager is consistent.
+//
+// kube-controller-manager sometimes reports .metadata.annotations as managed on CI, sometimes not.
+func sanitizeCompareResult(r *machinery.CompareResult) {
+	for i := range r.OtherManagers {
+		manager := r.OtherManagers[i]
+		if manager.Manager == "kube-controller-manager" {
+			manager.Fields.Insert(fieldpath.MakePathOrDie("metadata", "annotations"))
+		}
+	}
+}
 
 //nolint:maintidx
 func TestComparator(t *testing.T) {
@@ -335,6 +348,7 @@ Other:
 - "Franz"
   .metadata.annotations.test
 - "kube-controller-manager"
+  .metadata.annotations
   .metadata.annotations.deployment.kubernetes.io/revision
   .status.conditions
   .status.observedGeneration
@@ -419,6 +433,7 @@ Comparison:
 
 			r, err := comp.Compare(owner, test.desiredObj, test.actualObj)
 			require.NoError(t, err)
+			sanitizeCompareResult(&r)
 
 			assert.Equal(t, test.report, r.String())
 		})
