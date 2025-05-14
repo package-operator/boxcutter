@@ -11,6 +11,9 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   lint-unit-int:
     runs-on: ubuntu-latest
@@ -23,7 +26,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '>=1.22'
+        go-version: '1.23.x'
         cache-dependency-path: "**/*.sum"
         check-latest: true
 
