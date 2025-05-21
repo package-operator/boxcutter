@@ -80,5 +80,5 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	pkg.package-operator.run/cardboard/modules/kubeclients v0.0.4 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
-	sigs.k8s.io/kind v0.28.0 // indirect
+	sigs.k8s.io/kind v0.29.0 // indirect
 )
