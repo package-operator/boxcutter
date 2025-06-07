@@ -3,6 +3,7 @@ package machinery
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -269,7 +270,8 @@ func (d *Comparator) Compare(
 
 	// Index diff into something more useful for the caller.
 	for _, mf := range actualObject.GetManagedFields() {
-		if mf.Manager == d.fieldOwner {
+		if mf.Manager == d.fieldOwner ||
+			strings.HasPrefix(mf.Manager, d.fieldOwner+"-") {
 			continue
 		}
 
@@ -339,7 +341,8 @@ func getTyped(
 func findManagedFields(fieldOwner string, accessor metav1.Object) (metav1.ManagedFieldsEntry, bool) {
 	objManagedFields := accessor.GetManagedFields()
 	for _, mf := range objManagedFields {
-		if mf.Manager == fieldOwner &&
+		if (mf.Manager == fieldOwner ||
+			strings.HasPrefix(mf.Manager, fieldOwner+"-")) &&
 			mf.Operation == metav1.ManagedFieldsOperationApply &&
 			mf.Subresource == "" {
 			return mf, true

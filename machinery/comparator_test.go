@@ -17,7 +17,10 @@ import (
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
-const testFieldOwner = "test.testy"
+const (
+	testFieldOwner          = "test.testy"
+	testFieldOwnerWRevision = "test.testy-1"
+)
 
 //nolint:dupl
 func TestComparator_Unstructured(t *testing.T) {
@@ -75,7 +78,7 @@ func TestComparator_Unstructured(t *testing.T) {
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
 						"fieldsV1":   map[string]interface{}{},
-						"manager":    testFieldOwner,
+						"manager":    testFieldOwnerWRevision,
 						"operation":  "Apply",
 					},
 					map[string]interface{}{
@@ -137,7 +140,7 @@ func TestComparator_Unstructured(t *testing.T) {
 								},
 							},
 						},
-						"manager":   testFieldOwner,
+						"manager":   testFieldOwnerWRevision,
 						"operation": "Apply",
 					},
 				},
@@ -237,7 +240,7 @@ func TestComparator_Unstructured(t *testing.T) {
 									"f:test": map[string]interface{}{},
 								},
 							},
-							"manager":   testFieldOwner,
+							"manager":   testFieldOwnerWRevision,
 							"operation": "Apply",
 						},
 					},
@@ -320,7 +323,7 @@ func TestComparator_Structured(t *testing.T) {
 			ManagedFields: []metav1.ManagedFieldsEntry{
 				{
 					APIVersion: "v1",
-					Manager:    testFieldOwner,
+					Manager:    testFieldOwnerWRevision,
 					Operation:  metav1.ManagedFieldsOperationApply,
 					FieldsType: "FieldsV1",
 					FieldsV1: &metav1.FieldsV1{
@@ -388,7 +391,7 @@ func TestComparator_Structured(t *testing.T) {
 			ManagedFields: []metav1.ManagedFieldsEntry{
 				{
 					APIVersion: "v1",
-					Manager:    testFieldOwner,
+					Manager:    testFieldOwnerWRevision,
 					Operation:  metav1.ManagedFieldsOperationApply,
 					FieldsType: "FieldsV1",
 					FieldsV1: &metav1.FieldsV1{
@@ -515,7 +518,7 @@ func TestComparator_Structured(t *testing.T) {
 									"f:test": map[string]interface{}{},
 								},
 							},
-							"manager":   testFieldOwner,
+							"manager":   testFieldOwnerWRevision,
 							"operation": "Apply",
 						},
 					},
