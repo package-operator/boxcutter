@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
 )
@@ -100,12 +101,12 @@ func (e *ObjectEngine) Teardown(
 		panic("owner must be persisted to cluster, empty UID")
 	}
 
-	// Shortcut when Owner is orphaning its dependents.
-	// If we don't check this, we might be too quick and start deleting
-	// dependents that should be kept on the cluster!
-	if controllerutil.ContainsFinalizer(owner, "orphan") {
-		return true, nil
-	}
+	// // Shortcut when Owner is orphaning its dependents.
+	// // If we don't check this, we might be too quick and start deleting
+	// // dependents that should be kept on the cluster!
+	// if controllerutil.ContainsFinalizer(owner, "orphan") {
+	// 	return true, nil
+	// }
 
 	// Lookup actual object state on cluster.
 	actualObject := desiredObject.DeepCopyObject().(Object)
@@ -135,12 +136,19 @@ func (e *ObjectEngine) Teardown(
 	}
 
 	ctrlSit, _ := e.detectOwner(owner, actualObject, nil)
-	if actualRevision != revision || ctrlSit != ctrlSituationIsController {
-		// Remove us from owners list:
-		patch := actualObject.DeepCopyObject().(Object)
-		e.ownerStrategy.RemoveOwner(owner, patch)
+	if ctrlSit == ctrlSituationNoController {
+		// Object has been orphaned.
+		return true, nil
+	}
 
-		return true, e.writer.Patch(ctx, patch, client.MergeFrom(actualObject))
+	if actualRevision != revision || ctrlSit != ctrlSituationIsController {
+		// Remove all fields from this revision (should just be the owner):
+		emptyPatch := &unstructured.Unstructured{}
+		emptyPatch.SetGroupVersionKind(actualObject.GetObjectKind().GroupVersionKind())
+		emptyPatch.SetName(actualObject.GetName())
+		emptyPatch.SetNamespace(actualObject.GetNamespace())
+
+		return true, e.writer.Patch(ctx, emptyPatch, client.Apply, e.fieldOwnerForRevision(revision))
 	}
 
 	// Actually delete the object.
@@ -157,6 +165,10 @@ func (e *ObjectEngine) Teardown(
 	}
 	// need to wait for Not Found Error to ensure finalizers have been progressed.
 	return false, nil
+}
+
+func (e *ObjectEngine) fieldOwnerForRevision(revision int64) client.FieldOwner {
+	return client.FieldOwner(fmt.Sprintf("%s-%d", e.fieldOwner, revision))
 }
 
 // Reconcile runs actions to bring actual state closer to desired.
@@ -214,7 +226,7 @@ func (e *ObjectEngine) Reconcile(
 		// Using SSA might patch an already existing object,
 		// violating collision protection settings.
 		err := e.create(
-			ctx, desiredObject, options, client.FieldOwner(e.fieldOwner))
+			ctx, desiredObject, options, e.fieldOwnerForRevision(revision))
 		if errors.IsAlreadyExists(err) {
 			// Might be a slow cache or an object created by a different actor
 			// but excluded by the cache selector.
@@ -225,7 +237,7 @@ func (e *ObjectEngine) Reconcile(
 			return nil, fmt.Errorf("creating resource: %w", err)
 		}
 
-		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
+		if err := e.migrateFieldManagersToSSA(ctx, desiredObject, revision); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
 
@@ -292,6 +304,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			err := e.patch(
 				ctx, desiredObject, client.Apply,
 				options,
+				revision,
 			)
 			if err != nil {
 				// Might be a Conflict if object already exists.
@@ -325,6 +338,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		err := e.patch(
 			ctx, desiredObject, client.Apply,
 			options,
+			revision,
 			client.ForceOwnership,
 		)
 		if err != nil {
@@ -357,7 +371,11 @@ func (e *ObjectEngine) objectUpdateHandling(
 		}
 
 	case ctrlSituationNoController:
-		if options.CollisionProtection == types.CollisionProtectionPrevent {
+		// If the object has no controller, but there are system annotations or labels present,
+		// the object might have been just orphaned, if we re-adopt it now, it would get deleted
+		// by the kubernetes garbage collector.
+		if options.CollisionProtection == types.CollisionProtectionPrevent ||
+			e.hasSystemAnnotationsOrLabels(actualObject) {
 			return newObjectResultConflict(
 				actualObject, compareRes,
 				actualOwner, options.Probes,
@@ -391,6 +409,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 	err = e.patch(
 		ctx, desiredObject, client.Apply,
 		options,
+		revision,
 		client.ForceOwnership,
 	)
 	if err != nil {
@@ -409,6 +428,22 @@ func (e *ObjectEngine) objectUpdateHandling(
 	), nil
 }
 
+func (e *ObjectEngine) hasSystemAnnotationsOrLabels(obj client.Object) bool {
+	for k := range obj.GetAnnotations() {
+		if strings.HasPrefix(k, e.systemPrefix) {
+			return true
+		}
+	}
+
+	for k := range obj.GetLabels() {
+		if strings.HasPrefix(k, e.systemPrefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (e *ObjectEngine) create(
 	ctx context.Context, obj client.Object,
 	options types.ObjectReconcileOptions, opts ...client.CreateOption,
@@ -425,18 +460,19 @@ func (e *ObjectEngine) patch(
 	obj Object,
 	patch client.Patch,
 	options types.ObjectReconcileOptions,
+	revision int64,
 	opts ...client.PatchOption,
 ) error {
 	if options.Paused {
 		return nil
 	}
 
-	if err := e.migrateFieldManagersToSSA(ctx, obj); err != nil {
+	if err := e.migrateFieldManagersToSSA(ctx, obj, revision); err != nil {
 		return err
 	}
 
 	o := []client.PatchOption{
-		client.FieldOwner(e.fieldOwner),
+		e.fieldOwnerForRevision(revision),
 	}
 	o = append(o, opts...)
 
@@ -515,10 +551,11 @@ func (e *ObjectEngine) getObjectRevision(obj client.Object) (int64, error) {
 // Migrate field ownerships to be compatible with server-side apply.
 // SSA really is complicated: https://github.com/kubernetes/kubernetes/issues/99003
 func (e *ObjectEngine) migrateFieldManagersToSSA(
-	ctx context.Context, object Object,
+	ctx context.Context, object Object, revision int64,
 ) error {
+	fo := string(e.fieldOwnerForRevision(revision))
 	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
-		object, sets.New(e.fieldOwner), e.fieldOwner)
+		object, sets.New(e.fieldOwner, fo), fo)
 
 	switch {
 	case err != nil:

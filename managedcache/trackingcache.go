@@ -253,6 +253,11 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				}
 			}
 
+			c.waitingForSync[gvk] = append(c.waitingForSync[gvk], errCh)
+			if _, ok := c.cacheWaitInFlight[gvk]; ok {
+				return
+			}
+
 			stopCh := make(chan struct{})
 			c.cacheWaitInFlight[gvk] = stopCh
 			go func() {
@@ -268,7 +273,6 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				log.V(-1).Info("wait for informer sync canceled")
 				c.informerSyncCh <- informerSyncResponse{gvk: gvk, err: context.Canceled}
 			}()
-			c.waitingForSync[gvk] = append(c.waitingForSync[gvk], errCh)
 		},
 	}
 
