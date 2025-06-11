@@ -23,11 +23,20 @@ type Phase = types.Phase
 // ObjectReconcileOption is the common interface for object reconciliation options.
 type ObjectReconcileOption = types.ObjectReconcileOption
 
+// ObjectTeardownOption holds configuration options changing object teardown.
+type ObjectTeardownOption = types.ObjectTeardownOption
+
 // PhaseReconcileOption is the common interface for phase reconciliation options.
 type PhaseReconcileOption = types.PhaseReconcileOption
 
+// PhaseTeardownOption holds configuration options changing phase teardown.
+type PhaseTeardownOption = types.PhaseTeardownOption
+
 // RevisionReconcileOption is the common interface for revision reconciliation options.
 type RevisionReconcileOption = types.RevisionReconcileOption
+
+// RevisionTeardownOption holds configuration options changing revision teardown.
+type RevisionTeardownOption = types.RevisionTeardownOption
 
 // WithPreviousOwners is a list of known objects allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
