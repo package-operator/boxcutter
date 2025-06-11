@@ -18,13 +18,13 @@ import (
 // performs probing after the objects have been reconciled.
 type PhaseEngine struct {
 	objectEngine   objectEngine
-	phaseValidator phaseValidator
+	phaseValidator PhaseValidator
 }
 
 // NewPhaseEngine returns a new PhaseEngine instance.
 func NewPhaseEngine(
 	objectEngine objectEngine,
-	phaseValidator phaseValidator,
+	phaseValidator PhaseValidator,
 ) *PhaseEngine {
 	return &PhaseEngine{
 		objectEngine:   objectEngine,
@@ -32,7 +32,7 @@ func NewPhaseEngine(
 	}
 }
 
-type phaseValidator interface {
+type PhaseValidator interface {
 	Validate(
 		ctx context.Context,
 		owner client.Object,

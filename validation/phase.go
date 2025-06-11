@@ -19,7 +19,7 @@ type PhaseValidator struct {
 	*ObjectValidator
 }
 
-// NewClusterPhaseValidator returns an PhaseValidator for cross-cluster deployments.
+// NewClusterPhaseValidator returns an PhaseValidator for cluster scoped deployments.
 func NewClusterPhaseValidator(
 	restMapper restMapper,
 	writer client.Writer,

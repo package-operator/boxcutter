@@ -83,6 +83,9 @@ const ProgressProbeType = types.ProgressProbeType
 // RevisionEngine manages rollout and teardown of multiple phases.
 type RevisionEngine = machinery.RevisionEngine
 
+// PhaseEngine manages rollout and teardown of multiple objects grouped into a phase.
+type PhaseEngine = machinery.PhaseEngine
+
 // OwnerStrategy interface needed for RevisionEngine.
 type OwnerStrategy interface {
 	SetControllerReference(owner, obj metav1.Object) error
@@ -105,7 +108,8 @@ type RevisionEngineOptions struct {
 
 	// Optional
 
-	OwnerStrategy OwnerStrategy
+	OwnerStrategy  OwnerStrategy
+	PhaseValidator machinery.PhaseValidator
 }
 
 // NewRevisionEngine returns a new RevisionEngine instance.
@@ -118,19 +122,32 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 		opts.OwnerStrategy = ownerhandling.NewNative(opts.Scheme)
 	}
 
-	pval := validation.NewNamespacedPhaseValidator(opts.RestMapper, opts.Writer)
-	rval := validation.NewRevisionValidator()
+	if opts.PhaseValidator == nil {
+		opts.PhaseValidator = validation.NewNamespacedPhaseValidator(
+			opts.RestMapper,
+			opts.Writer,
+		)
+	}
 
-	comp := machinery.NewComparator(
-		opts.OwnerStrategy, opts.DiscoveryClient, opts.Scheme, opts.FieldOwner)
-
-	oe := machinery.NewObjectEngine(
-		opts.Scheme, opts.Reader, opts.Writer,
-		opts.OwnerStrategy, comp, opts.FieldOwner, opts.SystemPrefix,
+	revisionValidator := validation.NewRevisionValidator()
+	comparator := machinery.NewComparator(
+		opts.OwnerStrategy, opts.DiscoveryClient,
+		opts.Scheme, opts.FieldOwner,
 	)
-	pe := machinery.NewPhaseEngine(oe, pval)
+	objectEngine := machinery.NewObjectEngine(
+		opts.Scheme, opts.Reader, opts.Writer,
+		opts.OwnerStrategy, comparator, opts.FieldOwner, opts.SystemPrefix,
+	)
+	phaseEngine := machinery.NewPhaseEngine(
+		objectEngine,
+		opts.PhaseValidator,
+	)
 
-	return machinery.NewRevisionEngine(pe, rval, opts.Writer), nil
+	return machinery.NewRevisionEngine(
+		phaseEngine,
+		revisionValidator,
+		opts.Writer,
+	), nil
 }
 
 // RevisionEngineOptionsError is returned for errors with the RevisionEngineOptions.
@@ -172,4 +189,35 @@ func validateRevisionEngineOpts(opts RevisionEngineOptions) error {
 	}
 
 	return nil
+}
+
+func NewPhaseEngine(opts RevisionEngineOptions) (*PhaseEngine, error) {
+	if err := validateRevisionEngineOpts(opts); err != nil {
+		return nil, err
+	}
+
+	if opts.OwnerStrategy == nil {
+		opts.OwnerStrategy = ownerhandling.NewNative(opts.Scheme)
+	}
+
+	if opts.PhaseValidator == nil {
+		opts.PhaseValidator = validation.NewNamespacedPhaseValidator(
+			opts.RestMapper,
+			opts.Writer,
+		)
+	}
+
+	comparator := machinery.NewComparator(
+		opts.OwnerStrategy, opts.DiscoveryClient,
+		opts.Scheme, opts.FieldOwner,
+	)
+	objectEngine := machinery.NewObjectEngine(
+		opts.Scheme, opts.Reader, opts.Writer,
+		opts.OwnerStrategy, comparator, opts.FieldOwner, opts.SystemPrefix,
+	)
+
+	return machinery.NewPhaseEngine(
+		objectEngine,
+		opts.PhaseValidator,
+	), nil
 }

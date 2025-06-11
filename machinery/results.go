@@ -16,6 +16,9 @@ type ObjectResult interface {
 	Action() Action
 	// Object as last seen on the cluster after creation/update.
 	Object() Object
+	// TODO
+	// IsControlled returns true when the object in the api is controlled by its given owner(s).
+	// IsControlled() bool
 	// Success returns true when the operation is considered successful.
 	// Operations are considered a success, when the object reflects desired state,
 	// is owned by the right controller and passes the given probe.
