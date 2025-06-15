@@ -274,6 +274,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 		), nil
 	}
 
+	// Use optimistic locking to ensure that object will only
+	// be overridden when previous state is known to us.
+	// This prevents re-adoption of orphaned objects where we
+	// haven't observed the orphaning yet.
+	desiredObject.SetResourceVersion(actualObject.GetResourceVersion())
+
 	switch ctrlSit {
 	case ctrlSituationIsController:
 		modified := compareRes.Comparison != nil &&
