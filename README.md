@@ -1,8 +1,14 @@
 # Boxcutter
 
 <p align="center">
+	<img src="docs/logos/boxcutter-github.png" width=400px>
+</p>
+
+<p align="center">
+	<a href="https://pkg.go.dev/pkg.package-operator.run/boxcutter"><img src="https://pkg.go.dev/badge/pkg.package-operator.run/boxcutter" /></a>
 	<img src="https://img.shields.io/github/license/package-operator/boxcutter?style=flat-square"/>
 	<img src="https://img.shields.io/github/go-mod/go-version/package-operator/boxcutter?style=flat-square"/>
+	<img src="https://img.shields.io/codecov/c/gh/package-operator/boxcutter?style=flat-square"/>
 </p>
 
 ---
@@ -16,7 +22,6 @@ Cutting edge library providing the basic tooling to build and reconcile packages
 - [License](#license)
 
 ---
-
 
 ## Getting in touch
 
