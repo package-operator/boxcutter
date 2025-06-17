@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -363,7 +364,11 @@ func (e *ObjectEngine) objectUpdateHandling(
 		}
 
 	case ctrlSituationNoController:
-		if options.CollisionProtection == types.CollisionProtectionPrevent {
+		// If the object has no controller, but there are system annotations or labels present,
+		// the object might have been just orphaned, if we re-adopt it now, it would get deleted
+		// by the kubernetes garbage collector.
+		if options.CollisionProtection == types.CollisionProtectionPrevent ||
+			e.hasSystemAnnotationsOrLabels(actualObject) {
 			return newObjectResultConflict(
 				actualObject, compareRes,
 				actualOwner, options.Probes,
@@ -413,6 +418,22 @@ func (e *ObjectEngine) objectUpdateHandling(
 	return newObjectResultUpdated(
 		desiredObject, compareRes, options.Probes,
 	), nil
+}
+
+func (e *ObjectEngine) hasSystemAnnotationsOrLabels(obj client.Object) bool {
+	for k := range obj.GetAnnotations() {
+		if strings.HasPrefix(k, e.systemPrefix) {
+			return true
+		}
+	}
+
+	for k := range obj.GetLabels() {
+		if strings.HasPrefix(k, e.systemPrefix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (e *ObjectEngine) create(
