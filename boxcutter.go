@@ -221,3 +221,23 @@ func NewPhaseEngine(opts RevisionEngineOptions) (*PhaseEngine, error) {
 		opts.PhaseValidator,
 	), nil
 }
+
+func NewObjectEngine(opts RevisionEngineOptions) (*machinery.ObjectEngine, error) {
+	if err := validateRevisionEngineOpts(opts); err != nil {
+		return nil, err
+	}
+
+	if opts.OwnerStrategy == nil {
+		opts.OwnerStrategy = ownerhandling.NewNative(opts.Scheme)
+	}
+
+	comparator := machinery.NewComparator(
+		opts.OwnerStrategy, opts.DiscoveryClient,
+		opts.Scheme, opts.FieldOwner,
+	)
+
+	return machinery.NewObjectEngine(
+		opts.Scheme, opts.Reader, opts.Writer,
+		opts.OwnerStrategy, comparator, opts.FieldOwner, opts.SystemPrefix,
+	), nil
+}
