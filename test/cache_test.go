@@ -41,7 +41,7 @@ func TestManagedCacheStartStop(t *testing.T) {
 		cache.Options{},
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -114,7 +114,7 @@ func TestManagedCacheStartStop(t *testing.T) {
 
 	for _, owner := range owners {
 		t.Run("Owner_"+string(owner.GetUID()), func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// First get all objects in owned,
 			// then all except the last,
@@ -195,7 +195,7 @@ func TestManagedCacheStartStopRestart(t *testing.T) {
 		cache.Options{},
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	eg, ctx := errgroup.WithContext(ctx)
