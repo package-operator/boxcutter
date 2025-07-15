@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-type ownerStrategy interface {
+type OwnerStrategy interface {
 	// SetOwnerReference adds owner as OwnerReference to obj, with Controller set to false.
 	SetOwnerReference(owner, obj metav1.Object) error
 	// SetControllerReference adds owner as OwnerReference to obj, with Controller set to true.
@@ -31,6 +31,7 @@ type ownerStrategy interface {
 
 // Removes the given index from the slice.
 // does not perform an out-of-bounds check.
+// Modifies underlying array and does not preserve order.
 func remove[T any](s []T, i int) []T {
 	s[i] = s[len(s)-1]
 
