@@ -32,9 +32,6 @@ type TrackingCache interface {
 
 	// RemoveOtherInformers stops all informers that are not needed to watch the given list of object types.
 	RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error
-
-	// GetGVKs returns a list of GVKs known by this trackingCache.
-	GetGVKs() []schema.GroupVersionKind
 }
 
 type cacheSourcer interface {
@@ -113,14 +110,6 @@ func newTrackingCache(
 	wehc.Cache = c
 
 	return wehc, nil
-}
-
-// GetGVKs returns a list of GVKs known by this trackingCache.
-func (c *trackingCache) GetGVKs() []schema.GroupVersionKind {
-	c.accessLock.RLock()
-	defer c.accessLock.RUnlock()
-
-	return c.knownInformers.UnsortedList()
 }
 
 func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {

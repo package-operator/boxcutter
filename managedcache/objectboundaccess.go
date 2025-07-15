@@ -73,7 +73,7 @@ func NewObjectBoundAccessManager[T RefType](
 		cacheSourcer: &cacheSource{},
 		newClient:    client.New,
 
-		accessors:         map[accessManagerKey]accessorEntry{},
+		accessors:         map[types.UID]accessorEntry{},
 		accessorRequestCh: make(chan accessorRequest[T]),
 		accessorStopCh:    make(chan accessorRequest[T]),
 	}
@@ -103,22 +103,14 @@ type objectBoundAccessManagerImpl[T RefType] struct {
 	cacheSourcer cacheSourcer
 	newClient    newClientFunc
 
-	accessorsLock     sync.RWMutex
-	accessors         map[accessManagerKey]accessorEntry
+	accessors         map[types.UID]accessorEntry
 	accessorRequestCh chan accessorRequest[T]
 	accessorStopCh    chan accessorRequest[T]
 }
 
-type accessManagerKey struct {
-	// UID ensures a re-created object also gets it's own cache.
-	UID types.UID
-	schema.GroupVersionKind
-	client.ObjectKey
-}
-
 type accessorEntry struct {
 	accessor Accessor
-	users    map[accessManagerKey]sets.Set[schema.GroupVersionKind]
+	users    map[types.UID]sets.Set[schema.GroupVersionKind]
 	cancel   func()
 }
 
@@ -136,7 +128,7 @@ type accessorResponse struct {
 
 type cacheDone struct {
 	err error
-	key accessManagerKey
+	uid types.UID
 }
 
 // implements Accessor interface.
@@ -162,8 +154,11 @@ func (m *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 	for {
 		select {
 		case done := <-doneCh:
-			if err := m.handleCacheDone(ctx, done); err != nil {
-				return err
+			// Remove accessor from list.
+			delete(m.accessors, done.uid)
+
+			if done.err != nil && !errors.Is(done.err, context.Canceled) {
+				return fmt.Errorf("cache for UID %s crashed: %w", done.uid, done.err)
 			}
 
 		case req := <-m.accessorRequestCh:
@@ -196,36 +191,17 @@ func (m *objectBoundAccessManagerImpl[T]) Start(ctx context.Context) error {
 	}
 }
 
-func (m *objectBoundAccessManagerImpl[T]) handleCacheDone(
-	_ context.Context, done cacheDone,
-) error {
-	m.accessorsLock.Lock()
-	defer m.accessorsLock.Unlock()
-
-	// Remove accessor from list.
-	delete(m.accessors, done.key)
-
-	if done.err != nil && !errors.Is(done.err, context.Canceled) {
-		return fmt.Errorf("cache for Key %s crashed: %w", done.key, done.err)
-	}
-
-	return nil
-}
-
 func (m *objectBoundAccessManagerImpl[T]) handleAccessorStop(
 	ctx context.Context, req accessorRequest[T],
 ) error {
-	m.accessorsLock.Lock()
-	defer m.accessorsLock.Unlock()
-
-	cache, ok := m.accessors[toAccessManagerKey(req.owner)]
+	cache, ok := m.accessors[req.owner.GetUID()]
 	if !ok {
 		// nothing todo.
 		return nil
 	}
 
 	if req.user != nil {
-		delete(cache.users, toAccessManagerKey(req.user))
+		delete(cache.users, req.owner.GetUID())
 	}
 
 	return m.gcCache(ctx, req.owner)
@@ -234,9 +210,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorStop(
 func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) error {
 	log := logr.FromContextOrDiscard(ctx)
 
-	key := toAccessManagerKey(owner)
-
-	entry, ok := m.accessors[key]
+	entry, ok := m.accessors[owner.GetUID()]
 	if !ok {
 		return nil
 	}
@@ -245,7 +219,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 		// no users left -> close
 		log.Info("no users left, closing cache")
 		entry.cancel()
-		delete(m.accessors, key)
+		delete(m.accessors, owner.GetUID())
 
 		return nil
 	}
@@ -262,22 +236,18 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 	ctx context.Context, req accessorRequest[T],
 	doneCh chan<- cacheDone, wg *sync.WaitGroup,
 ) (Accessor, error) {
-	m.accessorsLock.Lock()
-	defer m.accessorsLock.Unlock()
-
 	log := logr.FromContextOrDiscard(ctx)
 	log = log.WithValues(
 		"ownerUID", req.owner.GetUID(),
 	)
 	ctx = logr.NewContext(ctx, log)
-	key := toAccessManagerKey(req.owner)
 
-	entry, ok := m.accessors[key]
+	entry, ok := m.accessors[req.owner.GetUID()]
 	if ok {
 		log.V(-1).Info("reusing cache for owner")
 
 		if req.user != nil {
-			entry.users[toAccessManagerKey(req.user)] = req.gvks
+			entry.users[req.user.GetUID()] = req.gvks
 		}
 
 		return entry.accessor, m.gcCache(ctx, req.owner)
@@ -311,25 +281,25 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 
 	entry = accessorEntry{
 		accessor: a,
-		users:    map[accessManagerKey]sets.Set[schema.GroupVersionKind]{},
+		users:    map[types.UID]sets.Set[schema.GroupVersionKind]{},
 		cancel:   cancel,
 	}
 	if req.user != nil {
-		entry.users[toAccessManagerKey(req.user)] = req.gvks
+		entry.users[req.user.GetUID()] = req.gvks
 		log = log.WithValues(
 			"userUID", req.user.GetUID(),
 			"usedForGVKs", req.gvks.UnsortedList(),
 		)
 	}
 
-	m.accessors[key] = entry
+	m.accessors[req.owner.GetUID()] = entry
 
 	log.V(-1).Info("starting new cache")
 	wg.Add(1)
 
 	go func(ctx context.Context, doneCh chan<- cacheDone) {
 		defer wg.Done()
-		doneCh <- cacheDone{key: key, err: ctrlcache.Start(ctx)}
+		doneCh <- cacheDone{uid: req.owner.GetUID(), err: ctrlcache.Start(ctx)}
 	}(ctx, doneCh)
 
 	return a, nil
@@ -410,30 +380,4 @@ func (m *objectBoundAccessManagerImpl[T]) FreeWithUser(ctx context.Context, owne
 	_, err := m.request(ctx, m.accessorStopCh, req)
 
 	return err
-}
-
-func (m *objectBoundAccessManagerImpl[T]) getWatchersForGVK(gvk schema.GroupVersionKind) (out []accessManagerKey) {
-	m.accessorsLock.RLock()
-	defer m.accessorsLock.RUnlock()
-
-	for k, a := range m.accessors {
-		if !sets.New(a.accessor.GetGVKs()...).Has(gvk) {
-			continue
-		}
-
-		out = append(out, k)
-		for u := range a.users {
-			out = append(out, u)
-		}
-	}
-
-	return out
-}
-
-func toAccessManagerKey[T RefType](owner T) accessManagerKey {
-	return accessManagerKey{
-		UID:              owner.GetUID(),
-		ObjectKey:        client.ObjectKeyFromObject(owner),
-		GroupVersionKind: owner.GetObjectKind().GroupVersionKind(),
-	}
 }
