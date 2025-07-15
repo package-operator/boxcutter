@@ -48,8 +48,7 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{}, nil)
 
-	ctx := context.Background()
-	res, err := re.Teardown(ctx, rev)
+	res, err := re.Teardown(t.Context(), rev)
 	require.NoError(t, err)
 
 	assert.True(t, res.IsComplete())
@@ -102,8 +101,7 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 			{},
 		}}, nil)
 
-	ctx := context.Background()
-	res, err := re.Teardown(ctx, rev)
+	res, err := re.Teardown(t.Context(), rev)
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete())
