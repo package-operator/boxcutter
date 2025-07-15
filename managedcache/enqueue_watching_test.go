@@ -1,7 +1,6 @@
 package managedcache
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -50,7 +49,7 @@ func TestEnqueueWatchingObjects(t *testing.T) {
 	})
 
 	h := NewEnqueueWatchingObjects(ownerRefGetter, &corev1.ConfigMap{}, scheme)
-	h.Create(context.Background(), event.CreateEvent{
+	h.Create(t.Context(), event.CreateEvent{
 		Object: &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test",
