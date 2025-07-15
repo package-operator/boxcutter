@@ -23,7 +23,7 @@ func TestObjectEngine(t *testing.T) {
 		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "oe-owner",
@@ -32,7 +32,8 @@ func TestObjectEngine(t *testing.T) {
 	}
 	require.NoError(t, Client.Create(ctx, owner, client.FieldOwner(fieldOwner)))
 	t.Cleanup(func() {
-		if err := Client.Delete(ctx, owner); err != nil {
+		//nolint:usetesting
+		if err := Client.Delete(context.Background(), owner); err != nil {
 			t.Error(err)
 		}
 	})

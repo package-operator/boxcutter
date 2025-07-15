@@ -3,7 +3,6 @@
 package boxcutter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -22,11 +21,11 @@ import (
 )
 
 func TestCollisionProtectionPreventUnowned(t *testing.T) {
-	ctx := logr.NewContext(context.Background(), testr.New(t))
+	ctx := logr.NewContext(t.Context(), testr.New(t))
 
 	owner := newConfigMap("test-collision-prevention-prevent-unowned-cm-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, owner))
-	cleanupOnSuccess(ctx, t, owner)
+	cleanupOnSuccess(t, owner)
 
 	existing := newConfigMap("test-collision-prevention-prevent-unowned-cm", map[string]string{
 		"banana": "bread",
@@ -34,7 +33,7 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 	colliding := existing.DeepCopy()
 
 	require.NoError(t, Client.Create(ctx, existing))
-	cleanupOnSuccess(ctx, t, existing)
+	cleanupOnSuccess(t, existing)
 
 	colliding.Data["apple"] = "pie"
 
@@ -68,18 +67,18 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 }
 
 func TestCollisionProtectionPreventOwned(t *testing.T) {
-	ctx := logr.NewContext(context.Background(), testr.New(t))
+	ctx := logr.NewContext(t.Context(), testr.New(t))
 
 	existingOwner := newConfigMap("test-collision-prevention-prevent-owned-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, existingOwner))
-	cleanupOnSuccess(ctx, t, existingOwner)
+	cleanupOnSuccess(t, existingOwner)
 
 	existing := newConfigMap("test-collision-prevention-prevent-owned-cm", map[string]string{
 		"banana": "bread",
 	})
 	require.NoError(t, controllerutil.SetControllerReference(existingOwner, existing, Scheme))
 	require.NoError(t, Client.Create(ctx, existing))
-	cleanupOnSuccess(ctx, t, existing)
+	cleanupOnSuccess(t, existing)
 
 	colliding := newConfigMap("test-collision-prevention-prevent-owned-cm", map[string]string{
 		"banana": "bread",
@@ -88,7 +87,7 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 
 	owner := newConfigMap("test-collision-prevention-prevent-owned-cm-owner", map[string]string{})
 	require.NoError(t, Client.Create(ctx, owner))
-	cleanupOnSuccess(ctx, t, owner)
+	cleanupOnSuccess(t, owner)
 
 	re := newTestRevisionEngine()
 	res, err := re.Reconcile(ctx, types.Revision{

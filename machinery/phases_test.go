@@ -53,8 +53,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
-	ctx := context.Background()
-	_, err := pe.Reconcile(ctx, owner, revision, types.Phase{
+	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -97,8 +96,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
 
-	ctx := context.Background()
-	_, err := pe.Reconcile(ctx, owner, revision, types.Phase{
+	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -142,8 +140,7 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything, mock.Anything).
 		Return(true, nil)
 
-	ctx := context.Background()
-	deleted, err := pe.Teardown(ctx, owner, revision, types.Phase{
+	deleted, err := pe.Teardown(t.Context(), owner, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj, *obj,
