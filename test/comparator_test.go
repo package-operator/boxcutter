@@ -38,16 +38,17 @@ func TestComparator(t *testing.T) {
 	comp := machinery.NewComparator(
 		os, DiscoveryClient, Scheme, fieldOwner)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "owner",
 			Namespace: "default",
 		},
 	}
-	require.NoError(t, Client.Create(ctx, owner, client.FieldOwner(fieldOwner)))
+	require.NoError(t, Client.Create(t.Context(), owner, client.FieldOwner(fieldOwner)))
 	t.Cleanup(func() {
-		if err := Client.Delete(ctx, owner); err != nil {
+		//nolint:usetesting
+		if err := Client.Delete(context.Background(), owner); err != nil {
 			t.Error(err)
 		}
 	})

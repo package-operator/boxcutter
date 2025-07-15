@@ -3,7 +3,6 @@
 package boxcutter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -27,11 +26,11 @@ func TestWithOwnerReference(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			ctx := logr.NewContext(context.Background(), testr.New(t))
+			ctx := logr.NewContext(t.Context(), testr.New(t))
 
 			owner := newConfigMap("test-preflight-validation-owner-reference-owner", map[string]string{})
 			require.NoError(t, Client.Create(ctx, owner))
-			cleanupOnSuccess(ctx, t, owner)
+			cleanupOnSuccess(t, owner)
 
 			invalid := newConfigMap("test-preflight-validation-owner-reference-cm", map[string]string{
 				"banana": "bread",

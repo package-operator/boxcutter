@@ -77,13 +77,14 @@ func TestRevisionEngine(t *testing.T) {
 	rval := validation.NewRevisionValidator()
 	re := machinery.NewRevisionEngine(pe, rval, Client)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Owner has to be there first:
 	err := Client.Create(ctx, revOwner)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, Client.Delete(ctx, revOwner))
+		//nolint:usetesting
+		require.NoError(t, Client.Delete(context.Background(), revOwner))
 	})
 
 	// Test execution
