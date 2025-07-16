@@ -835,10 +835,8 @@ func TestObjectEngine(t *testing.T) {
 
 			test.mockSetup(cache, writer, divergeDetector)
 
-			//nolint:usetesting
-			ctx := context.Background()
 			res, err := oe.Reconcile(
-				ctx, owner, 1, test.desiredObject,
+				t.Context(), owner, 1, test.desiredObject,
 				test.opts...,
 			)
 			require.NoError(t, err)
