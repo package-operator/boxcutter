@@ -112,3 +112,15 @@ func newConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 		Data: data,
 	}
 }
+
+func ignoreContextCanceled(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+
+	return err
+}
+
+func deepCopyClientObject(obj client.Object) client.Object {
+	return obj.DeepCopyObject().(client.Object)
+}
