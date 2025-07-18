@@ -32,6 +32,9 @@ type TrackingCache interface {
 
 	// RemoveOtherInformers stops all informers that are not needed to watch the given list of object types.
 	RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error
+
+	// GetGVKs returns a list of GVKs known by this trackingCache.
+	GetGVKs() []schema.GroupVersionKind
 }
 
 type cacheSourcer interface {
@@ -112,6 +115,14 @@ func newTrackingCache(
 	return wehc, nil
 }
 
+// GetGVKs returns a list of GVKs known by this trackingCache.
+func (c *trackingCache) GetGVKs() []schema.GroupVersionKind {
+	c.accessLock.RLock()
+	defer c.accessLock.RUnlock()
+
+	return c.knownInformers.UnsortedList()
+}
+
 func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
 	return c.cacheSourcer.Source(handler, predicates...)
 }
@@ -130,10 +141,15 @@ func (c *trackingCache) Start(ctx context.Context) error {
 		case res := <-c.informerSyncCh:
 			for _, errCh := range c.waitingForSync[res.gvk] {
 				errCh <- res.err
+				// TODO: figure out if we should close channels here?
 			}
 
 			delete(c.waitingForSync, res.gvk)
-			delete(c.cacheWaitInFlight, res.gvk)
+
+			if _, ok := c.cacheWaitInFlight[res.gvk]; ok {
+				close(c.cacheWaitInFlight[res.gvk])
+				delete(c.cacheWaitInFlight, res.gvk)
+			}
 
 		case req := <-c.gvkRequestCh:
 			req.do(ctx)
@@ -222,6 +238,8 @@ func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.Obj
 
 func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	errCh := make(chan error, 1)
+	defer close(errCh)
+
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx).WithValues("gvk", gvk)
@@ -404,7 +422,11 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 
 					return
 				}
-				close(c.cacheWaitInFlight[gvkToStop])
+
+				if _, ok := c.cacheWaitInFlight[gvkToStop]; ok {
+					close(c.cacheWaitInFlight[gvkToStop])
+					delete(c.cacheWaitInFlight, gvkToStop)
+				}
 				c.knownInformers.Delete(gvkToStop)
 			}
 			close(errCh)
