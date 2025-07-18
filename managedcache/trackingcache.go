@@ -141,10 +141,15 @@ func (c *trackingCache) Start(ctx context.Context) error {
 		case res := <-c.informerSyncCh:
 			for _, errCh := range c.waitingForSync[res.gvk] {
 				errCh <- res.err
+				// TODO: figure out if we should close channels here?
 			}
 
 			delete(c.waitingForSync, res.gvk)
-			delete(c.cacheWaitInFlight, res.gvk)
+
+			if _, ok := c.cacheWaitInFlight[res.gvk]; ok {
+				close(c.cacheWaitInFlight[res.gvk])
+				delete(c.cacheWaitInFlight, res.gvk)
+			}
 
 		case req := <-c.gvkRequestCh:
 			req.do(ctx)
