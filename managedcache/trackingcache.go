@@ -415,7 +415,11 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 
 					return
 				}
-				close(c.cacheWaitInFlight[gvkToStop])
+
+				if _, ok := c.cacheWaitInFlight[gvkToStop]; ok {
+					close(c.cacheWaitInFlight[gvkToStop])
+					delete(c.cacheWaitInFlight, gvkToStop)
+				}
 				c.knownInformers.Delete(gvkToStop)
 			}
 			close(errCh)
