@@ -233,6 +233,8 @@ func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.Obj
 
 func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	errCh := make(chan error, 1)
+	defer close(errCh)
+
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx).WithValues("gvk", gvk)
