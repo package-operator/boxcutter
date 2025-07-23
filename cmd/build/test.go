@@ -33,11 +33,6 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 		"KUBECONFIG":  kubeconfigPath,
 	}
 
-	if env["PKO_TEST_LATEST_BOOTSTRAP_JOB"] == "" {
-		url := "https://github.com/package-operator/package-operator/releases/latest/download/self-bootstrap-job.yaml"
-		env["PKO_TEST_LATEST_BOOTSTRAP_JOB"] = url
-	}
-
 	if err := os.MkdirAll(filepath.Join(cacheDir, "integration"), 0o755); err != nil {
 		return err
 	}
