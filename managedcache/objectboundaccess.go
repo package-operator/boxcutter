@@ -48,6 +48,8 @@ type ObjectBoundAccessManager[T RefType] interface {
 
 	// Source returns a controller-runtime source to watch from a controller.
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
+
+	readAccessors(reader func(owner types.UID, accessor Accessor))
 }
 
 // Accessor provides write and cached read access to the cluster.
@@ -380,4 +382,10 @@ func (m *objectBoundAccessManagerImpl[T]) FreeWithUser(ctx context.Context, owne
 	_, err := m.request(ctx, m.accessorStopCh, req)
 
 	return err
+}
+
+func (m *objectBoundAccessManagerImpl[T]) readAccessors(reader func(owner types.UID, accessor Accessor)) {
+	for owner, entry := range m.accessors {
+		reader(owner, entry.accessor)
+	}
 }
