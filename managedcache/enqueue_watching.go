@@ -41,7 +41,7 @@ func NewEnqueueWatchingObjects(watcherRefGetter ownerRefGetter,
 	if err := e.parseWatcherTypeGroupKind(scheme); err != nil {
 		// This (passing a type that is not in the scheme) HAS
 		// to be a programmer error and can't be recovered at runtime anyways.
-		panic(err)
+		panic(fmt.Errorf("setting up NewEnqueueWatchingObjects: %w", err))
 	}
 
 	return e
@@ -89,8 +89,7 @@ func (e *EnqueueWatchingObjects) enqueueWatchers(obj client.Object,
 
 	gvk, err := apiutil.GVKForObject(obj, e.scheme)
 	if err != nil {
-		// TODO: error reporting?
-		panic(err)
+		panic(fmt.Errorf("getting gvk for object %s in enqueueWatchers: %w", client.ObjectKeyFromObject(obj), err))
 	}
 
 	ownerRefs := e.WatcherRefGetter.GetWatchersForGVK(gvk)
@@ -115,11 +114,11 @@ func (e *EnqueueWatchingObjects) parseWatcherTypeGroupKind(scheme *runtime.Schem
 	// Get the kinds of the type
 	kinds, _, err := scheme.ObjectKinds(e.WatcherType)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting object kinds from watchertype: %w", err)
 	}
-	// Expect only 1 kind.  If there is more than one kind this is probably an edge case such as ListOptions.
+	// Expect only 1 kind. If there is more than one kind this is probably an edge case such as ListOptions.
 	if len(kinds) != 1 {
-		panic(fmt.Sprintf("Expected exactly 1 kind for WatcherType %T, but found %s kinds", e.WatcherType, kinds))
+		return fmt.Errorf("expected exactly 1 kind for WatcherType %T, but found %s kinds", e.WatcherType, kinds)
 	}
 	// Cache the Group and Kind for the WatcherType
 	e.groupKind = schema.GroupKind{Group: kinds[0].Group, Kind: kinds[0].Kind}
