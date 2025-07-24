@@ -25,11 +25,11 @@ func TestEnqueueWatchingObjects(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 
 	ownerRefGetter.
-		On("getWatchersForGVK", schema.GroupVersionKind{
+		On("GetWatchersForGVK", schema.GroupVersionKind{
 			Version: "v1",
 			Kind:    "Secret",
 		}).
-		Return([]accessManagerKey{
+		Return([]AccessManagerKey{
 			{
 				GroupVersionKind: schema.GroupVersionKind{
 					Kind: "ConfigMap",
@@ -67,10 +67,10 @@ type ownerRefGetterMock struct {
 	mock.Mock
 }
 
-func (m *ownerRefGetterMock) getWatchersForGVK(gvk schema.GroupVersionKind) []accessManagerKey {
+func (m *ownerRefGetterMock) GetWatchersForGVK(gvk schema.GroupVersionKind) []AccessManagerKey {
 	args := m.Called(gvk)
 
-	return args.Get(0).([]accessManagerKey)
+	return args.Get(0).([]AccessManagerKey)
 }
 
 type typedRateLimitingQueueMock[T comparable] struct {

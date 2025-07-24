@@ -48,7 +48,7 @@ func NewEnqueueWatchingObjects(watcherRefGetter ownerRefGetter,
 }
 
 type ownerRefGetter interface {
-	getWatchersForGVK(gvk schema.GroupVersionKind) []accessManagerKey
+	GetWatchersForGVK(gvk schema.GroupVersionKind) []AccessManagerKey
 }
 
 // Create implements handler.EventHandler.
@@ -93,7 +93,7 @@ func (e *EnqueueWatchingObjects) enqueueWatchers(obj client.Object,
 		panic(err)
 	}
 
-	ownerRefs := e.WatcherRefGetter.getWatchersForGVK(gvk)
+	ownerRefs := e.WatcherRefGetter.GetWatchersForGVK(gvk)
 	for _, ownerRef := range ownerRefs {
 		if ownerRef.Kind != e.groupKind.Kind ||
 			ownerRef.Group != e.groupKind.Group {
