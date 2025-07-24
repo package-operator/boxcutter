@@ -31,7 +31,7 @@ type TrackingCache interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
 
 	// RemoveOtherInformers stops all informers that are not needed to watch the given list of object types.
-	RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error
+	RemoveOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error
 
 	// GetGVKs returns a list of GVKs known by this trackingCache.
 	GetGVKs() []schema.GroupVersionKind
@@ -391,7 +391,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	}
 }
 
-func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error {
+func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
@@ -399,10 +399,8 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx)
-			existingGVKs := sets.Set[schema.GroupVersionKind]{}
-			existingGVKs.Insert(gvks...)
 
-			gvksToStop := c.knownInformers.Difference(existingGVKs).UnsortedList()
+			gvksToStop := c.knownInformers.Difference(gvks).UnsortedList()
 			if len(gvksToStop) > 0 {
 				log.V(-1).Info("stopping informers", "gvks", gvksToStop)
 			}

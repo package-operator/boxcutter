@@ -258,7 +258,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 		inUseGVKs.Insert(gvks.UnsortedList()...)
 	}
 
-	return entry.accessor.RemoveOtherInformers(ctx, inUseGVKs.UnsortedList()...)
+	return entry.accessor.RemoveOtherInformers(ctx, inUseGVKs)
 }
 
 func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
