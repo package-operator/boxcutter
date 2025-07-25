@@ -90,9 +90,9 @@ func newTrackingCache(
 		cacheWaitInFlight: map[schema.GroupVersionKind]chan struct{}{},
 	}
 	errHandler := opts.DefaultWatchErrorHandler
-	opts.DefaultWatchErrorHandler = func(r *toolscache.Reflector, err error) {
+	opts.DefaultWatchErrorHandler = func(ctx context.Context, r *toolscache.Reflector, err error) {
 		if errHandler != nil {
-			errHandler(r, err)
+			errHandler(ctx, r, err)
 		}
 
 		if apistatus, ok := err.(apierrors.APIStatus); ok || errors.As(err, &apistatus) {
