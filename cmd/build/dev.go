@@ -62,6 +62,15 @@ func (dev *Dev) LintFix(_ context.Context, _ []string) error {
 	return lint.glciFix()
 }
 
+// Create creates the development cluster.
+func (dev *Dev) Create(ctx context.Context, _ []string) error {
+	self := run.Meth1(dev, dev.Create, []string{})
+
+	return mgr.SerialDeps(ctx, self,
+		run.Meth(cluster, cluster.Create),
+	)
+}
+
 // Destroy the local development cluster.
 func (dev *Dev) Destroy(ctx context.Context, _ []string) error {
 	self := run.Meth1(dev, dev.Destroy, []string{})

@@ -31,7 +31,7 @@ type TrackingCache interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
 
 	// RemoveOtherInformers stops all informers that are not needed to watch the given list of object types.
-	RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error
+	RemoveOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error
 
 	// GetGVKs returns a list of GVKs known by this trackingCache.
 	GetGVKs() []schema.GroupVersionKind
@@ -60,7 +60,14 @@ type trackingCache struct {
 	gvkRequestCh      chan trackingCacheRequest
 	informerSyncCh    chan informerSyncResponse
 	knownInformers    sets.Set[schema.GroupVersionKind]
-	waitingForSync    map[schema.GroupVersionKind][]chan error
+
+	// waitingForSync contains a slice of error channels for each GVK.
+	// The error channels are waiting for the initial cache sync of the GVK's associated informer.
+	waitingForSync map[schema.GroupVersionKind][]chan error
+
+	// cacheWaitInFlight contains a stop channel for each GVK that is currently waiting
+	// for an initial cache synchronization.
+	// The stop channel can be closed to interrupt the wait operation.
 	cacheWaitInFlight map[schema.GroupVersionKind]chan struct{}
 }
 
@@ -115,6 +122,14 @@ func newTrackingCache(
 	wehc.Cache = c
 
 	return wehc, nil
+}
+
+// GetGVKs returns a list of GVKs known by this trackingCache.
+func (c *trackingCache) GetGVKs() []schema.GroupVersionKind {
+	c.accessLock.RLock()
+	defer c.accessLock.RUnlock()
+
+	return c.knownInformers.UnsortedList()
 }
 
 func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
@@ -189,7 +204,11 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 				}
 
 				delete(c.waitingForSync, waitingGvk)
-				close(c.cacheWaitInFlight[waitingGvk])
+
+				if _, ok := c.cacheWaitInFlight[waitingGvk]; ok {
+					close(c.cacheWaitInFlight[waitingGvk])
+					delete(c.cacheWaitInFlight, waitingGvk)
+				}
 			}
 		}
 	}
@@ -227,12 +246,17 @@ func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.Obj
 
 func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	errCh := make(chan error, 1)
+	// This goroutine MUST NOT defer close(errCh),
+	// because it's context could be canceled and the .Start()
+	// goroutine could try to send a response, which makes it panic.
+
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx).WithValues("gvk", gvk)
+
+			// If others are already waiting on the same informer to sync.
 			if _, ok := c.waitingForSync[gvk]; ok {
-				// other are already waiting on the same informer to sync.
-				// -> don't start another WaitForCacheSync
+				// -> don't start another WaitForCacheSync and instead queue up in c.waitingForSync[gvk].
 				log.V(-1).Info("new call waiting for WaitForCacheSync already in flight")
 				c.waitingForSync[gvk] = append(c.waitingForSync[gvk], errCh)
 
@@ -248,6 +272,7 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				return
 			}
 
+			// If informer is new, store it in c.knownInformers and register event sources.
 			isNewInformer := !c.knownInformers.Has(gvk)
 			if isNewInformer {
 				c.knownInformers.Insert(gvk)
@@ -258,17 +283,20 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 				}
 			}
 
-			c.waitingForSync[gvk] = append(c.waitingForSync[gvk], errCh)
-			if _, ok := c.cacheWaitInFlight[gvk]; ok {
+			// Return early if informer has already synced.
+			if i.HasSynced() {
+				errCh <- nil
+
 				return
 			}
+
+			// Register request as waiting for sync.
+			c.waitingForSync[gvk] = []chan error{errCh}
 
 			stopCh := make(chan struct{})
 			c.cacheWaitInFlight[gvk] = stopCh
 			go func() {
-				if isNewInformer {
-					log.V(-1).Info("waiting for new informer to sync")
-				}
+				log.V(-1).Info("waiting for new informer to sync")
 				if toolscache.WaitForCacheSync(stopCh, i.HasSynced) {
 					log.V(-1).Info("informer synced successfully")
 					c.informerSyncCh <- informerSyncResponse{gvk: gvk, err: nil}
@@ -360,6 +388,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	}
 
 	errCh := make(chan error, 1)
+	defer close(errCh)
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx)
@@ -371,9 +400,11 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 			}
 
 			log.V(-1).Info("stopping informers", "gvk", gvk)
-			close(errCh)
+
 			close(c.cacheWaitInFlight[gvk])
 			c.knownInformers.Delete(gvk)
+
+			errCh <- nil
 		},
 	}
 
@@ -385,18 +416,18 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	}
 }
 
-func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema.GroupVersionKind) error {
+func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
 	errCh := make(chan error, 1)
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
-			log := logr.FromContextOrDiscard(ctx)
-			existingGVKs := sets.Set[schema.GroupVersionKind]{}
-			existingGVKs.Insert(gvks...)
+			defer close(errCh)
 
-			gvksToStop := c.knownInformers.Difference(existingGVKs).UnsortedList()
+			log := logr.FromContextOrDiscard(ctx)
+
+			gvksToStop := c.knownInformers.Difference(gvks).UnsortedList()
 			if len(gvksToStop) > 0 {
 				log.V(-1).Info("stopping informers", "gvks", gvksToStop)
 			}
@@ -409,10 +440,13 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 
 					return
 				}
-				close(c.cacheWaitInFlight[gvkToStop])
+
+				if _, ok := c.cacheWaitInFlight[gvkToStop]; ok {
+					close(c.cacheWaitInFlight[gvkToStop])
+					delete(c.cacheWaitInFlight, gvkToStop)
+				}
 				c.knownInformers.Delete(gvkToStop)
 			}
-			close(errCh)
 		},
 	}
 
@@ -422,13 +456,6 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks ...schema
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-// GetGVKs returns a list of GVKs known by this trackingCache.
-func (c *trackingCache) GetGVKs() []schema.GroupVersionKind {
-	c.accessLock.RLock()
-	defer c.accessLock.RUnlock()
-	return c.knownInformers.UnsortedList()
 }
 
 func (c *trackingCache) getObjectsPerInformer(ctx context.Context) map[schema.GroupVersionKind]int {
