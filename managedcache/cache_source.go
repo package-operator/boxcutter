@@ -12,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const cacheStringOutput = "managedcache.CacheSource"
+
 type cacheSettings struct {
 	source     *cacheSource
 	handler    handler.EventHandler
@@ -19,7 +21,7 @@ type cacheSettings struct {
 }
 
 // For printing in startup log messages.
-func (e cacheSettings) String() string { return "managedcache.CacheSource" }
+func (e cacheSettings) String() string { return cacheStringOutput }
 
 var _ source.Source = (*cacheSettings)(nil)
 
@@ -32,23 +34,14 @@ type eventHandler struct {
 
 // Implements source.Source interface to be used as event source when setting up controllers.
 func (e cacheSettings) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
-	e.source.mu.Lock()
-	defer e.source.mu.Unlock()
-
-	if e.source.blockNew {
-		panic("Trying to add EventHandlers to managedcache.CacheSource after manager start")
-	}
-
-	e.source.handlers = append(e.source.handlers, eventHandler{ctx, queue, e.handler, e.predicates})
-
-	return nil
+	return e.source.handleNewEventHandlerStart(ctx, queue, e)
 }
 
 type cacheSource struct {
-	mu       sync.RWMutex
-	handlers []eventHandler
-	blockNew bool
-	settings []cacheSettings
+	mu        sync.Mutex
+	handlers  []eventHandler
+	informers []cache.Informer
+	settings  []cacheSettings
 }
 
 func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
@@ -59,30 +52,38 @@ func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predica
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.blockNew {
-		panic("Trying to add EventHandlers to managedcache.CacheSource after manager start")
-	}
-
 	s := cacheSettings{e, handler, predicates}
 	e.settings = append(e.settings, s)
 
 	return s
 }
 
-// Disables registration of new EventHandlers.
-func (e *cacheSource) blockNewRegistrations() {
+func (e *cacheSource) handleNewEventHandlerStart(
+	ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request],
+	settings cacheSettings,
+) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.blockNew = true
+
+	e.handlers = append(e.handlers, eventHandler{ctx, queue, settings.handler, settings.predicates})
+
+	// ensure to connect all informers with the new handler
+	for _, i := range e.informers {
+		s := source.Informer{Informer: i, Handler: settings.handler, Predicates: settings.predicates}
+		if err := s.Start(ctx, queue); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Adds all registered EventHandlers to the given informer.
 func (e *cacheSource) handleNewInformer(informer cache.Informer) error {
-	// this read lock should not be needed,
-	// because the cacheSource should block registration
-	// of new event handlers at this point
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.informers = append(e.informers, informer)
 
 	// ensure to add all event handlers to the new informer
 	for _, eh := range e.handlers {
