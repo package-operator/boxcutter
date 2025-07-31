@@ -161,6 +161,15 @@ func TestComparator_Unstructured(t *testing.T) {
 					},
 				},
 			},
+			// Status dropped in strip set due to presence of /status subresource.
+			"status": map[string]interface{}{
+				"conditions": []interface{}{
+					map[string]interface{}{
+						"type":   "Ready",
+						"status": "True",
+					},
+				},
+			},
 		},
 	}
 	err = n.SetControllerReference(owner, pod)
@@ -371,6 +380,15 @@ func TestComparator_Structured(t *testing.T) {
 							Value: "xxx",
 						},
 					},
+				},
+			},
+		},
+		// Status dropped in strip set due to presence of /status subresource.
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   "Ready",
+					Status: corev1.ConditionTrue,
 				},
 			},
 		},
@@ -611,6 +629,60 @@ func Test_openAPICanonicalName(t *testing.T) {
 			cn, err := openAPICanonicalName(&test.obj)
 			require.NoError(t, err)
 			assert.Equal(t, test.cn, cn)
+		})
+	}
+}
+
+func Test_hasStatusSubresource(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		openAPI  *spec3.OpenAPI
+		expected bool
+	}{
+		{
+			name:     "nil paths",
+			openAPI:  &spec3.OpenAPI{},
+			expected: false,
+		},
+		{
+			name: "no paths",
+			openAPI: &spec3.OpenAPI{
+				Paths: &spec3.Paths{},
+			},
+			expected: false,
+		},
+		{
+			name: "no status path",
+			openAPI: &spec3.OpenAPI{
+				Paths: &spec3.Paths{
+					Paths: map[string]*spec3.Path{
+						"/api/v1/namespaces/{namespace}/pods/{name}": nil,
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "with status path",
+			openAPI: &spec3.OpenAPI{
+				Paths: &spec3.Paths{
+					Paths: map[string]*spec3.Path{
+						"/api/v1/namespaces/{namespace}/pods/{name}/status": nil,
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := hasStatusSubresource(test.openAPI)
+			assert.Equal(t, test.expected, r)
 		})
 	}
 }

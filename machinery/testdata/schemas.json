@@ -1,4 +1,7 @@
 {
+  "paths": {
+    "/api/v1/namespaces/{namespace}/pods/{name}/status": {}
+  },
   "components": {
     "schemas": {
       "io.k8s.api.core.v1.Pod": {

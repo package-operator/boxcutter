@@ -224,22 +224,6 @@ Comparison:
   .spec.template.spec.containers[name="app"].imagePullPolicy
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
-  .status.observedGeneration
-  .status.replicas
-  .status.unavailableReplicas
-  .status.updatedReplicas
-  .status.conditions[type="Available"].lastTransitionTime
-  .status.conditions[type="Available"].lastUpdateTime
-  .status.conditions[type="Available"].message
-  .status.conditions[type="Available"].reason
-  .status.conditions[type="Available"].status
-  .status.conditions[type="Available"].type
-  .status.conditions[type="Progressing"].lastTransitionTime
-  .status.conditions[type="Progressing"].lastUpdateTime
-  .status.conditions[type="Progressing"].message
-  .status.conditions[type="Progressing"].reason
-  .status.conditions[type="Progressing"].status
-  .status.conditions[type="Progressing"].type
 - Modified:
   .spec.template.spec.containers[name="app"].image
 `,
@@ -296,22 +280,6 @@ Comparison:
   .spec.template.spec.containers[name="app"].imagePullPolicy
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
-  .status.observedGeneration
-  .status.replicas
-  .status.unavailableReplicas
-  .status.updatedReplicas
-  .status.conditions[type="Available"].lastTransitionTime
-  .status.conditions[type="Available"].lastUpdateTime
-  .status.conditions[type="Available"].message
-  .status.conditions[type="Available"].reason
-  .status.conditions[type="Available"].status
-  .status.conditions[type="Available"].type
-  .status.conditions[type="Progressing"].lastTransitionTime
-  .status.conditions[type="Progressing"].lastUpdateTime
-  .status.conditions[type="Progressing"].message
-  .status.conditions[type="Progressing"].reason
-  .status.conditions[type="Progressing"].status
-  .status.conditions[type="Progressing"].type
 - Modified:
   .spec.replicas
   .spec.template.spec.containers[name="app"].image
@@ -387,22 +355,6 @@ Comparison:
   .spec.template.spec.containers[name="app"].imagePullPolicy
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
-  .status.observedGeneration
-  .status.replicas
-  .status.unavailableReplicas
-  .status.updatedReplicas
-  .status.conditions[type="Available"].lastTransitionTime
-  .status.conditions[type="Available"].lastUpdateTime
-  .status.conditions[type="Available"].message
-  .status.conditions[type="Available"].reason
-  .status.conditions[type="Available"].status
-  .status.conditions[type="Available"].type
-  .status.conditions[type="Progressing"].lastTransitionTime
-  .status.conditions[type="Progressing"].lastUpdateTime
-  .status.conditions[type="Progressing"].message
-  .status.conditions[type="Progressing"].reason
-  .status.conditions[type="Progressing"].status
-  .status.conditions[type="Progressing"].type
 - Modified:
   .spec.replicas
   .spec.template.spec.containers[name="app"].image
