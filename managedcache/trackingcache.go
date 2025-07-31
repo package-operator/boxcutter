@@ -101,6 +101,8 @@ func newTrackingCache(
 	}
 	errHandler := opts.DefaultWatchErrorHandler
 	opts.DefaultWatchErrorHandler = func(ctx context.Context, r *toolscache.Reflector, err error) {
+		log.V(-1).Info("error in reflector", "typeDescription", r.TypeDescription(), "err", err)
+
 		if errHandler != nil {
 			errHandler(ctx, r, err)
 		}
