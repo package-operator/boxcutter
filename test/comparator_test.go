@@ -23,6 +23,7 @@ import (
 // sanitizeCompareResult ensures that the managed field list of kube-controller-manager is consistent.
 //
 // kube-controller-manager sometimes reports .metadata.annotations as managed on CI, sometimes not.
+// TODO(erdii): can we track an upstream issue or an issue on our side here?
 func sanitizeCompareResult(r *machinery.CompareResult) {
 	for i := range r.OtherManagers {
 		manager := r.OtherManagers[i]

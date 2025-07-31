@@ -34,7 +34,7 @@ type ObjectValidator struct {
 	allowNamespaceEscalation bool
 }
 
-// NewClusterObjectValidator returns an ObjectValidator for cross-cluster deployments.
+// NewClusterObjectValidator returns an ObjectValidator for cluster-scoped deployments.
 func NewClusterObjectValidator(
 	restMapper restMapper,
 	writer client.Writer,
