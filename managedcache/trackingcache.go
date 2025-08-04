@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
@@ -23,7 +24,7 @@ import (
 )
 
 // TrackingCache is a cache remembering what objects are being cached and
-// allowing to stop caches no longer needed.
+// allows to stop caches/informers that are no longer needed.
 type TrackingCache interface {
 	cache.Cache
 
@@ -35,6 +36,9 @@ type TrackingCache interface {
 
 	// GetGVKs returns a list of GVKs known by this trackingCache.
 	GetGVKs() []schema.GroupVersionKind
+
+	Watch(ctx context.Context, user client.Object, gvks sets.Set[schema.GroupVersionKind]) error
+	Free(ctx context.Context, user client.Object) error
 }
 
 type cacheSourcer interface {
@@ -48,6 +52,7 @@ type trackingCache struct {
 	log          logr.Logger
 	restMapper   meta.RESTMapper
 	cacheSourcer cacheSourcer
+	scheme       *runtime.Scheme
 
 	// Guards against informers getting removed
 	// while someone is still reading.
@@ -66,6 +71,10 @@ type trackingCache struct {
 	// for an initial cache synchronization.
 	// The stop channel can be closed to interrupt the wait operation.
 	cacheWaitInFlight map[schema.GroupVersionKind]chan struct{}
+
+	// Watches by user
+	watchesByUser     map[AccessManagerKey]sets.Set[schema.GroupVersionKind]
+	watchesByUserLock sync.Mutex
 }
 
 type informerSyncResponse struct {
@@ -77,19 +86,22 @@ type trackingCacheRequest struct {
 	do func(ctx context.Context)
 }
 
+type newCacheFn func(cfg *rest.Config, opts cache.Options) (cache.Cache, error)
+
 // NewTrackingCache returns a new TrackingCache instance.
 func NewTrackingCache(log logr.Logger, config *rest.Config, opts cache.Options) (TrackingCache, error) {
-	return newTrackingCache(log, &cacheSource{}, config, opts)
+	return newTrackingCache(log, &cacheSource{}, cache.New, config, opts)
 }
 
 func newTrackingCache(
-	log logr.Logger, cacheSourcer cacheSourcer,
+	log logr.Logger, cacheSourcer cacheSourcer, newCache newCacheFn,
 	config *rest.Config, opts cache.Options,
 ) (TrackingCache, error) {
 	wehc := &trackingCache{
 		log:          log.WithName("TrackingCache"),
 		restMapper:   opts.Mapper,
 		cacheSourcer: cacheSourcer,
+		scheme:       opts.Scheme,
 
 		cacheWatchErrorCh: make(chan error),
 		gvkRequestCh:      make(chan trackingCacheRequest),
@@ -97,10 +109,11 @@ func newTrackingCache(
 		knownInformers:    sets.Set[schema.GroupVersionKind]{},
 		waitingForSync:    map[schema.GroupVersionKind][]chan error{},
 		cacheWaitInFlight: map[schema.GroupVersionKind]chan struct{}{},
+		watchesByUser:     map[AccessManagerKey]sets.Set[schema.GroupVersionKind]{},
 	}
 	errHandler := opts.DefaultWatchErrorHandler
 	opts.DefaultWatchErrorHandler = func(ctx context.Context, r *toolscache.Reflector, err error) {
-		log.V(-1).Info("error in reflector", "typeDescription", r.TypeDescription(), "err", err)
+		wehc.log.V(-1).Info("error in reflector", "typeDescription", r.TypeDescription(), "err", err)
 
 		if errHandler != nil {
 			errHandler(ctx, r, err)
@@ -113,7 +126,7 @@ func newTrackingCache(
 		}
 	}
 
-	c, err := cache.New(config, opts)
+	c, err := newCache(config, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +228,7 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 }
 
 func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) error {
-	gvk, err := gvkForObject(obj)
+	gvk, err := gvkForObject(c.scheme, obj)
 	if err != nil {
 		return err
 	}
@@ -228,7 +241,7 @@ func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) 
 }
 
 func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.ObjectList) error {
-	gvk, err := gvkForObject(list)
+	gvk, err := gvkForObject(c.scheme, list)
 	if err != nil {
 		return err
 	}
@@ -251,7 +264,6 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
 			log := logr.FromContextOrDiscard(ctx).WithValues("gvk", gvk)
-
 			// If others are already waiting on the same informer to sync.
 			if _, ok := c.waitingForSync[gvk]; ok {
 				// -> don't start another WaitForCacheSync and instead queue up in c.waitingForSync[gvk].
@@ -380,7 +392,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
-	gvk, err := gvkForObject(obj)
+	gvk, err := gvkForObject(c.scheme, obj)
 	if err != nil {
 		return err
 	}
@@ -399,7 +411,10 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 
 			log.V(-1).Info("stopping informers", "gvk", gvk)
 
-			close(c.cacheWaitInFlight[gvk])
+			if _, ok := c.cacheWaitInFlight[gvk]; ok {
+				close(c.cacheWaitInFlight[gvk])
+				delete(c.cacheWaitInFlight, gvk)
+			}
 			c.knownInformers.Delete(gvk)
 
 			errCh <- nil
@@ -418,6 +433,10 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
+	return c.removeOtherInformers(ctx, gvks)
+}
+
+func (c *trackingCache) removeOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
 	errCh := make(chan error, 1)
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
@@ -454,4 +473,62 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (c *trackingCache) Watch(ctx context.Context, user client.Object, gvks sets.Set[schema.GroupVersionKind]) error {
+	if err := c.watch(ctx, gvks); err != nil {
+		return err
+	}
+
+	c.watchesByUserLock.Lock()
+	defer c.watchesByUserLock.Unlock()
+	c.watchesByUser[toAccessManagerKey(user)] = gvks
+
+	c.accessLock.Lock()
+	defer c.accessLock.Unlock()
+
+	if err := c.gcUnusedGVK(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *trackingCache) watch(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
+	c.accessLock.RLock()
+	defer c.accessLock.RUnlock()
+
+	for _, gvk := range gvks.UnsortedList() {
+		if err := c.ensureCacheSyncForGVK(ctx, gvk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *trackingCache) Free(ctx context.Context, user client.Object) error {
+	c.watchesByUserLock.Lock()
+	defer c.watchesByUserLock.Unlock()
+	delete(c.watchesByUser, toAccessManagerKey(user))
+
+	c.accessLock.Lock()
+	defer c.accessLock.Unlock()
+
+	if err := c.gcUnusedGVK(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// gcUnusedGVK garbage collects informers that are no longer in use by any user by stopping them.
+// Warning: Needs a lock on c.accessLock and c.watchesByUserLock.
+func (c *trackingCache) gcUnusedGVK(ctx context.Context) error {
+	gvksInUse := sets.New[schema.GroupVersionKind]()
+	for _, gvks := range c.watchesByUser {
+		gvksInUse.Insert(gvks.UnsortedList()...)
+	}
+
+	return c.removeOtherInformers(ctx, gvksInUse)
 }

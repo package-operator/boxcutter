@@ -292,7 +292,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 		return nil, fmt.Errorf("mapping rest.Config and cache.Options: %w", err)
 	}
 
-	ctrlcache, err := newTrackingCache(m.log, m.cacheSourcer, restConfig, cacheOpts)
+	ctrlcache, err := newTrackingCache(m.log, m.cacheSourcer, cache.New, restConfig, cacheOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating new Cache: %w", err)
 	}
@@ -384,7 +384,7 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 	gvks := sets.Set[schema.GroupVersionKind]{}
 
 	for _, obj := range usedFor {
-		gvk, err := gvkForObject(obj)
+		gvk, err := gvkForObject(m.baseCacheOptions.Scheme, obj)
 		if err != nil {
 			return nil, err
 		}
