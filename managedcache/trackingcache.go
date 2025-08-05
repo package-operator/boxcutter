@@ -18,6 +18,7 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -228,7 +229,7 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 }
 
 func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) error {
-	gvk, err := gvkForObject(c.scheme, obj)
+	gvk, err := apiutil.GVKForObject(obj, c.scheme)
 	if err != nil {
 		return err
 	}
@@ -241,7 +242,7 @@ func (c *trackingCache) ensureCacheSync(ctx context.Context, obj client.Object) 
 }
 
 func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.ObjectList) error {
-	gvk, err := gvkForObject(c.scheme, list)
+	gvk, err := apiutil.GVKForObject(list, c.scheme)
 	if err != nil {
 		return err
 	}
@@ -392,7 +393,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
 
-	gvk, err := gvkForObject(c.scheme, obj)
+	gvk, err := apiutil.GVKForObject(obj, c.scheme)
 	if err != nil {
 		return err
 	}

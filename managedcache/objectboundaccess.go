@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -384,7 +385,7 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 	gvks := sets.Set[schema.GroupVersionKind]{}
 
 	for _, obj := range usedFor {
-		gvk, err := gvkForObject(m.baseCacheOptions.Scheme, obj)
+		gvk, err := apiutil.GVKForObject(obj, m.baseCacheOptions.Scheme)
 		if err != nil {
 			return nil, err
 		}
