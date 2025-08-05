@@ -41,7 +41,6 @@ type TrackingCache interface {
 
 type cacheSourcer interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
-	blockNewRegistrations()
 	handleNewInformer(cache.Informer) error
 }
 
@@ -102,9 +101,11 @@ func newTrackingCache(
 		cacheWaitInFlight: map[schema.GroupVersionKind]chan struct{}{},
 	}
 	errHandler := opts.DefaultWatchErrorHandler
-	opts.DefaultWatchErrorHandler = func(r *toolscache.Reflector, err error) {
+	opts.DefaultWatchErrorHandler = func(ctx context.Context, r *toolscache.Reflector, err error) {
+		log.V(-1).Info("error in reflector", "typeDescription", r.TypeDescription(), "err", err)
+
 		if errHandler != nil {
-			errHandler(r, err)
+			errHandler(ctx, r, err)
 		}
 
 		if apistatus, ok := err.(apierrors.APIStatus); ok || errors.As(err, &apistatus) {
@@ -138,7 +139,6 @@ func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predi
 
 func (c *trackingCache) Start(ctx context.Context) error {
 	ctx = logr.NewContext(ctx, c.log)
-	c.cacheSourcer.blockNewRegistrations()
 
 	cacheErrCh := make(chan error)
 	go func() {

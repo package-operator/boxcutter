@@ -3,6 +3,7 @@ package machinery
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -201,6 +202,20 @@ func (d *Comparator) Compare(
 		return res, fmt.Errorf("API accessor: %w", err)
 	}
 
+	// If there is a Status subresource defined, add .status to stripset to ignore it.
+	localStripSet := stripSet
+
+	if hasStatusSubresource(s) {
+		var paths []fieldpath.Path
+
+		stripSet.Iterate(func(p fieldpath.Path) {
+			paths = append(paths, p)
+		})
+
+		paths = append(paths, fieldpath.MakePathOrDie("status"))
+		localStripSet = fieldpath.NewSet(paths...)
+	}
+
 	ss, err := schemaconv.ToSchemaFromOpenAPI(s.Components.Schemas, false)
 	if err != nil {
 		return res, fmt.Errorf("schema from OpenAPI: %w", err)
@@ -231,7 +246,7 @@ func (d *Comparator) Compare(
 		return res, fmt.Errorf("desired to field set: %w", err)
 	}
 
-	res.DesiredFieldSet = res.DesiredFieldSet.Difference(stripSet)
+	res.DesiredFieldSet = res.DesiredFieldSet.Difference(localStripSet)
 
 	// Get "our" managed fields on actual.
 	mf, ok := findManagedFields(d.fieldOwner, actualObject)
@@ -302,9 +317,9 @@ func (d *Comparator) Compare(
 		return res, fmt.Errorf("actual object: %w", err)
 	}
 
-	actualValues := typedActual.RemoveItems(stripSet)
+	actualValues := typedActual.RemoveItems(localStripSet)
 
-	res.Comparison, err = typedDesired.RemoveItems(stripSet).Compare(actualValues)
+	res.Comparison, err = typedDesired.RemoveItems(localStripSet).Compare(actualValues)
 	if err != nil {
 		return res, fmt.Errorf("compare: %w", err)
 	}
@@ -415,4 +430,22 @@ func ensureGVKIsSet(obj client.Object, scheme *runtime.Scheme) error {
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
 
 	return nil
+}
+
+const statusSubresourceSuffix = "{name}/status"
+
+// Determines if the schema has a Status subresource defined.
+// If so the comperator has to ignore .status, because the API server will also ignore these fields.
+func hasStatusSubresource(openAPISchema *spec3.OpenAPI) bool {
+	if openAPISchema.Paths == nil {
+		return false
+	}
+
+	for path := range openAPISchema.Paths.Paths {
+		if strings.HasSuffix(path, statusSubresourceSuffix) {
+			return true
+		}
+	}
+
+	return false
 }

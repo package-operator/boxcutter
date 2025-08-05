@@ -835,6 +835,7 @@ func TestObjectEngine(t *testing.T) {
 
 			test.mockSetup(cache, writer, divergeDetector)
 
+			//nolint:usetesting
 			ctx := context.Background()
 			res, err := oe.Reconcile(
 				ctx, owner, 1, test.desiredObject,
@@ -870,14 +871,14 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Reconcile(context.Background(), owner, 0, desired)
+			_, _ = oe.Reconcile(t.Context(), owner, 0, desired)
 		})
 	})
 
 	t.Run("missing owner.UID", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner must be persistet to cluster, empty UID", func() {
-			_, _ = oe.Reconcile(context.Background(), owner, 1, desired)
+			_, _ = oe.Reconcile(t.Context(), owner, 1, desired)
 		})
 	})
 }
@@ -1081,9 +1082,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				testSystemPrefix,
 			)
 
-			ctx := context.Background()
-
-			deleted, err := oe.Teardown(ctx, owner, 1, obj)
+			deleted, err := oe.Teardown(t.Context(), owner, 1, obj)
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
 			} else {
@@ -1104,14 +1103,14 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Teardown(context.Background(), owner, 0, desired)
+			_, _ = oe.Teardown(t.Context(), owner, 0, desired)
 		})
 	})
 
 	t.Run("missing owner.UID", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
-			_, _ = oe.Teardown(context.Background(), owner, 1, desired)
+			_, _ = oe.Teardown(t.Context(), owner, 1, desired)
 		})
 	})
 }
