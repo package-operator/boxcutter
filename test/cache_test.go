@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	dto "github.com/prometheus/client_model/go"
+
 	"pkg.package-operator.run/boxcutter/managedcache"
 )
 
@@ -266,6 +267,7 @@ func TestManagedCacheMetrics(t *testing.T) {
 	log := testr.New(t)
 
 	const ownerLabel = "owner-label"
+
 	accessManager := managedcache.NewObjectBoundAccessManager(
 		log,
 		func(_ context.Context, owner client.Object, config *rest.Config, options cache.Options) (*rest.Config, cache.Options, error) {
@@ -273,6 +275,7 @@ func TestManagedCacheMetrics(t *testing.T) {
 			if err != nil {
 				return nil, options, err
 			}
+
 			dynSelector := labels.NewSelector().Add(*req)
 			options.DefaultLabelSelector = dynSelector
 
@@ -282,7 +285,7 @@ func TestManagedCacheMetrics(t *testing.T) {
 		cache.Options{},
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	eg, ctx := errgroup.WithContext(ctx)
 
@@ -291,6 +294,7 @@ func TestManagedCacheMetrics(t *testing.T) {
 	})
 
 	const metricsPrefix = "test_metric"
+
 	registry := prometheus.NewRegistry()
 	collector := managedcache.NewCollector(accessManager, metricsPrefix)
 	registry.MustRegister(collector)
@@ -336,11 +340,11 @@ func TestManagedCacheMetrics(t *testing.T) {
 
 	informers := mustGatherGaugeValue(t, registry,
 		managedcache.InformersMetricName(metricsPrefix), "owner", string(owner.UID))
-	assert.Equal(t, float64(1), informers)
+	assert.Equal(t, 1, informers)
 
 	cmCount := mustGatherGaugeValue(t, registry,
 		managedcache.ObjectsMetricName(metricsPrefix), "gvk", cm.GroupVersionKind().String())
-	assert.Equal(t, float64(1), cmCount)
+	assert.Equal(t, 1, cmCount)
 
 	require.NoError(t, accessor.Create(ctx, deepCopyClientObject(secret)))
 	require.NoError(t, accessor.Get(ctx, client.ObjectKeyFromObject(secret), secret))
@@ -348,17 +352,19 @@ func TestManagedCacheMetrics(t *testing.T) {
 
 	informers = mustGatherGaugeValue(t, registry,
 		managedcache.InformersMetricName(metricsPrefix), "owner", string(owner.UID))
-	assert.Equal(t, float64(2), informers)
+	assert.Equal(t, 2, informers)
 
 	secretCount := mustGatherGaugeValue(t, registry,
 		managedcache.ObjectsMetricName(metricsPrefix), "gvk", secret.GroupVersionKind().String())
-	assert.Equal(t, float64(1), secretCount)
+	assert.Equal(t, 1, secretCount)
 
 	cancel()
 	require.NoError(t, eg.Wait())
 }
 
-func mustGatherGaugeValue(t *testing.T, registry prometheus.Gatherer, name, label, value string) float64 {
+func mustGatherGaugeValue(t *testing.T, registry prometheus.Gatherer, name, label, value string) int {
+	t.Helper()
+
 	metricsFamilies, err := registry.Gather()
 	require.NoError(t, err)
 
@@ -372,7 +378,7 @@ func mustGatherGaugeValue(t *testing.T, registry prometheus.Gatherer, name, labe
 		for _, metric := range mf.GetMetric() {
 			for _, l := range metric.GetLabel() {
 				if l.GetName() == label && l.GetValue() == value {
-					return metric.GetGauge().GetValue()
+					return int(metric.GetGauge().GetValue())
 				}
 			}
 		}

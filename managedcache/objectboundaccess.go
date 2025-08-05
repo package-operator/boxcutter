@@ -443,6 +443,7 @@ func toAccessManagerKey[T RefType](owner T) AccessManagerKey {
 	}
 }
 
+//nolint:unused
 func (m *objectBoundAccessManagerImpl[T]) readAccessors(reader func(owner types.UID, accessor Accessor)) {
 	m.accessorsLock.RLock()
 	defer m.accessorsLock.RUnlock()

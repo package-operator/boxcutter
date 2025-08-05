@@ -2,6 +2,7 @@ package managedcache
 
 import (
 	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,16 +15,20 @@ const (
 	gvkLabel   = "gvk"
 )
 
+// InformersMetricName constructs the name of the cache metric that tracks the number of informers.
 func InformersMetricName(prefix string) string {
 	return prefix + "_managed_cache_informers"
 }
 
+// ObjectsMetricName constructs the name of the cache metric that tracks the number of objects.
 func ObjectsMetricName(prefix string) string {
 	return prefix + "_managed_cache_objects"
 }
 
+// Collector is an alias for prometheus.Collector.
 type Collector prometheus.Collector
 
+// NewCollector constructs a managed cache metrics collector that collects metrics from the provided ObjectBoundAccessManager.
 func NewCollector[T RefType](manager ObjectBoundAccessManager[T], metricsPrefix string) Collector {
 	informersDesc := prometheus.NewDesc(
 		InformersMetricName(metricsPrefix),
