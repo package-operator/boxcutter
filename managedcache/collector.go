@@ -14,15 +14,23 @@ const (
 	gvkLabel   = "gvk"
 )
 
+func InformersMetricName(prefix string) string {
+	return prefix + "_managed_cache_informers"
+}
+
+func ObjectsMetricName(prefix string) string {
+	return prefix + "_managed_cache_objects"
+}
+
 type Collector prometheus.Collector
 
 func NewCollector[T RefType](manager ObjectBoundAccessManager[T], metricsPrefix string) Collector {
 	informersDesc := prometheus.NewDesc(
-		metricsPrefix+"_managed_cache_informers",
+		InformersMetricName(metricsPrefix),
 		"Number of active informers per owner running for the managed cache.",
 		[]string{ownerLabel}, nil)
 	objectsDesc := prometheus.NewDesc(
-		metricsPrefix+"_managed_cache_objects",
+		ObjectsMetricName(metricsPrefix),
 		"Number of objects per GVK and owner in the managed cache.",
 		[]string{ownerLabel, gvkLabel}, nil)
 
