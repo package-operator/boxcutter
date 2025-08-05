@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -499,13 +500,12 @@ func (c *trackingCache) watch(ctx context.Context, gvks sets.Set[schema.GroupVer
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
 
+	g, ctx := errgroup.WithContext(ctx)
 	for _, gvk := range gvks.UnsortedList() {
-		if err := c.ensureCacheSyncForGVK(ctx, gvk); err != nil {
-			return err
-		}
+		g.Go(func() error { return c.ensureCacheSyncForGVK(ctx, gvk) })
 	}
 
-	return nil
+	return g.Wait()
 }
 
 func (c *trackingCache) Free(ctx context.Context, user client.Object) error {
