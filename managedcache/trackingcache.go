@@ -438,7 +438,7 @@ func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[
 	return c.removeOtherInformers(ctx, gvks)
 }
 
-func (c *trackingCache) removeOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
+func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep sets.Set[schema.GroupVersionKind]) error {
 	errCh := make(chan error, 1)
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
@@ -446,7 +446,7 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvks sets.Set[
 
 			log := logr.FromContextOrDiscard(ctx)
 
-			gvksToStop := c.knownInformers.Difference(gvks).UnsortedList()
+			gvksToStop := c.knownInformers.Difference(gvksToKeep).UnsortedList()
 			if len(gvksToStop) > 0 {
 				log.V(-1).Info("stopping informers", "gvks", gvksToStop)
 			}
