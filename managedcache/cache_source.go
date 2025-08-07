@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -40,8 +41,14 @@ func (e cacheSettings) Start(ctx context.Context, queue workqueue.TypedRateLimit
 type cacheSource struct {
 	mu        sync.Mutex
 	handlers  []eventHandler
-	informers []cache.Informer
+	informers map[schema.GroupVersionKind]cache.Informer
 	settings  []cacheSettings
+}
+
+func newCacheSource() *cacheSource {
+	return &cacheSource{
+		informers: map[schema.GroupVersionKind]cache.Informer{},
+	}
 }
 
 func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
@@ -79,11 +86,15 @@ func (e *cacheSource) handleNewEventHandlerStart(
 }
 
 // Adds all registered EventHandlers to the given informer.
-func (e *cacheSource) handleNewInformer(informer cache.Informer) error {
+func (e *cacheSource) handleNewInformer(gvk schema.GroupVersionKind, informer cache.Informer) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.informers = append(e.informers, informer)
+	if _, ok := e.informers[gvk]; ok {
+		panic("informer already registered without previous informer being stopped")
+	}
+
+	e.informers[gvk] = informer
 
 	// ensure to add all event handlers to the new informer
 	for _, eh := range e.handlers {
@@ -94,4 +105,11 @@ func (e *cacheSource) handleNewInformer(informer cache.Informer) error {
 	}
 
 	return nil
+}
+
+func (e *cacheSource) handleInformerStop(gvk schema.GroupVersionKind) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	delete(e.informers, gvk)
 }

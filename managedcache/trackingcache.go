@@ -45,7 +45,8 @@ type TrackingCache interface {
 
 type cacheSourcer interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
-	handleNewInformer(cache.Informer) error
+	handleNewInformer(schema.GroupVersionKind, cache.Informer) error
+	handleInformerStop(schema.GroupVersionKind)
 }
 
 // - informing the cacheSourcer about new informers.
@@ -92,7 +93,7 @@ type newCacheFn func(cfg *rest.Config, opts cache.Options) (cache.Cache, error)
 
 // NewTrackingCache returns a new TrackingCache instance.
 func NewTrackingCache(log logr.Logger, config *rest.Config, opts cache.Options) (TrackingCache, error) {
-	return newTrackingCache(log, &cacheSource{}, cache.New, config, opts)
+	return newTrackingCache(log, newCacheSource(), cache.New, config, opts)
 }
 
 func newTrackingCache(
@@ -277,7 +278,7 @@ func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.Gr
 			isNewInformer := !c.knownInformers.Has(gvk)
 			if isNewInformer {
 				c.knownInformers.Insert(gvk)
-				if err := c.cacheSourcer.handleNewInformer(i); err != nil {
+				if err := c.cacheSourcer.handleNewInformer(gvk, i); err != nil {
 					errCh <- err
 
 					return
@@ -435,6 +436,7 @@ func (c *trackingCache) stopInformer(ctx context.Context, gvk schema.GroupVersio
 		delete(c.cacheWaitInFlight, gvk)
 	}
 
+	c.cacheSourcer.handleInformerStop(gvk)
 	c.knownInformers.Delete(gvk)
 
 	return nil

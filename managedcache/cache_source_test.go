@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
@@ -14,7 +15,7 @@ func TestCacheSource_Source(t *testing.T) {
 	t.Run("panics on nil handler", func(t *testing.T) {
 		t.Parallel()
 
-		cs := &cacheSource{}
+		cs := newCacheSource()
 
 		require.Panics(t, func() {
 			cs.Source(nil)
@@ -24,7 +25,7 @@ func TestCacheSource_Source(t *testing.T) {
 	t.Run("returns a Source that can be started", func(t *testing.T) {
 		t.Parallel()
 
-		cs := &cacheSource{}
+		cs := newCacheSource()
 		s := cs.Source(&handler.EnqueueRequestForObject{})
 
 		ctx := t.Context()
@@ -38,9 +39,9 @@ func TestCacheSource_Source(t *testing.T) {
 	t.Run("handles new Informers", func(t *testing.T) {
 		t.Parallel()
 
-		cs := &cacheSource{}
+		cs := newCacheSource()
 
-		require.NoError(t, cs.handleNewInformer(nil))
+		require.NoError(t, cs.handleNewInformer(schema.GroupVersionKind{}, nil))
 		assert.Len(t, cs.informers, 1)
 	})
 }

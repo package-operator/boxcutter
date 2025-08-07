@@ -43,7 +43,7 @@ func TestTrackingCache_createTeardownInformers(t *testing.T) {
 	restMapperMock := &restMapperMock{}
 
 	tc, err := newTrackingCache(
-		log, &cacheSource{},
+		log, newCacheSource(),
 		func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
 			return cacheMock, nil
 		},
@@ -114,7 +114,7 @@ func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
 	restMapperMock := &restMapperMock{}
 
 	tc, err := newTrackingCache(
-		log, &cacheSource{},
+		log, newCacheSource(),
 		func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
 			return cacheMock, nil
 		},
@@ -181,7 +181,7 @@ func TestTrackingCache_WatchFree(t *testing.T) {
 	restMapperMock := &restMapperMock{}
 
 	tc, err := newTrackingCache(
-		log, &cacheSource{},
+		log, newCacheSource(),
 		func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
 			return cacheMock, nil
 		},
@@ -315,7 +315,7 @@ func TestTrackingCache_handleCacheWatchError(t *testing.T) {
 				Return(nil)
 
 			tc, err := newTrackingCache(
-				log, &cacheSource{},
+				log, newCacheSource(),
 				func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
 					return cacheMock, nil
 				},
@@ -352,7 +352,7 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 	var wrappedErrorHandler func(ctx context.Context, r *toolscache.Reflector, err error)
 
 	tc, err := newTrackingCache(
-		log, &cacheSource{},
+		log, newCacheSource(),
 		func(_ *rest.Config, opts cache.Options) (cache.Cache, error) {
 			wrappedErrorHandler = opts.DefaultWatchErrorHandler
 
@@ -431,7 +431,7 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 	var wrappedErrorHandler func(ctx context.Context, r *toolscache.Reflector, err error)
 
 	tc, err := newTrackingCache(
-		log, &cacheSource{},
+		log, newCacheSource(),
 		func(_ *rest.Config, opts cache.Options) (cache.Cache, error) {
 			wrappedErrorHandler = opts.DefaultWatchErrorHandler
 

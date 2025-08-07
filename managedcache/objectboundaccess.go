@@ -73,7 +73,7 @@ func NewObjectBoundAccessManager[T RefType](
 		baseRestConfig:   baseRestConfig,
 		baseCacheOptions: baseCacheOptions,
 
-		cacheSourcer: &cacheSource{},
+		cacheSourcer: newCacheSource(),
 		newClient:    client.New,
 
 		accessors:         map[AccessManagerKey]accessorEntry{},
