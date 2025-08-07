@@ -310,6 +310,10 @@ func TestTrackingCache_handleCacheWatchError(t *testing.T) {
 				On("KindsFor", mock.Anything).
 				Return([]schema.GroupVersionKind{bananaGVK}, nil)
 
+			cacheMock.
+				On("RemoveInformer", mock.Anything, mock.Anything).
+				Return(nil)
+
 			tc, err := newTrackingCache(
 				log, &cacheSource{},
 				func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
@@ -328,7 +332,7 @@ func TestTrackingCache_handleCacheWatchError(t *testing.T) {
 				test.setup(t, itc)
 			}
 
-			err = itc.handleCacheWatchError(test.err)
+			err = itc.handleCacheWatchError(t.Context(), test.err)
 			require.NoError(t, err)
 
 			if test.asserts != nil {
@@ -381,6 +385,9 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 			ctx := args.Get(0).(context.Context)
 			<-ctx.Done()
 		}).
+		Return(nil)
+	cacheMock.
+		On("RemoveInformer", mock.Anything, mock.Anything).
 		Return(nil)
 
 	reflectorWatchErrorHandlerMock.
@@ -457,6 +464,9 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 			ctx := args.Get(0).(context.Context)
 			<-ctx.Done()
 		}).
+		Return(nil)
+	cacheMock.
+		On("RemoveInformer", mock.Anything, mock.Anything).
 		Return(nil)
 	reflectorWatchErrorHandlerMock.
 		On("ErrorHandler", mock.Anything, mock.Anything, mock.Anything).

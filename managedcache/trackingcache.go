@@ -172,7 +172,7 @@ func (c *trackingCache) Start(ctx context.Context) error {
 			req.do(ctx)
 
 		case err := <-c.cacheWatchErrorCh:
-			if err := c.handleCacheWatchError(err); err != nil {
+			if err := c.handleCacheWatchError(ctx, err); err != nil {
 				return err
 			}
 
@@ -185,7 +185,7 @@ func (c *trackingCache) Start(ctx context.Context) error {
 	}
 }
 
-func (c *trackingCache) handleCacheWatchError(err error) error {
+func (c *trackingCache) handleCacheWatchError(ctx context.Context, err error) error {
 	apistatus, ok := err.(apierrors.APIStatus)
 	apistatusOk := ok || errors.As(err, &apistatus)
 
@@ -209,20 +209,8 @@ func (c *trackingCache) handleCacheWatchError(err error) error {
 	}
 
 	for _, errorGVK := range errorGVKs {
-		for waitingGvk, errChs := range c.waitingForSync {
-			if waitingGvk.Group == errorGVK.Group &&
-				waitingGvk.Kind == errorGVK.Kind {
-				for _, errCh := range errChs {
-					errCh <- err
-				}
-
-				delete(c.waitingForSync, waitingGvk)
-
-				if _, ok := c.cacheWaitInFlight[waitingGvk]; ok {
-					close(c.cacheWaitInFlight[waitingGvk])
-					delete(c.cacheWaitInFlight, waitingGvk)
-				}
-			}
+		if err := c.stopInformer(ctx, errorGVK, err); err != nil {
+			return err
 		}
 	}
 
@@ -259,6 +247,7 @@ func (c *trackingCache) ensureCacheSyncList(ctx context.Context, list client.Obj
 
 func (c *trackingCache) ensureCacheSyncForGVK(ctx context.Context, gvk schema.GroupVersionKind) error {
 	errCh := make(chan error, 1)
+
 	// This goroutine MUST NOT defer close(errCh),
 	// because it's context could be canceled and the .Start()
 	// goroutine could try to send a response, which makes it panic.
@@ -400,10 +389,9 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	}
 
 	errCh := make(chan error, 1)
-	defer close(errCh)
 	c.gvkRequestCh <- trackingCacheRequest{
 		do: func(ctx context.Context) {
-			log := logr.FromContextOrDiscard(ctx)
+			defer close(errCh)
 			err := c.Cache.RemoveInformer(ctx, obj)
 			if err != nil {
 				errCh <- err
@@ -411,15 +399,7 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 				return
 			}
 
-			log.V(-1).Info("stopping informers", "gvk", gvk)
-
-			if _, ok := c.cacheWaitInFlight[gvk]; ok {
-				close(c.cacheWaitInFlight[gvk])
-				delete(c.cacheWaitInFlight, gvk)
-			}
-			c.knownInformers.Delete(gvk)
-
-			errCh <- nil
+			errCh <- c.stopInformer(ctx, gvk, err)
 		},
 	}
 
@@ -429,6 +409,35 @@ func (c *trackingCache) RemoveInformer(ctx context.Context, obj client.Object) e
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// stopInformer, only call this within the main control goroutine.
+func (c *trackingCache) stopInformer(ctx context.Context, gvk schema.GroupVersionKind, cause error) error {
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(-1).Info("stopping informer", "gvk", gvk)
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+
+	err := c.Cache.RemoveInformer(ctx, obj)
+	if err != nil {
+		return err
+	}
+
+	for _, errCh := range c.waitingForSync[gvk] {
+		errCh <- cause
+	}
+
+	delete(c.waitingForSync, gvk)
+
+	if _, ok := c.cacheWaitInFlight[gvk]; ok {
+		close(c.cacheWaitInFlight[gvk])
+		delete(c.cacheWaitInFlight, gvk)
+	}
+
+	c.knownInformers.Delete(gvk)
+
+	return nil
 }
 
 func (c *trackingCache) RemoveOtherInformers(ctx context.Context, gvks sets.Set[schema.GroupVersionKind]) error {
@@ -460,11 +469,7 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep set
 					return
 				}
 
-				if _, ok := c.cacheWaitInFlight[gvkToStop]; ok {
-					close(c.cacheWaitInFlight[gvkToStop])
-					delete(c.cacheWaitInFlight, gvkToStop)
-				}
-				c.knownInformers.Delete(gvkToStop)
+				errCh <- c.stopInformer(ctx, gvkToStop, nil)
 			}
 		},
 	}
@@ -478,12 +483,13 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep set
 }
 
 func (c *trackingCache) Watch(ctx context.Context, user client.Object, gvks sets.Set[schema.GroupVersionKind]) error {
+	c.watchesByUserLock.Lock()
+	defer c.watchesByUserLock.Unlock()
+
 	if err := c.watch(ctx, gvks); err != nil {
 		return err
 	}
 
-	c.watchesByUserLock.Lock()
-	defer c.watchesByUserLock.Unlock()
 	c.watchesByUser[toAccessManagerKey(user)] = gvks
 
 	c.accessLock.Lock()
