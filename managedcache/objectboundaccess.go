@@ -247,7 +247,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 
 	if len(entry.users) == 0 {
 		// no users left -> close
-		log.Info("no users left, closing cache")
+		log.Info("no users left, closing cache", "gvk", key.GroupVersionKind.String())
 		entry.cancel()
 		delete(m.accessors, key)
 

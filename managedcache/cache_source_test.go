@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
@@ -41,7 +41,11 @@ func TestCacheSource_Source(t *testing.T) {
 
 		cs := newCacheSource()
 
-		require.NoError(t, cs.handleNewInformer(schema.GroupVersionKind{}, nil))
+		existing := &informerMock{}
+		existing.On("IsStopped").Return(true)
+		cs.informers = []cache.Informer{existing}
+
+		require.NoError(t, cs.handleNewInformer(&informerMock{}))
 		assert.Len(t, cs.informers, 1)
 	})
 }

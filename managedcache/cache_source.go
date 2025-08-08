@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -41,14 +40,12 @@ func (e cacheSettings) Start(ctx context.Context, queue workqueue.TypedRateLimit
 type cacheSource struct {
 	mu        sync.Mutex
 	handlers  []eventHandler
-	informers map[schema.GroupVersionKind]cache.Informer
+	informers []cache.Informer
 	settings  []cacheSettings
 }
 
 func newCacheSource() *cacheSource {
-	return &cacheSource{
-		informers: map[schema.GroupVersionKind]cache.Informer{},
-	}
+	return &cacheSource{}
 }
 
 func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
@@ -86,30 +83,30 @@ func (e *cacheSource) handleNewEventHandlerStart(
 }
 
 // Adds all registered EventHandlers to the given informer.
-func (e *cacheSource) handleNewInformer(gvk schema.GroupVersionKind, informer cache.Informer) error {
+func (e *cacheSource) handleNewInformer(newInformer cache.Informer) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if _, ok := e.informers[gvk]; ok {
-		panic("informer already registered without previous informer being stopped")
+	newInformers := []cache.Informer{}
+
+	for _, i := range e.informers {
+		if i.IsStopped() { // ensure old informers are removed so we don't hold on to them forever.
+			continue
+		}
+
+		newInformers = append(newInformers, i)
 	}
 
-	e.informers[gvk] = informer
+	newInformers = append(newInformers, newInformer)
+	e.informers = newInformers
 
 	// ensure to add all event handlers to the new informer
 	for _, eh := range e.handlers {
-		s := source.Informer{Informer: informer, Handler: eh.handler, Predicates: eh.predicates}
+		s := source.Informer{Informer: newInformer, Handler: eh.handler, Predicates: eh.predicates}
 		if err := s.Start(eh.ctx, eh.queue); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func (e *cacheSource) handleInformerStop(gvk schema.GroupVersionKind) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	delete(e.informers, gvk)
 }
