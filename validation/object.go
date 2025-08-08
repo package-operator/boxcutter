@@ -85,6 +85,8 @@ func (d *ObjectValidator) Validate(
 	drve := DryRunValidationError{}
 
 	if errors.As(err, &drve) {
+		errs = append(errs, drve)
+
 		return NewObjectValidationError(bctypes.ToObjectRef(obj), errs...)
 	}
 
@@ -116,17 +118,17 @@ func validateNamespace(
 	namespace string,
 	obj *unstructured.Unstructured,
 ) error {
+	// shortcut if Namespaces are not limited.
+	if len(namespace) == 0 {
+		return nil
+	}
+
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if meta.IsNoMatchError(err) {
 		// API does not exist in the cluster.
 		return err
-	}
-
-	// shortcut if Namespaces are not limited.
-	if len(namespace) == 0 {
-		return nil
 	}
 
 	switch mapping.Scope {
@@ -180,7 +182,7 @@ func validateDryRun(
 		err = w.Create(ctx, obj.DeepCopyObject().(client.Object), client.DryRunAll)
 	}
 
-	var apiErr apimachineryerrors.APIStatus
+	var apiErr *apimachineryerrors.StatusError
 
 	switch {
 	case err == nil:
@@ -199,7 +201,7 @@ func validateDryRun(
 			metav1.StatusReasonUnsupportedMediaType,
 			metav1.StatusReasonNotAcceptable,
 			metav1.StatusReasonNotFound:
-			return DryRunValidationError{err: err}
+			return DryRunValidationError{err: apiErr}
 		case "":
 			logr.FromContextOrDiscard(ctx).Info("API status error with empty reason string", "err", apiErr.Status())
 
