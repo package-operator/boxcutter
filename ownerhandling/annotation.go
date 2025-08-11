@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ ownerStrategy = (*OwnerStrategyAnnotation)(nil)
+var _ OwnerStrategy = (*OwnerStrategyAnnotation)(nil)
 
 // OwnerStrategyAnnotation handling strategy uses .metadata.annotations.
 // Allows cross-namespace owner references.
