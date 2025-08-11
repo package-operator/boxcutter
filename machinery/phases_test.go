@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
@@ -344,4 +345,132 @@ Objects:
 - Object Secret.v1 test/testi
   Action: "Created"
 `, r.String())
+}
+
+func TestPhaseEngine_NewPhaseEngine(t *testing.T) {
+	t.Parallel()
+
+	engine := NewPhaseEngine(nil, nil)
+	assert.NotNil(t, engine)
+}
+
+func TestPhaseTeardownResult_String(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result *phaseTeardownResult
+		want   string
+	}{
+		{
+			name: "with gone and waiting objects",
+			result: &phaseTeardownResult{
+				name: "test-phase",
+				gone: []types.ObjectRef{
+					{
+						GroupVersionKind: schema.GroupVersionKind{
+							Group:   "",
+							Version: "v1",
+							Kind:    "ConfigMap",
+						},
+						ObjectKey: client.ObjectKey{
+							Name:      "config1",
+							Namespace: "test",
+						},
+					},
+				},
+				waiting: []types.ObjectRef{
+					{
+						GroupVersionKind: schema.GroupVersionKind{
+							Group:   "",
+							Version: "v1",
+							Kind:    "Secret",
+						},
+						ObjectKey: client.ObjectKey{
+							Name:      "secret1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			want: `Phase "test-phase"
+Gone Objects:
+- /v1, Kind=ConfigMap test/config1
+Waiting Objects:
+- /v1, Kind=Secret test/secret1
+`,
+		},
+		{
+			name: "with only gone objects",
+			result: &phaseTeardownResult{
+				name: "test-phase",
+				gone: []types.ObjectRef{
+					{
+						GroupVersionKind: schema.GroupVersionKind{
+							Group:   "",
+							Version: "v1",
+							Kind:    "ConfigMap",
+						},
+						ObjectKey: client.ObjectKey{
+							Name:      "config1",
+							Namespace: "test",
+						},
+					},
+				},
+			},
+			want: `Phase "test-phase"
+Gone Objects:
+- /v1, Kind=ConfigMap test/config1
+`,
+		},
+		{
+			name: "empty phase",
+			result: &phaseTeardownResult{
+				name: "empty-phase",
+			},
+			want: `Phase "empty-phase"
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.result.String()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestPhaseTeardownResult_GetName(t *testing.T) {
+	t.Parallel()
+
+	result := &phaseTeardownResult{name: "test-phase"}
+	assert.Equal(t, "test-phase", result.GetName())
+}
+
+func TestPhaseResult_GetObjects(t *testing.T) {
+	t.Parallel()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+
+	objects := []ObjectResult{
+		newObjectResultCreated(obj, map[string]types.Prober{}),
+	}
+
+	result := &phaseResult{
+		objects: objects,
+	}
+
+	assert.Equal(t, objects, result.GetObjects())
 }
