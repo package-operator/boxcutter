@@ -44,6 +44,10 @@ type cacheSource struct {
 	settings  []cacheSettings
 }
 
+func newCacheSource() *cacheSource {
+	return &cacheSource{}
+}
+
 func (e *cacheSource) Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source {
 	if handler == nil {
 		panic("handler is nil")
@@ -79,15 +83,26 @@ func (e *cacheSource) handleNewEventHandlerStart(
 }
 
 // Adds all registered EventHandlers to the given informer.
-func (e *cacheSource) handleNewInformer(informer cache.Informer) error {
+func (e *cacheSource) handleNewInformer(newInformer cache.Informer) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.informers = append(e.informers, informer)
+	newInformers := []cache.Informer{}
+
+	for _, i := range e.informers {
+		if i.IsStopped() { // ensure old informers are removed so we don't hold on to them forever.
+			continue
+		}
+
+		newInformers = append(newInformers, i)
+	}
+
+	newInformers = append(newInformers, newInformer)
+	e.informers = newInformers
 
 	// ensure to add all event handlers to the new informer
 	for _, eh := range e.handlers {
-		s := source.Informer{Informer: informer, Handler: eh.handler, Predicates: eh.predicates}
+		s := source.Informer{Informer: newInformer, Handler: eh.handler, Predicates: eh.predicates}
 		if err := s.Start(eh.ctx, eh.queue); err != nil {
 			return err
 		}

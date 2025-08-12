@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,7 +45,9 @@ func TestManagedCacheStartStop(t *testing.T) {
 			return config, options, nil
 		},
 		Config,
-		cache.Options{},
+		cache.Options{
+			Scheme: scheme.Scheme,
+		},
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -198,7 +201,9 @@ func TestManagedCacheStartStopRestart(t *testing.T) {
 			return config, options, nil
 		},
 		Config,
-		cache.Options{},
+		cache.Options{
+			Scheme: scheme.Scheme,
+		},
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())

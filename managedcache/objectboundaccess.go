@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -74,7 +75,7 @@ func NewObjectBoundAccessManager[T RefType](
 		baseRestConfig:   baseRestConfig,
 		baseCacheOptions: baseCacheOptions,
 
-		cacheSourcer: &cacheSource{},
+		cacheSourcer: newCacheSource(),
 		newClient:    client.New,
 
 		accessors:         map[AccessManagerKey]accessorEntry{},
@@ -248,7 +249,7 @@ func (m *objectBoundAccessManagerImpl[T]) gcCache(ctx context.Context, owner T) 
 
 	if len(entry.users) == 0 {
 		// no users left -> close
-		log.Info("no users left, closing cache")
+		log.Info("no users left, closing cache", "gvk", key.GroupVersionKind.String())
 		entry.cancel()
 		delete(m.accessors, key)
 
@@ -294,7 +295,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 		return nil, fmt.Errorf("mapping rest.Config and cache.Options: %w", err)
 	}
 
-	ctrlcache, err := newTrackingCache(m.log, m.cacheSourcer, restConfig, cacheOpts)
+	ctrlcache, err := newTrackingCache(m.log, m.cacheSourcer, cache.New, restConfig, cacheOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating new Cache: %w", err)
 	}
@@ -386,7 +387,7 @@ func (m *objectBoundAccessManagerImpl[T]) GetWithUser(
 	gvks := sets.Set[schema.GroupVersionKind]{}
 
 	for _, obj := range usedFor {
-		gvk, err := gvkForObject(obj)
+		gvk, err := apiutil.GVKForObject(obj, m.baseCacheOptions.Scheme)
 		if err != nil {
 			return nil, err
 		}
