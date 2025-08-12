@@ -287,7 +287,9 @@ func TestManagedCacheMetrics(t *testing.T) {
 			return config, options, nil
 		},
 		Config,
-		cache.Options{},
+		cache.Options{
+			Scheme: scheme.Scheme,
+		},
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
