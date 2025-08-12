@@ -112,7 +112,7 @@ type PhaseObjectDuplicationError struct {
 }
 
 func (e PhaseObjectDuplicationError) Error() string {
-	return "duplicate object also found in phases " + strings.Join(e.PhaseNames, ", ")
+	return "duplicate object found in phases: " + strings.Join(e.PhaseNames, ", ")
 }
 
 func checkForObjectDuplicates(phases ...types.Phase) []ObjectValidationError {
@@ -127,6 +127,8 @@ func checkForObjectDuplicates(phases ...types.Phase) []ObjectValidationError {
 
 			otherPhase, ok := uniqueObjectsInPhase[ref]
 			if !ok {
+				uniqueObjectsInPhase[ref] = phase.Name
+
 				continue
 			}
 
