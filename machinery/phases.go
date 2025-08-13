@@ -221,12 +221,14 @@ type PhaseResult interface {
 	// InTransition returns true if the Phase has not yet fully rolled out,
 	// if the phase has objects progressed to a new revision or
 	// if objects have unresolved conflicts.
-	InTransistion() bool
+	InTransition() bool
 	// IsComplete returns true when all objects have
 	// successfully been reconciled and pass their probes.
 	IsComplete() bool
 	// HasProgressed returns true when all objects have been progressed to a newer revision.
 	HasProgressed() bool
+	// GetProbesStatus returns a human readable status of all failing probes on all objects.
+	GetProbesStatus() string
 	String() string
 }
 
@@ -256,7 +258,7 @@ func (r *phaseResult) GetObjects() []ObjectResult {
 // InTransition returns true if the Phase has not yet fully rolled out,
 // if the phase has some objects progressed to a new revision or
 // if objects have unresolved conflicts.
-func (r *phaseResult) InTransistion() bool {
+func (r *phaseResult) InTransition() bool {
 	if err := r.GetValidationError(); err != nil {
 		return false
 	}
@@ -301,14 +303,31 @@ func (r *phaseResult) IsComplete() bool {
 			return false
 		}
 	}
-
 	return true
+}
+
+func (r *phaseResult) GetProbesStatus() string {
+	if r.IsComplete() {
+		return ""
+	}
+	var messages []string
+	ores := r.GetObjects()
+	for _, o := range ores {
+		if !o.Success() {
+			messages = append(messages,
+				o.Object().GetObjectKind().GroupVersionKind().Kind+"/"+
+					o.Object().GetName()+": "+
+					strings.Join(o.Probes()[types.ProgressProbeType].Messages, ", "))
+		}
+	}
+
+	return strings.Join(messages, ",")
 }
 
 func (r *phaseResult) String() string {
 	out := fmt.Sprintf(
 		"Phase %q\nComplete: %t\nIn Transition: %t\n",
-		r.name, r.IsComplete(), r.InTransistion(),
+		r.name, r.IsComplete(), r.InTransition(),
 	)
 
 	if err := r.GetValidationError(); err != nil {
