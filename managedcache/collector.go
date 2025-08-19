@@ -10,19 +10,14 @@ import (
 
 var _ Collector = (*collector[client.Object])(nil)
 
-const (
-	ownerLabel = "owner"
-	gvkLabel   = "gvk"
-)
-
 // InformersMetricName constructs the name of the cache metric that tracks the number of informers.
 func InformersMetricName(prefix string) string {
-	return prefix + "_managed_cache_informers"
+	return prefix + "_managed_cache_informers_total"
 }
 
 // ObjectsMetricName constructs the name of the cache metric that tracks the number of objects.
 func ObjectsMetricName(prefix string) string {
-	return prefix + "_managed_cache_objects"
+	return prefix + "_managed_cache_objects_total"
 }
 
 // Collector is an alias for prometheus.Collector.
@@ -33,11 +28,11 @@ func NewCollector[T RefType](manager ObjectBoundAccessManager[T], metricsPrefix 
 	informersDesc := prometheus.NewDesc(
 		InformersMetricName(metricsPrefix),
 		"Number of active informers per owner running for the managed cache.",
-		[]string{ownerLabel}, nil)
+		[]string{"owner"}, nil)
 	objectsDesc := prometheus.NewDesc(
 		ObjectsMetricName(metricsPrefix),
 		"Number of objects per GVK and owner in the managed cache.",
-		[]string{ownerLabel, gvkLabel}, nil)
+		[]string{"owner", "gvk"}, nil)
 
 	return &collector[T]{
 		manager,
@@ -67,9 +62,6 @@ func (c collector[T]) Collect(ch chan<- prometheus.Metric) {
 			float64(len(gvks)),
 			string(owner),
 		)
-
-		// TODO(reviewer): this way the two metrics may not match if informers
-		// change in between the calls. Do we care? (IMO, it should be fine)
 
 		for gvk, objects := range accessor.getObjectsPerInformer(context.Background()) {
 			// Number of objects per GVK per owner
