@@ -546,7 +546,7 @@ func (c *trackingCache) getObjectsPerInformer(ctx context.Context) map[schema.Gr
 	c.accessLock.RLock()
 	defer c.accessLock.RUnlock()
 
-	log := logr.FromContextOrDiscard(ctx)
+	log := logr.FromContextOrDiscard(ctx).WithName("getObjectsPerInformer")
 
 	objects := make(map[schema.GroupVersionKind]int, len(c.knownInformers))
 
