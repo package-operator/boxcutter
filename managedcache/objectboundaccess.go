@@ -51,8 +51,6 @@ type ObjectBoundAccessManager[T RefType] interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
 
 	GetWatchersForGVK(gvk schema.GroupVersionKind) (out []AccessManagerKey)
-
-	readAccessors(reader func(owner types.UID, accessor Accessor))
 }
 
 // Accessor provides write and cached read access to the cluster.
@@ -441,15 +439,5 @@ func toAccessManagerKey[T RefType](owner T) AccessManagerKey {
 		UID:              owner.GetUID(),
 		ObjectKey:        client.ObjectKeyFromObject(owner),
 		GroupVersionKind: owner.GetObjectKind().GroupVersionKind(),
-	}
-}
-
-//nolint:unused
-func (m *objectBoundAccessManagerImpl[T]) readAccessors(reader func(owner types.UID, accessor Accessor)) {
-	m.accessorsLock.RLock()
-	defer m.accessorsLock.RUnlock()
-
-	for owner, entry := range m.accessors {
-		reader(owner.UID, entry.accessor)
 	}
 }
