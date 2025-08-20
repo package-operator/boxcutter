@@ -461,18 +461,23 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep set
 			if len(gvksToStop) > 0 {
 				log.V(-1).Info("stopping informers", "gvks", gvksToStop)
 			}
+
+			var errs []error
 			for _, gvkToStop := range gvksToStop {
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(gvkToStop)
-				err := c.Cache.RemoveInformer(ctx, obj)
-				if err != nil {
-					errCh <- err
+				if err := c.Cache.RemoveInformer(ctx, obj); err != nil {
+					errs = append(errs, err)
 
-					return
+					continue
 				}
+				if err := c.stopInformer(ctx, gvkToStop, nil); err != nil {
+					errs = append(errs, err)
 
-				errCh <- c.stopInformer(ctx, gvkToStop, nil)
+					continue
+				}
 			}
+			errCh <- errors.Join(errs...)
 		},
 	}
 
