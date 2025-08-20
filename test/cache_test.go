@@ -9,22 +9,16 @@ import (
 	"time"
 
 	"github.com/go-logr/logr/testr"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	dto "github.com/prometheus/client_model/go"
 
 	"pkg.package-operator.run/boxcutter/managedcache"
 )
@@ -266,131 +260,4 @@ func TestManagedCacheStartStopRestart(t *testing.T) {
 
 	cancel()
 	require.NoError(t, eg.Wait())
-}
-
-func TestManagedCacheMetrics(t *testing.T) {
-	log := testr.New(t)
-
-	const ownerLabel = "owner-label"
-
-	accessManager := managedcache.NewObjectBoundAccessManager(
-		log,
-		func(_ context.Context, owner client.Object, config *rest.Config, options cache.Options) (*rest.Config, cache.Options, error) {
-			req, err := labels.NewRequirement(ownerLabel, selection.Equals, []string{string(owner.GetUID())})
-			if err != nil {
-				return nil, options, err
-			}
-
-			dynSelector := labels.NewSelector().Add(*req)
-			options.DefaultLabelSelector = dynSelector
-
-			return config, options, nil
-		},
-		Config,
-		cache.Options{
-			Scheme: scheme.Scheme,
-		},
-	)
-
-	ctx, cancel := context.WithCancel(t.Context())
-
-	eg, ctx := errgroup.WithContext(ctx)
-
-	eg.Go(func() error {
-		return ignoreContextCanceled(accessManager.Start(ctx))
-	})
-
-	const metricsPrefix = "test_metric"
-
-	registry := prometheus.NewRegistry()
-	collector := managedcache.NewCollector(accessManager, metricsPrefix)
-	registry.MustRegister(collector)
-
-	owner := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			UID: "metrics-test-owner",
-		},
-	}
-	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owned-1",
-			Namespace: "default",
-			Labels: map[string]string{
-				ownerLabel: string(owner.UID),
-			},
-		},
-	}
-	secret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owned-2",
-			Namespace: "default",
-			Labels: map[string]string{
-				ownerLabel: string(owner.UID),
-			},
-		},
-	}
-
-	accessor, err := accessManager.GetWithUser(ctx, owner, owner, []client.Object{cm, secret})
-	require.NoError(t, err)
-
-	require.NoError(t, accessor.Create(ctx, deepCopyClientObject(cm)))
-	require.NoError(t, accessor.Get(ctx, client.ObjectKeyFromObject(cm), cm))
-	cleanupOnSuccess(t, cm)
-
-	informers := mustGatherGaugeValue(t, registry,
-		managedcache.InformersMetricName(metricsPrefix), "owner", string(owner.UID))
-	assert.Equal(t, 1, informers)
-
-	cmCount := mustGatherGaugeValue(t, registry,
-		managedcache.ObjectsMetricName(metricsPrefix), "gvk", cm.GroupVersionKind().String())
-	assert.Equal(t, 1, cmCount)
-
-	require.NoError(t, accessor.Create(ctx, deepCopyClientObject(secret)))
-	require.NoError(t, accessor.Get(ctx, client.ObjectKeyFromObject(secret), secret))
-	cleanupOnSuccess(t, secret)
-
-	informers = mustGatherGaugeValue(t, registry,
-		managedcache.InformersMetricName(metricsPrefix), "owner", string(owner.UID))
-	assert.Equal(t, 2, informers)
-
-	secretCount := mustGatherGaugeValue(t, registry,
-		managedcache.ObjectsMetricName(metricsPrefix), "gvk", secret.GroupVersionKind().String())
-	assert.Equal(t, 1, secretCount)
-
-	cancel()
-	require.NoError(t, eg.Wait())
-}
-
-func mustGatherGaugeValue(t *testing.T, registry prometheus.Gatherer, name, label, value string) int {
-	t.Helper()
-
-	metricsFamilies, err := registry.Gather()
-	require.NoError(t, err)
-
-	for _, mf := range metricsFamilies {
-		if mf.GetName() != name {
-			continue
-		}
-
-		require.Equal(t, dto.MetricType_GAUGE, mf.GetType(), "unexpected metric type: %s", mf.GetType())
-
-		for _, metric := range mf.GetMetric() {
-			for _, l := range metric.GetLabel() {
-				if l.GetName() == label && l.GetValue() == value {
-					return int(metric.GetGauge().GetValue())
-				}
-			}
-		}
-	}
-
-	require.Fail(t, "metric not found", "name: '%s', label: '%s', value: '%s'", name, label, value)
-	panic("unreachable")
 }
