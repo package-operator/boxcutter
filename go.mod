@@ -7,7 +7,7 @@ toolchain go1.24.4
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-logr/logr v1.4.3
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	golang.org/x/sync v0.16.0
 	k8s.io/api v0.33.4
 	k8s.io/apiextensions-apiserver v0.33.4
