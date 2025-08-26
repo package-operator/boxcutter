@@ -51,7 +51,12 @@ type ObjectBoundAccessManager[T RefType] interface {
 	Source(handler handler.EventHandler, predicates ...predicate.Predicate) source.Source
 
 	GetWatchersForGVK(gvk schema.GroupVersionKind) (out []AccessManagerKey)
+
+	CollectMetrics(ctx context.Context) (ObjectsPerOwnerPerGVK, error)
 }
+
+// ObjectsPerOwnerPerGVK is used to store data for collecting managed cache metrics.
+type ObjectsPerOwnerPerGVK map[AccessManagerKey]map[schema.GroupVersionKind]int
 
 // Accessor provides write and cached read access to the cluster.
 type Accessor interface {
@@ -440,4 +445,22 @@ func toAccessManagerKey[T RefType](owner T) AccessManagerKey {
 		ObjectKey:        client.ObjectKeyFromObject(owner),
 		GroupVersionKind: owner.GetObjectKind().GroupVersionKind(),
 	}
+}
+
+func (m *objectBoundAccessManagerImpl[T]) CollectMetrics(ctx context.Context) (ObjectsPerOwnerPerGVK, error) {
+	m.accessorsLock.RLock()
+	defer m.accessorsLock.RUnlock()
+
+	metrics := make(ObjectsPerOwnerPerGVK, len(m.accessors))
+
+	for owner, entry := range m.accessors {
+		objectsPerInformer, err := entry.accessor.GetObjectsPerInformer(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("getting objects per informer with owner '%s': %w", owner.UID, err)
+		}
+
+		metrics[owner] = objectsPerInformer
+	}
+
+	return metrics, nil
 }
