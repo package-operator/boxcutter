@@ -14,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -490,6 +491,114 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 
 	reflectorWatchErrorHandlerMock.AssertCalled(
 		t, "ErrorHandler", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
+	t.Parallel()
+	log := testr.New(t)
+	cacheMock := &cacheMock{}
+	restMapperMock := &restMapperMock{}
+
+	tc, err := newTrackingCache(
+		log, newCacheSource(),
+		func(_ *rest.Config, _ cache.Options) (cache.Cache, error) {
+			return cacheMock, nil
+		},
+		nil, cache.Options{
+			Mapper: restMapperMock,
+			Scheme: scheme.Scheme,
+		},
+	)
+	require.NoError(t, err)
+
+	itc := tc.(*trackingCache)
+
+	informerMock := &informerMock{}
+
+	// Mocks
+	cacheMock.
+		On("GetInformer", mock.Anything, mock.Anything, mock.Anything).
+		Return(informerMock, nil)
+	informerMock.
+		On("HasSynced").
+		Return(false).Once()
+	informerMock.
+		On("HasSynced").
+		Return(true)
+	informerMock.
+		On("IsStopped").
+		Return(false)
+	cacheMock.
+		On("Start", mock.Anything).
+		Run(func(args mock.Arguments) {
+			ctx := args.Get(0).(context.Context)
+			<-ctx.Done()
+		}).
+		Return(nil)
+	cacheMock.
+		On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	cacheMock.
+		On("List", mock.Anything, mock.AnythingOfType("*unstructured.UnstructuredList"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			list := args.Get(1).(*unstructured.UnstructuredList)
+			switch list.GetKind() {
+			case "ConfigMapList":
+				list.Items = []unstructured.Unstructured{{}} // Single "ConfigMap"
+			case "SecretList":
+				list.Items = []unstructured.Unstructured{{}, {}} // Two "Secrets"
+			default:
+				t.Fatalf("unexpected list kind: %s", list.GetKind())
+			}
+		}).
+		Return(nil)
+
+	go func() {
+		err := tc.Start(t.Context())
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	// No informers
+	objectsPerInformer, err := itc.GetObjectsPerInformer(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, objectsPerInformer)
+
+	cmObj := &corev1.ConfigMap{}
+	err = itc.Get(t.Context(), client.ObjectKey{
+		Name: "banana",
+	}, cmObj)
+	require.NoError(t, err)
+
+	// Expect a ConfigMap informer with a single object to be present
+	objectsPerInformer, err = itc.GetObjectsPerInformer(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, objectsPerInformer, 1)
+	objects, ok := objectsPerInformer[schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}]
+	require.True(t, ok)
+	assert.Equal(t, 1, objects)
+
+	secretObj := &corev1.Secret{}
+	err = itc.Get(t.Context(), client.ObjectKey{
+		Name: "bread",
+	}, secretObj)
+	require.NoError(t, err)
+
+	// Expect a new Secret informer with two objects to be present
+	objectsPerInformer, err = itc.GetObjectsPerInformer(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, objectsPerInformer, 2)
+	objects, ok = objectsPerInformer[schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}]
+	require.True(t, ok)
+	assert.Equal(t, 1, objects)
+	objects, ok = objectsPerInformer[schema.GroupVersionKind{Version: "v1", Kind: "Secret"}]
+	require.True(t, ok)
+	assert.Equal(t, 2, objects)
+
+	informerMock.AssertExpectations(t)
+	restMapperMock.AssertExpectations(t)
+	cacheMock.AssertExpectations(t)
 }
 
 type reflectorWatchErrorHandlerMock struct {

@@ -9,11 +9,14 @@ import (
 	"time"
 
 	"github.com/go-logr/logr/testr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -257,6 +260,118 @@ func TestManagedCacheStartStopRestart(t *testing.T) {
 
 		require.NoError(t, accessManager.FreeWithUser(ctx, owner, owner))
 	}
+
+	cancel()
+	require.NoError(t, eg.Wait())
+}
+
+func TestManagedCacheMetrics(t *testing.T) {
+	log := testr.New(t)
+
+	const ownerLabel = "owner-label"
+
+	accessManager := managedcache.NewObjectBoundAccessManager(
+		log,
+		func(_ context.Context, owner client.Object, config *rest.Config, options cache.Options) (*rest.Config, cache.Options, error) {
+			req, err := labels.NewRequirement(ownerLabel, selection.Equals, []string{string(owner.GetUID())})
+			if err != nil {
+				return nil, options, err
+			}
+
+			dynSelector := labels.NewSelector().Add(*req)
+			options.DefaultLabelSelector = dynSelector
+
+			return config, options, nil
+		},
+		Config,
+		cache.Options{
+			Scheme: scheme.Scheme,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		return ignoreContextCanceled(accessManager.Start(ctx))
+	})
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID: "metrics-test-owner",
+		},
+	}
+	ownerKey := managedcache.AccessManagerKey{
+		UID: owner.UID,
+	}
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-1",
+			Namespace: "default",
+			Labels: map[string]string{
+				ownerLabel: string(owner.UID),
+			},
+		},
+	}
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-2",
+			Namespace: "default",
+			Labels: map[string]string{
+				ownerLabel: string(owner.UID),
+			},
+		},
+	}
+
+	accessor, err := accessManager.GetWithUser(ctx, owner, owner, []client.Object{cm, secret})
+	require.NoError(t, err)
+
+	require.NoError(t, accessor.Create(ctx, deepCopyClientObject(cm)))
+	require.NoError(t, accessor.Get(ctx, client.ObjectKeyFromObject(cm), cm))
+	cleanupOnSuccess(t, cm)
+
+	objectsPerOwnerPerGVK, err := accessManager.CollectMetrics(t.Context())
+	require.NoError(t, err)
+
+	objectsPerGVK, ok := objectsPerOwnerPerGVK[ownerKey]
+	require.True(t, ok)
+
+	// Expect one informer
+	assert.Len(t, objectsPerGVK, 1)
+
+	cmCount, ok := objectsPerGVK[cm.GroupVersionKind()]
+	require.True(t, ok)
+	assert.Equal(t, 1, cmCount)
+
+	require.NoError(t, accessor.Create(ctx, deepCopyClientObject(secret)))
+	require.NoError(t, accessor.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+	cleanupOnSuccess(t, secret)
+
+	objectsPerOwnerPerGVK, err = accessManager.CollectMetrics(t.Context())
+	require.NoError(t, err)
+
+	objectsPerGVK, ok = objectsPerOwnerPerGVK[ownerKey]
+	require.True(t, ok)
+
+	// Expect two informers
+	assert.Len(t, objectsPerGVK, 2)
+
+	cmCount, ok = objectsPerGVK[cm.GroupVersionKind()]
+	require.True(t, ok)
+	assert.Equal(t, 1, cmCount)
+
+	secretCount, ok := objectsPerGVK[secret.GroupVersionKind()]
+	require.True(t, ok)
+	assert.Equal(t, 1, secretCount)
 
 	cancel()
 	require.NoError(t, eg.Wait())
