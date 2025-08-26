@@ -41,6 +41,8 @@ type TrackingCache interface {
 
 	Watch(ctx context.Context, user client.Object, gvks sets.Set[schema.GroupVersionKind]) error
 	Free(ctx context.Context, user client.Object) error
+
+	GetObjectsPerInformer(ctx context.Context) (map[schema.GroupVersionKind]int, error)
 }
 
 type cacheSourcer interface {
@@ -543,4 +545,28 @@ func (c *trackingCache) gcUnusedGVK(ctx context.Context) error {
 	}
 
 	return c.removeOtherInformers(ctx, gvksInUse)
+}
+
+func (c *trackingCache) GetObjectsPerInformer(ctx context.Context) (map[schema.GroupVersionKind]int, error) {
+	c.accessLock.RLock()
+	defer c.accessLock.RUnlock()
+
+	objects := make(map[schema.GroupVersionKind]int, len(c.knownInformers))
+
+	for gvk := range c.knownInformers {
+		listObj := &unstructured.UnstructuredList{}
+		listObj.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind + "List",
+		})
+
+		if err := c.Cache.List(ctx, listObj); err != nil {
+			return nil, fmt.Errorf("listing objects for GVK '%s': %w", gvk.String(), err)
+		}
+
+		objects[gvk] = len(listObj.Items)
+	}
+
+	return objects, nil
 }
