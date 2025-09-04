@@ -303,6 +303,7 @@ func (r *phaseResult) IsComplete() bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -310,7 +311,9 @@ func (r *phaseResult) GetProbesStatus() string {
 	if r.IsComplete() {
 		return ""
 	}
-	var messages []string
+
+	messages := []string{}
+
 	ores := r.GetObjects()
 	for _, o := range ores {
 		if !o.Success() {

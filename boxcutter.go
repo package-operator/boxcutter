@@ -118,8 +118,8 @@ type RevisionEngineOptions struct {
 	PhaseValidator *validation.PhaseValidator
 }
 
+// NewPhaseEngine  returns a new PhaseEngine instance.
 func NewPhaseEngine(opts RevisionEngineOptions) (*machinery.PhaseEngine, error) {
-
 	if err := validateRevisionEngineOpts(opts); err != nil {
 		return nil, err
 	}
@@ -139,6 +139,7 @@ func NewPhaseEngine(opts RevisionEngineOptions) (*machinery.PhaseEngine, error) 
 		opts.Scheme, opts.Reader, opts.Writer,
 		opts.OwnerStrategy, comp, opts.FieldOwner, opts.SystemPrefix,
 	)
+
 	return machinery.NewPhaseEngine(oe, opts.PhaseValidator), nil
 }
 
