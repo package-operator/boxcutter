@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-var _ OwnerStrategy = (*OwnerStrategyNative)(nil)
+var _ ownerStrategy = (*OwnerStrategyNative)(nil)
 
 // OwnerStrategyNative handling strategy uses .metadata.ownerReferences.
 type OwnerStrategyNative struct {
