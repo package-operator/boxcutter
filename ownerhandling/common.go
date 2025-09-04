@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
-type OwnerStrategy interface {
+type ownerStrategy interface {
 	// SetOwnerReference adds owner as OwnerReference to obj, with Controller set to false.
 	SetOwnerReference(owner, obj metav1.Object) error
 	// SetControllerReference adds owner as OwnerReference to obj, with Controller set to true.
