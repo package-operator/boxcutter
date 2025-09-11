@@ -7,7 +7,7 @@ toolchain go1.24.4
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-logr/logr v1.4.3
-	github.com/google/cel-go v0.23.2
+	github.com/google/cel-go v0.26.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
 	k8s.io/api v0.33.4
@@ -27,7 +27,7 @@ require (
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
-	cel.dev/expr v0.19.1 // indirect
+	cel.dev/expr v0.24.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
