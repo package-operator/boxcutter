@@ -522,12 +522,420 @@ func TestIsController(t *testing.T) {
 	}
 }
 
-// func TestOwnerStrategyAnnotation_EnqueueRequestForOwner(t *testing.T) {
-// 	t.Parallel()
-// 	scheme := runtime.NewScheme()
-// 	require.NoError(t, appsv1.AddToScheme(scheme))
-// 	s := NewAnnotation(scheme, testAnnotationKey)
-// 	require.NotPanics(t, func() {
-// 		s.EnqueueRequestForOwner(&appsv1.Deployment{}, meta.RESTMapper(nil), true)
-// 	})
-// }
+func TestOwnerStrategyAnnotation_GetController(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name               string
+		ownerRefs          []annotationOwnerRef
+		expectedController metav1.OwnerReference
+		expectedFound      bool
+	}{
+		{
+			name:               "no owner references",
+			ownerRefs:          []annotationOwnerRef{},
+			expectedController: metav1.OwnerReference{},
+			expectedFound:      false,
+		},
+		{
+			name: "no controller owner reference",
+			ownerRefs: []annotationOwnerRef{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "cm1",
+					Namespace:  "test",
+					UID:        types.UID("1234"),
+					Controller: nil,
+				},
+				{
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       "secret1",
+					Namespace:  "test",
+					UID:        types.UID("5678"),
+					Controller: ptr.To(false),
+				},
+			},
+			expectedController: metav1.OwnerReference{},
+			expectedFound:      false,
+		},
+		{
+			name: "has controller owner reference",
+			ownerRefs: []annotationOwnerRef{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "cm1",
+					Namespace:  "test",
+					UID:        types.UID("1234"),
+					Controller: ptr.To(false),
+				},
+				{
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       "secret1",
+					Namespace:  "test",
+					UID:        types.UID("5678"),
+					Controller: ptr.To(true),
+				},
+			},
+			expectedController: metav1.OwnerReference{
+				APIVersion:         "v1",
+				Kind:               "Secret",
+				Name:               "secret1",
+				UID:                types.UID("5678"),
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			},
+			expectedFound: true,
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := NewAnnotation(testScheme, testAnnotationKey)
+			obj := &corev1.Secret{}
+			s.setOwnerReferences(obj, tc.ownerRefs)
+
+			controller, found := s.GetController(obj)
+			assert.Equal(t, tc.expectedFound, found)
+
+			if tc.expectedFound {
+				assert.Equal(t, tc.expectedController, controller)
+			}
+		})
+	}
+}
+
+func TestOwnerStrategyAnnotation_CopyOwnerReferences(t *testing.T) {
+	t.Parallel()
+
+	s := NewAnnotation(testScheme, testAnnotationKey)
+
+	objA := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "secret-a",
+			Namespace: "test",
+		},
+	}
+	objB := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "configmap-b",
+			Namespace: "test",
+		},
+	}
+
+	ownerRefsA := []annotationOwnerRef{
+		{
+			APIVersion: "v1",
+			Kind:       "Pod",
+			Name:       "pod1",
+			Namespace:  "test",
+			UID:        types.UID("1234"),
+			Controller: ptr.To(true),
+		},
+		{
+			APIVersion: "apps/v1",
+			Kind:       "Deployment",
+			Name:       "deploy1",
+			Namespace:  "test",
+			UID:        types.UID("5678"),
+			Controller: ptr.To(false),
+		},
+	}
+
+	s.setOwnerReferences(objA, ownerRefsA)
+
+	s.CopyOwnerReferences(objA, objB)
+
+	ownerRefsB := s.getOwnerReferences(objB)
+	assert.Equal(t, ownerRefsA, ownerRefsB)
+}
+
+func TestOwnerStrategyAnnotation_ToMetaV1OwnerRef(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		ownerRef      annotationOwnerRef
+		expectedOwner metav1.OwnerReference
+	}{
+		{
+			name: "basic owner reference",
+			ownerRef: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				Namespace:  "test",
+				UID:        types.UID("1234"),
+				Controller: nil,
+			},
+			expectedOwner: metav1.OwnerReference{
+				APIVersion:         "v1",
+				Kind:               "ConfigMap",
+				Name:               "cm1",
+				UID:                types.UID("1234"),
+				Controller:         nil,
+				BlockOwnerDeletion: ptr.To(true),
+			},
+		},
+		{
+			name: "controller owner reference",
+			ownerRef: annotationOwnerRef{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "deploy1",
+				Namespace:  "test",
+				UID:        types.UID("5678"),
+				Controller: ptr.To(true),
+			},
+			expectedOwner: metav1.OwnerReference{
+				APIVersion:         "apps/v1",
+				Kind:               "Deployment",
+				Name:               "deploy1",
+				UID:                types.UID("5678"),
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := tc.ownerRef.ToMetaV1OwnerRef()
+			assert.Equal(t, tc.expectedOwner, result)
+		})
+	}
+}
+
+func TestOwnerStrategyAnnotation_GetOwnerReferencesEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		obj         metav1.Object
+		expectedLen int
+	}{
+		{
+			name:        "no annotations",
+			obj:         &corev1.Secret{},
+			expectedLen: 0,
+		},
+		{
+			name: "empty annotation key",
+			obj: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						testAnnotationKey: "",
+					},
+				},
+			},
+			expectedLen: 0,
+		},
+		{
+			name: "empty owner references array",
+			obj: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						testAnnotationKey: "[]",
+					},
+				},
+			},
+			expectedLen: 0,
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := NewAnnotation(testScheme, testAnnotationKey)
+			ownerRefs := s.getOwnerReferences(tc.obj)
+			assert.Len(t, ownerRefs, tc.expectedLen)
+		})
+	}
+}
+
+func TestOwnerStrategyAnnotation_ReferSameObjectEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		a        annotationOwnerRef
+		b        annotationOwnerRef
+		expected bool
+	}{
+		{
+			name: "same objects",
+			a: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			expected: true,
+		},
+		{
+			name: "different groups same version",
+			a: annotationOwnerRef{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "deploy1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "Deployment",
+				Name:       "deploy1",
+				UID:        types.UID("1234"),
+			},
+			expected: false,
+		},
+		{
+			name: "same group different versions",
+			a: annotationOwnerRef{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "deploy1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "apps/v1beta1",
+				Kind:       "Deployment",
+				Name:       "deploy1",
+				UID:        types.UID("1234"),
+			},
+			expected: true,
+		},
+		{
+			name: "different kinds",
+			a: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "Secret",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			expected: false,
+		},
+		{
+			name: "different names",
+			a: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm2",
+				UID:        types.UID("1234"),
+			},
+			expected: false,
+		},
+		{
+			name: "different UIDs",
+			a: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("5678"),
+			},
+			expected: false,
+		},
+		{
+			name: "different groups - core vs invalid",
+			a: annotationOwnerRef{
+				APIVersion: "invalid-group/v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			expected: false,
+		},
+		{
+			name: "different groups - core vs apps",
+			a: annotationOwnerRef{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			b: annotationOwnerRef{
+				APIVersion: "apps/v1",
+				Kind:       "ConfigMap",
+				Name:       "cm1",
+				UID:        types.UID("1234"),
+			},
+			expected: false,
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := NewAnnotation(testScheme, testAnnotationKey)
+			result := s.referSameObject(tc.a, tc.b)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestOwnerStrategyAnnotation_RemoveOwnerNotFound(t *testing.T) {
+	t.Parallel()
+
+	s := NewAnnotation(testScheme, testAnnotationKey)
+	obj := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				testAnnotationKey: `[{"uid":"1234", "kind":"ConfigMap", "name":"cm1", "apiVersion":"v1"}]`,
+			},
+		},
+	}
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cm2",
+			UID:  types.UID("5678"),
+		},
+	}
+
+	initialOwnerRefs := s.getOwnerReferences(obj)
+	s.RemoveOwner(owner, obj)
+	finalOwnerRefs := s.getOwnerReferences(obj)
+
+	assert.Equal(t, initialOwnerRefs, finalOwnerRefs)
+}
