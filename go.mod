@@ -10,9 +10,9 @@ require (
 	github.com/google/cel-go v0.26.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
-	k8s.io/api v0.34.0
+	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.0
-	k8s.io/apimachinery v0.34.0
+	k8s.io/apimachinery v0.34.1
 	k8s.io/apiserver v0.34.0
 	k8s.io/client-go v0.34.0
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b
