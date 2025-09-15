@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -31,6 +32,12 @@ func (m *mockRestMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*
 
 type mockWriter struct {
 	mock.Mock
+}
+
+func (m *mockWriter) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	args := m.Called(ctx, obj, opts)
+
+	return args.Error(0)
 }
 
 func (m *mockWriter) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {

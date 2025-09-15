@@ -18,6 +18,12 @@ type CtrlClient struct {
 	StatusMock *CtrlStatusClient
 }
 
+func (c *CtrlClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	args := c.Called(ctx, obj, opts)
+
+	return args.Error(0)
+}
+
 func (c *CtrlClient) GroupVersionKindFor(_ runtime.Object) (schema.GroupVersionKind, error) {
 	return schema.GroupVersionKind{
 		Group:   "mock",
