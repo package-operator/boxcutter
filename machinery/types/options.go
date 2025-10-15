@@ -10,6 +10,9 @@ type RevisionReconcileOptions struct {
 	DefaultPhaseOptions []PhaseReconcileOption
 	// PhaseOptions maps PhaseOptions for specific phases.
 	PhaseOptions map[string][]PhaseReconcileOption
+	// EarlyReturn will exit the reconcile operation on first incomplete phase.
+	// If set to false (default) the library execute all other phases in dry-run to return probing results.
+	EarlyReturn bool
 }
 
 // ForPhase returns the options for a given phase.
@@ -176,6 +179,15 @@ func (p WithCollisionProtection) ApplyToRevisionReconcileOptions(opts *RevisionR
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
+// WithEarlyReturn instructs the Revision Reconciler to stop on the first incomplete phase.
+// By default the library execute all other phases in dry-run to return probing results.
+type WithEarlyReturn struct{}
+
+// ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
+func (p WithEarlyReturn) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.EarlyReturn = true
+}
+
 // WithPreviousOwners is a list of known objects allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
 type WithPreviousOwners []client.Object
@@ -214,24 +226,16 @@ func (p WithPaused) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptio
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
-// ProgressProbeType is a well-known probe type used to guard phase progression.
-const ProgressProbeType = "Progress"
-
-// Prober needs to be implemented by any probing implementation.
-type Prober interface {
-	Probe(obj client.Object) (success bool, messages []string)
-}
-
 // ProbeFunc wraps the given function to work with the Prober interface.
-func ProbeFunc(fn func(obj client.Object) (success bool, messages []string)) Prober {
+func ProbeFunc(fn func(obj client.Object) ProbeResult) Prober {
 	return &probeFn{Fn: fn}
 }
 
 type probeFn struct {
-	Fn func(obj client.Object) (success bool, messages []string)
+	Fn func(obj client.Object) ProbeResult
 }
 
-func (p *probeFn) Probe(obj client.Object) (success bool, messages []string) {
+func (p *probeFn) Probe(obj client.Object) ProbeResult {
 	return p.Fn(obj)
 }
 

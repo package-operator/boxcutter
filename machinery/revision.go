@@ -65,8 +65,8 @@ type RevisionResult interface {
 	// if the phase has objects progressed to a new revision or
 	// if objects have unresolved conflicts.
 	InTransistion() bool
-	// IsComplete returns true when all objects have
-	// successfully been reconciled and pass their probes.
+	// IsComplete returns true when all objects have successfully
+	// been reconciled and pass their "Progress" probes.
 	IsComplete() bool
 	// HasProgressed returns true when all phases have been progressed to a newer revision.
 	HasProgressed() bool
@@ -211,9 +211,15 @@ func (re *RevisionEngine) Reconcile(
 		}
 
 		rres.phasesResults = append(rres.phasesResults, pres)
+
 		if !pres.IsComplete() {
-			// Wait
-			return rres, nil
+			if options.EarlyReturn {
+				return rres, nil
+			}
+
+			// Execute other phases in dry-run/paused mode to still collect data:
+			types.WithPaused{}.
+				ApplyToRevisionReconcileOptions(&options)
 		}
 	}
 

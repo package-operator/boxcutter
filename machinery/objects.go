@@ -226,12 +226,12 @@ func (e *ObjectEngine) Reconcile(
 			return nil, fmt.Errorf("creating resource: %w", err)
 		}
 
-		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
+		if err := e.migrateFieldManagersToSSA(ctx, desiredObject, options); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
 
 		return newObjectResultCreated(
-			desiredObject, options.Probes), nil
+			desiredObject, options), nil
 
 	case err != nil:
 		return nil, fmt.Errorf("getting object: %w", err)
@@ -271,7 +271,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Leave object alone.
 		// It's already owned by a later revision.
 		return newObjectResultProgressed(
-			actualObject, compareRes, options.Probes,
+			actualObject, compareRes, options,
 		), nil
 	}
 
@@ -290,7 +290,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			// No conflict with another field manager
 			// and no modification needed.
 			return newObjectResultIdle(
-				actualObject, compareRes, options.Probes,
+				actualObject, compareRes, options,
 			), nil
 		}
 
@@ -306,7 +306,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			}
 
 			return newObjectResultUpdated(
-				desiredObject, compareRes, options.Probes,
+				desiredObject, compareRes, options,
 			), nil
 		}
 
@@ -340,12 +340,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 		if options.Paused {
 			return newObjectResultRecovered(
-				actualObject, compareRes, options.Probes,
+				actualObject, compareRes, options,
 			), nil
 		}
 
 		return newObjectResultRecovered(
-			desiredObject, compareRes, options.Probes,
+			desiredObject, compareRes, options,
 		), nil
 
 		// Taking control checklist:
@@ -359,7 +359,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if options.CollisionProtection != types.CollisionProtectionNone {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probes,
+				actualOwner, options,
 			), nil
 		}
 
@@ -371,7 +371,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			e.hasSystemAnnotationsOrLabels(actualObject) {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probes,
+				actualOwner, options,
 			), nil
 		}
 
@@ -411,12 +411,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 	if options.Paused {
 		return newObjectResultUpdated(
-			actualObject, compareRes, options.Probes,
+			actualObject, compareRes, options,
 		), nil
 	}
 
 	return newObjectResultUpdated(
-		desiredObject, compareRes, options.Probes,
+		desiredObject, compareRes, options,
 	), nil
 }
 
@@ -441,7 +441,7 @@ func (e *ObjectEngine) create(
 	options types.ObjectReconcileOptions, opts ...client.CreateOption,
 ) error {
 	if options.Paused {
-		return nil
+		opts = append(opts, client.DryRunAll)
 	}
 
 	return e.writer.Create(ctx, obj, opts...)
@@ -458,7 +458,7 @@ func (e *ObjectEngine) patch(
 		return nil
 	}
 
-	if err := e.migrateFieldManagersToSSA(ctx, obj); err != nil {
+	if err := e.migrateFieldManagersToSSA(ctx, obj, options); err != nil {
 		return err
 	}
 
@@ -542,8 +542,12 @@ func (e *ObjectEngine) getObjectRevision(obj client.Object) (int64, error) {
 // Migrate field ownerships to be compatible with server-side apply.
 // SSA really is complicated: https://github.com/kubernetes/kubernetes/issues/99003
 func (e *ObjectEngine) migrateFieldManagersToSSA(
-	ctx context.Context, object Object,
+	ctx context.Context, object Object, options types.ObjectReconcileOptions,
 ) error {
+	if options.Paused {
+		return nil
+	}
+
 	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
 		object, sets.New(e.fieldOwner), e.fieldOwner)
 

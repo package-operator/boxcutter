@@ -16,20 +16,17 @@ type ObjectResult interface {
 	Action() Action
 	// Object as last seen on the cluster after creation/update.
 	Object() Object
-	// Success returns true when the operation is considered successful.
-	// Operations are considered a success, when the object reflects desired state,
-	// is owned by the right controller and passes the given probe.
-	Success() bool
+	// IsPaused returns true when the WithPaused option has been set.
+	IsPaused() bool
+	// IsComplete returns true when:
+	// - the operation has not been paused
+	// - there has been no collision
+	// - the progression probe succeeded
+	IsComplete() bool
 	// Probes returns the results from the given object Probes.
-	Probes() map[string]ObjectProbeResult
+	Probes() types.ProbeContainer
 	// String returns a human readable description of the Result.
 	String() string
-}
-
-// ObjectProbeResult records probe results for the object.
-type ObjectProbeResult struct {
-	Success  bool
-	Messages []string
 }
 
 var (
@@ -44,16 +41,18 @@ var (
 // ObjectResultCreated is returned when the Object was just created.
 type ObjectResultCreated struct {
 	obj          Object
-	probeResults map[string]ObjectProbeResult
+	probeResults types.ProbeContainer
+	options      types.ObjectReconcileOptions
 }
 
 func newObjectResultCreated(
 	obj Object,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultCreated{
 		obj:          obj,
-		probeResults: runProbes(obj, probes),
+		probeResults: runProbes(obj, options.Probes),
+		options:      options,
 	}
 }
 
@@ -67,21 +66,21 @@ func (r ObjectResultCreated) Object() Object {
 	return r.obj
 }
 
-// Success returns true when the operation is considered successful.
-// Operations are considered a success, when the object reflects desired state,
-// is owned by the right controller and passes the given probe.
-func (r ObjectResultCreated) Success() bool {
-	for _, res := range r.probeResults {
-		if !res.Success {
-			return false
-		}
-	}
+// IsPaused returns true when the WithPaused option has been set.
+func (r ObjectResultCreated) IsPaused() bool {
+	return r.options.Paused
+}
 
-	return true
+// IsComplete returns true when:
+// - the operation has not been paused
+// - there has been no collision
+// - the progression probe succeeded.
+func (r ObjectResultCreated) IsComplete() bool {
+	return isComplete(ActionCreated, r.probeResults, r.options)
 }
 
 // Probes returns the results from the given object Probe.
-func (r ObjectResultCreated) Probes() map[string]ObjectProbeResult {
+func (r ObjectResultCreated) Probes() types.ProbeContainer {
 	return r.probeResults
 }
 
@@ -98,10 +97,10 @@ type ObjectResultUpdated struct {
 func newObjectResultUpdated(
 	obj Object,
 	diverged CompareResult,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultUpdated{
-		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, probes),
+		normalResult: newNormalObjectResult(ActionUpdated, obj, diverged, options),
 	}
 }
 
@@ -113,10 +112,10 @@ type ObjectResultProgressed struct {
 func newObjectResultProgressed(
 	obj Object,
 	diverged CompareResult,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultProgressed{
-		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, probes),
+		normalResult: newNormalObjectResult(ActionProgressed, obj, diverged, options),
 	}
 }
 
@@ -128,10 +127,10 @@ type ObjectResultIdle struct {
 func newObjectResultIdle(
 	obj Object,
 	diverged CompareResult,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultIdle{
-		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, probes),
+		normalResult: newNormalObjectResult(ActionIdle, obj, diverged, options),
 	}
 }
 
@@ -143,31 +142,33 @@ type ObjectResultRecovered struct {
 func newObjectResultRecovered(
 	obj Object,
 	diverged CompareResult,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultRecovered{
-		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, probes),
+		normalResult: newNormalObjectResult(ActionRecovered, obj, diverged, options),
 	}
 }
 
 type normalResult struct {
 	action        Action
 	obj           Object
-	probeResults  map[string]ObjectProbeResult
+	probeResults  types.ProbeContainer
 	compareResult CompareResult
+	options       types.ObjectReconcileOptions
 }
 
 func newNormalObjectResult(
 	action Action,
 	obj Object,
 	compResult CompareResult,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) normalResult {
 	return normalResult{
 		obj:           obj,
 		action:        action,
-		probeResults:  runProbes(obj, probes),
+		probeResults:  runProbes(obj, options.Probes),
 		compareResult: compResult,
+		options:       options,
 	}
 }
 
@@ -189,21 +190,21 @@ func (r normalResult) CompareResult() CompareResult {
 }
 
 // Probe returns the results from the given object Probe.
-func (r normalResult) Probes() map[string]ObjectProbeResult {
+func (r normalResult) Probes() types.ProbeContainer {
 	return r.probeResults
 }
 
-// Success returns true when the operation is considered successful.
-// Operations are considered a success, when the object reflects desired state,
-// is owned by the right controller and passes the given probe.
-func (r normalResult) Success() bool {
-	for _, res := range r.probeResults {
-		if !res.Success {
-			return false
-		}
-	}
+// IsPaused returns true when the WithPaused option has been set.
+func (r normalResult) IsPaused() bool {
+	return r.options.Paused
+}
 
-	return true
+// IsComplete returns true when:
+// - the operation has not been paused
+// - there has been no collision
+// - the progression probe succeeded.
+func (r normalResult) IsComplete() bool {
+	return isComplete(r.action, r.probeResults, r.options)
 }
 
 // String returns a human readable description of the Result.
@@ -225,13 +226,6 @@ func (r ObjectResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool)
 	return r.conflictingOwner, r.conflictingOwner != nil
 }
 
-// Success returns true when the operation is considered successful.
-// Operations are considered a success, when the object reflects desired state,
-// is owned by the right controller and passes the given probe.
-func (r ObjectResultCollision) Success() bool {
-	return false
-}
-
 // String returns a human readable description of the Result.
 func (r ObjectResultCollision) String() string {
 	msg := r.normalResult.String()
@@ -244,12 +238,12 @@ func newObjectResultConflict(
 	obj Object,
 	diverged CompareResult,
 	conflictingOwner *metav1.OwnerReference,
-	probes map[string]types.Prober,
+	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultCollision{
 		normalResult: newNormalObjectResult(
 			ActionCollision,
-			obj, diverged, probes,
+			obj, diverged, options,
 		),
 		conflictingOwner: conflictingOwner,
 	}
@@ -280,13 +274,18 @@ func reportStart(or ObjectResult) string {
 		panic(err)
 	}
 
+	actionStr := "Action"
+	if or.IsPaused() {
+		actionStr = "Action (PAUSED)"
+	}
+
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	msg := fmt.Sprintf(
 		"Object %s.%s %s/%s\n"+
-			`Action: %q`+"\n",
+			`%s: %q`+"\n",
 		gvk.Kind, gvk.GroupVersion().String(),
 		obj.GetNamespace(), obj.GetName(),
-		or.Action(),
+		actionStr, or.Action(),
 	)
 
 	probes := or.Probes()
@@ -304,29 +303,51 @@ func reportStart(or ObjectResult) string {
 
 	for _, probeType := range probeTypes {
 		probeRes := probes[probeType]
-		if probeRes.Success {
+		switch probeRes.Status {
+		case types.ProbeStatusTrue:
 			msg += fmt.Sprintf("- %s: Succeeded\n", probeType)
-		} else {
+		case types.ProbeStatusFalse:
 			msg += fmt.Sprintf("- %s: Failed\n", probeType)
-			for _, m := range probeRes.Messages {
-				msg += "  - " + m + "\n"
-			}
+		case types.ProbeStatusUnknown:
+			msg += fmt.Sprintf("- %s: Unknown\n", probeType)
+		}
+
+		for _, m := range probeRes.Messages {
+			msg += "  - " + m + "\n"
 		}
 	}
 
 	return msg
 }
 
-func runProbes(obj Object, probes map[string]types.Prober) map[string]ObjectProbeResult {
-	results := map[string]ObjectProbeResult{}
+func runProbes(obj Object, probes map[string]types.Prober) types.ProbeContainer {
+	results := types.ProbeContainer{}
 
 	for t, probe := range probes {
-		s, msgs := probe.Probe(obj)
-		results[t] = ObjectProbeResult{
-			Success:  s,
-			Messages: msgs,
-		}
+		results[t] = probe.Probe(obj)
 	}
 
 	return results
+}
+
+func isComplete(
+	action Action,
+	probeResults types.ProbeContainer,
+	options types.ObjectReconcileOptions,
+) bool {
+	if options.Paused {
+		return false
+	}
+
+	if action == ActionCollision {
+		return false
+	}
+
+	for _, res := range probeResults {
+		if res.Status != types.ProbeStatusTrue {
+			return false
+		}
+	}
+
+	return true
 }
