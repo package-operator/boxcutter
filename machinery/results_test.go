@@ -25,8 +25,8 @@ var (
 	}
 	failedExampleProbe = map[string]types.Prober{
 		types.ProgressProbeType: &probeStub{
-			success: false,
-			msgs:    []string{"broken: broken"},
+			status: types.ProbeStatusFalse,
+			msgs:   []string{"broken: broken"},
 		},
 	}
 )
@@ -34,7 +34,7 @@ var (
 func TestObjectResultCreated(t *testing.T) {
 	t.Parallel()
 
-	or := newObjectResultCreated(resultExampleObj, failedExampleProbe)
+	or := newObjectResultCreated(resultExampleObj, types.ObjectReconcileOptions{Probes: failedExampleProbe})
 	assert.Equal(t, `Object Deployment.apps/v1 test/testi
 Action: "Created"
 Probes:
@@ -61,7 +61,7 @@ func TestNormalObjectResult(t *testing.T) {
 				),
 				Removed: fieldpath.NewSet(),
 			},
-		}, failedExampleProbe)
+		}, types.ObjectReconcileOptions{Probes: failedExampleProbe})
 
 	assert.Equal(t, `Object Deployment.apps/v1 test/testi
 Action: "Progressed"
@@ -78,12 +78,67 @@ Comparison:
 }
 
 type probeStub struct {
-	success bool
-	msgs    []string
+	status types.ProbeStatus
+	msgs   []string
 }
 
 func (s *probeStub) Probe(
 	_ client.Object,
-) (success bool, messages []string) {
-	return s.success, s.msgs
+) types.ProbeResult {
+	return types.ProbeResult{
+		Status:   s.status,
+		Messages: s.msgs,
+	}
+}
+
+func Test_isComplete(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		action  Action
+		probes  types.ProbeContainer
+		options types.ObjectReconcileOptions
+
+		result bool
+	}{
+		{
+			name:   "Collision",
+			action: ActionCollision,
+
+			result: false,
+		},
+		{
+			name: "Paused",
+			options: types.ObjectReconcileOptions{
+				Paused: true,
+			},
+
+			result: false,
+		},
+		{
+			name: "Progress probe failure",
+			probes: types.ProbeContainer{
+				types.ProgressProbeType: types.ProbeResult{
+					Status: types.ProbeStatusFalse,
+				},
+			},
+
+			result: false,
+		},
+		{
+			name: "success",
+
+			result: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := isComplete(test.action, test.probes, test.options)
+			assert.Equal(t, test.result, r)
+		})
+	}
 }

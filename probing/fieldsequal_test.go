@@ -18,7 +18,7 @@ func TestFieldsEqual(t *testing.T) {
 	tests := []struct {
 		name     string
 		obj      *unstructured.Unstructured
-		status   ProbeStatus
+		status   Status
 		messages []string
 	}{
 		{
@@ -31,7 +31,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusTrue,
+			status: StatusTrue,
 			messages: []string{
 				`".spec.fieldA" == ".spec.fieldB"`,
 			},
@@ -46,7 +46,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`".spec.fieldA" != ".spec.fieldB" expected: "test" got: "not test"`},
 		},
 		{
@@ -63,7 +63,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusTrue,
+			status:   StatusTrue,
 			messages: []string{`".spec.fieldA" == ".spec.fieldB"`},
 		},
 		{
@@ -80,7 +80,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`".spec.fieldA" != ".spec.fieldB" expected: {"fk":"fv"} got: {"fk":"something else"}`},
 		},
 		{
@@ -97,7 +97,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`".spec.fieldA" != ".spec.fieldB" expected: {"fk":1} got: {"fk":2}`},
 		},
 		{
@@ -109,7 +109,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`".spec.fieldA" missing`},
 		},
 		{
@@ -121,7 +121,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`".spec.fieldB" missing`},
 		},
 	}

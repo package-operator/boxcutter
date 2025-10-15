@@ -18,6 +18,7 @@ import (
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
+	"pkg.package-operator.run/boxcutter/probing"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -29,8 +30,8 @@ func TestRevisionEngine(t *testing.T) {
 		},
 	}
 
-	obj1Probe := &stubProbe{success: false, messages: []string{"nope"}}
-	obj2Probe := &stubProbe{success: true}
+	obj1Probe := &stubProbe{status: probing.StatusFalse, messages: []string{"nope"}}
+	obj2Probe := &stubProbe{status: probing.StatusTrue}
 	obj1 := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
@@ -97,6 +98,7 @@ func TestRevisionEngine(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	t.Log(res.String())
 	assert.False(t, res.IsComplete(), "Revision should not be complete.")
 	assert.True(t, res.InTransistion(), "Revision should be in transition.")
 
@@ -110,7 +112,7 @@ func TestRevisionEngine(t *testing.T) {
 		"test-rev-obj-2 should not have been created")
 
 	// 2nd Run.
-	obj1Probe.success = true
+	obj1Probe.status = probing.StatusTrue
 	obj1Probe.messages = nil
 	res, err = re.Reconcile(ctx, rev)
 	require.NoError(t, err)
@@ -169,10 +171,10 @@ func TestRevisionEngine(t *testing.T) {
 }
 
 type stubProbe struct {
-	success  bool
+	status   probing.Status
 	messages []string
 }
 
-func (p *stubProbe) Probe(_ client.Object) (success bool, messages []string) {
-	return p.success, p.messages
+func (p *stubProbe) Probe(_ client.Object) probing.Result {
+	return probing.Result{Status: p.status, Messages: p.messages}
 }

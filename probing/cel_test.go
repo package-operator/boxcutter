@@ -24,7 +24,7 @@ func Test_celProbe(t *testing.T) {
 		messages []string
 		obj      *unstructured.Unstructured
 
-		status ProbeStatus
+		status Status
 	}{
 		{
 			name:     "simple success",
@@ -37,7 +37,7 @@ func Test_celProbe(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusTrue,
+			status: StatusTrue,
 		},
 		{
 			name:     "simple failure",
@@ -50,7 +50,7 @@ func Test_celProbe(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusFalse,
+			status: StatusFalse,
 		},
 		{
 			name:     "OpenShift Route success simple",
@@ -74,7 +74,7 @@ func Test_celProbe(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusTrue,
+			status: StatusTrue,
 		},
 		{
 			name:     "OpenShift Route failure",
@@ -107,7 +107,7 @@ func Test_celProbe(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusFalse,
+			status: StatusFalse,
 		},
 	}
 
@@ -121,7 +121,7 @@ func Test_celProbe(t *testing.T) {
 			r := p.Probe(test.obj)
 			assert.Equal(t, test.status, r.Status)
 
-			if test.status == ProbeStatusTrue {
+			if test.status == StatusTrue {
 				assert.Empty(t, r.Messages)
 			} else {
 				assert.Equal(t, test.messages, r.Messages)

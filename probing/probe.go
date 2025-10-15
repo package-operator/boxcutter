@@ -6,35 +6,27 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
 
-// Prober check Kubernetes objects for certain conditions and report success or failure with failure messages.
-// type Prober = types.Prober
+	"pkg.package-operator.run/boxcutter/machinery/types"
+)
 
 // Prober needs to be implemented by any probing implementation.
-type Prober interface {
-	Probe(obj client.Object) ProbeResult
-}
+type Prober = types.Prober
 
-// ProbeStatus may be "True", "False" or "Unknown".
-type ProbeStatus string
+// Status may be "True", "False" or "Unknown".
+type Status = types.ProbeStatus
 
 const (
-	// ProbeStatusTrue means the probe has succeeded.
-	ProbeStatusTrue ProbeStatus = "True"
-	// ProbeStatusFalse means the probe has failed.
-	ProbeStatusFalse ProbeStatus = "False"
-	// ProbeStatusUnknown means the probe was unable to determine the state.
-	ProbeStatusUnknown ProbeStatus = "Unknown"
+	// StatusTrue means the probe has succeeded.
+	StatusTrue Status = types.ProbeStatusTrue
+	// StatusFalse means the probe has failed.
+	StatusFalse Status = types.ProbeStatusFalse
+	// StatusUnknown means the probe was unable to determine the state.
+	StatusUnknown Status = types.ProbeStatusUnknown
 )
 
-// ProbeResult combines a ProbeState with human readable messages describing how the state happened.
-type ProbeResult struct {
-	// Status of the probe result, one of True, False, Unknown.
-	Status ProbeStatus
-	// Messages are human readable status descriptions containing details about the reported state.
-	Messages []string
-}
+// Result combines a probe status with human readable messages describing how the state happened.
+type Result = types.ProbeResult
 
 // And combines multiple Prober.
 // The returned status is:
@@ -47,7 +39,7 @@ type And []Prober
 var _ Prober = (And)(nil)
 
 // Probe runs probes against the given object and returns the result.
-func (p And) Probe(obj client.Object) ProbeResult {
+func (p And) Probe(obj client.Object) Result {
 	var unknownMsgs, trueMsgs, falseMsgs []string
 
 	var statusUnknown, statusFalse bool
@@ -55,13 +47,13 @@ func (p And) Probe(obj client.Object) ProbeResult {
 	for _, probe := range p {
 		r := probe.Probe(obj)
 		switch r.Status {
-		case ProbeStatusTrue:
+		case StatusTrue:
 			trueMsgs = append(trueMsgs, r.Messages...)
-		case ProbeStatusFalse:
+		case StatusFalse:
 			statusFalse = true
 
 			falseMsgs = append(falseMsgs, r.Messages...)
-		case ProbeStatusUnknown:
+		case StatusUnknown:
 			statusUnknown = true
 
 			unknownMsgs = append(unknownMsgs, r.Messages...)
@@ -69,21 +61,21 @@ func (p And) Probe(obj client.Object) ProbeResult {
 	}
 
 	if statusUnknown {
-		return ProbeResult{
-			Status:   ProbeStatusUnknown,
+		return Result{
+			Status:   StatusUnknown,
 			Messages: unknownMsgs,
 		}
 	}
 
 	if statusFalse {
-		return ProbeResult{
-			Status:   ProbeStatusFalse,
+		return Result{
+			Status:   StatusFalse,
 			Messages: falseMsgs,
 		}
 	}
 
-	return ProbeResult{
-		Status:   ProbeStatusTrue,
+	return Result{
+		Status:   StatusTrue,
 		Messages: trueMsgs,
 	}
 }
@@ -99,8 +91,8 @@ func toUnstructured(obj client.Object) *unstructured.Unstructured {
 
 func probeUnstructuredSingleMsg(
 	obj client.Object,
-	probe func(obj *unstructured.Unstructured) ProbeResult,
-) ProbeResult {
+	probe func(obj *unstructured.Unstructured) Result,
+) Result {
 	unst := toUnstructured(obj)
 
 	return probe(unst)

@@ -18,12 +18,12 @@ func TestStatusObservedGeneration(t *testing.T) {
 
 	properMock.
 		On("Probe", mock.Anything).
-		Return(ProbeResult{Status: ProbeStatusTrue, Messages: []string{"banana"}})
+		Return(Result{Status: StatusTrue, Messages: []string{"banana"}})
 
 	tests := []struct {
 		name     string
 		obj      *unstructured.Unstructured
-		status   ProbeStatus
+		status   Status
 		messages []string
 	}{
 		{
@@ -38,7 +38,7 @@ func TestStatusObservedGeneration(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{".status outdated"},
 		},
 		{
@@ -53,7 +53,7 @@ func TestStatusObservedGeneration(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusTrue,
+			status:   StatusTrue,
 			messages: []string{"banana"},
 		},
 		{
@@ -66,7 +66,7 @@ func TestStatusObservedGeneration(t *testing.T) {
 					"status": map[string]any{},
 				},
 			},
-			status:   ProbeStatusTrue,
+			status:   StatusTrue,
 			messages: []string{"banana"},
 		},
 	}

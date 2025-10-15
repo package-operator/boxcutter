@@ -18,7 +18,7 @@ func TestCondition(t *testing.T) {
 	tests := []struct {
 		name     string
 		obj      *unstructured.Unstructured
-		status   ProbeStatus
+		status   Status
 		messages []string
 	}{
 		{
@@ -44,7 +44,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status: ProbeStatusTrue,
+			status: StatusTrue,
 			messages: []string{
 				`.status.condition["Available"] is False`,
 			},
@@ -67,7 +67,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`.status.condition["Available"] outdated`},
 		},
 		{
@@ -88,7 +88,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusFalse,
+			status:   StatusFalse,
 			messages: []string{`.status.condition["Available"] is Unknown`},
 		},
 		{
@@ -109,7 +109,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`missing .status.condition["Available"]`},
 		},
 		{
@@ -126,7 +126,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`malformed .status.conditions`},
 		},
 		{
@@ -143,7 +143,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`malformed .status.conditions`},
 		},
 		{
@@ -158,7 +158,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`malformed .status.conditions`},
 		},
 		{
@@ -171,7 +171,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`missing .status.conditions`},
 		},
 		{
@@ -183,7 +183,7 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			status:   ProbeStatusUnknown,
+			status:   StatusUnknown,
 			messages: []string{`missing .status.conditions`},
 		},
 	}

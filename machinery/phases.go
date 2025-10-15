@@ -222,8 +222,8 @@ type PhaseResult interface {
 	// if the phase has objects progressed to a new revision or
 	// if objects have unresolved conflicts.
 	InTransistion() bool
-	// IsComplete returns true when all objects have
-	// successfully been reconciled and pass their probes.
+	// IsComplete returns true when all objects have successfully
+	// been reconciled and pass their "Progress" probes.
 	IsComplete() bool
 	// HasProgressed returns true when all objects have been progressed to a newer revision.
 	HasProgressed() bool
@@ -271,6 +271,11 @@ func (r *phaseResult) InTransistion() bool {
 		case ActionCollision, ActionProgressed:
 			return true
 		}
+
+		if probe, ok := o.Probes()[types.ProgressProbeType]; ok &&
+			probe.Status != types.ProbeStatusTrue {
+			return true
+		}
 	}
 
 	return false
@@ -297,11 +302,7 @@ func (r *phaseResult) IsComplete() bool {
 	}
 
 	for _, o := range r.objects {
-		if o.Action() == ActionCollision {
-			return false
-		}
-
-		if probe, ok := o.Probes()[types.ProgressProbeType]; ok && !probe.Success {
+		if !o.IsComplete() {
 			return false
 		}
 	}

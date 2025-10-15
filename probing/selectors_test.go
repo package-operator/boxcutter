@@ -19,7 +19,7 @@ func TestKindSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusTrue})
+			Return(Result{Status: StatusTrue})
 
 		gk := schema.GroupKind{
 			Kind: "Pod",
@@ -31,7 +31,7 @@ func TestKindSelector(t *testing.T) {
 			GroupKind: gk,
 		}
 		r := s.Probe(obj)
-		assert.Equal(t, ProbeStatusTrue, r.Status)
+		assert.Equal(t, StatusTrue, r.Status)
 		assert.Empty(t, r.Messages)
 		prober.AssertCalled(t, "Probe", mock.Anything)
 	})
@@ -53,7 +53,7 @@ func TestKindSelector(t *testing.T) {
 			GroupKind: gk,
 		}
 		r := s.Probe(obj)
-		assert.Equal(t, ProbeStatusTrue, r.Status)
+		assert.Equal(t, StatusTrue, r.Status)
 		assert.Empty(t, r.Messages)
 		prober.AssertNotCalled(t, "Probe", mock.Anything)
 	})
@@ -68,7 +68,7 @@ func TestLabelSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusTrue})
+			Return(Result{Status: StatusTrue})
 
 		obj := &unstructured.Unstructured{}
 		s := &LabelSelector{
@@ -76,7 +76,7 @@ func TestLabelSelector(t *testing.T) {
 			Selector: labels.Everything(),
 		}
 		r := s.Probe(obj)
-		assert.Equal(t, ProbeStatusTrue, r.Status)
+		assert.Equal(t, StatusTrue, r.Status)
 		assert.Empty(t, r.Messages)
 		prober.AssertCalled(t, "Probe", mock.Anything)
 	})
@@ -87,7 +87,7 @@ func TestLabelSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusTrue})
+			Return(Result{Status: StatusTrue})
 
 		obj := &unstructured.Unstructured{}
 		s := &LabelSelector{
@@ -95,7 +95,7 @@ func TestLabelSelector(t *testing.T) {
 			Selector: labels.Nothing(),
 		}
 		r := s.Probe(obj)
-		assert.Equal(t, ProbeStatusTrue, r.Status)
+		assert.Equal(t, StatusTrue, r.Status)
 		assert.Empty(t, r.Messages)
 		prober.AssertNotCalled(t, "Probe", mock.Anything)
 	})

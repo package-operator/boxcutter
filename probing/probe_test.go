@@ -15,10 +15,10 @@ type proberMock struct {
 	mock.Mock
 }
 
-func (m *proberMock) Probe(obj client.Object) ProbeResult {
+func (m *proberMock) Probe(obj client.Object) Result {
 	args := m.Called(obj)
 
-	return args.Get(0).(ProbeResult)
+	return args.Get(0).(Result)
 }
 
 func TestAnd(t *testing.T) {
@@ -31,15 +31,15 @@ func TestAnd(t *testing.T) {
 
 		prober1.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusFalse, Messages: []string{"error from prober1"}})
+			Return(Result{Status: StatusFalse, Messages: []string{"error from prober1"}})
 		prober2.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusFalse, Messages: []string{"error from prober2"}})
+			Return(Result{Status: StatusFalse, Messages: []string{"error from prober2"}})
 
 		l := And{prober1, prober2}
 
 		r := l.Probe(&unstructured.Unstructured{})
-		assert.Equal(t, ProbeStatusFalse, r.Status)
+		assert.Equal(t, StatusFalse, r.Status)
 		assert.Equal(t, []string{"error from prober1", "error from prober2"}, r.Messages)
 	})
 
@@ -51,15 +51,15 @@ func TestAnd(t *testing.T) {
 
 		prober1.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusTrue, Messages: []string{"success from prober1"}})
+			Return(Result{Status: StatusTrue, Messages: []string{"success from prober1"}})
 		prober2.
 			On("Probe", mock.Anything).
-			Return(ProbeResult{Status: ProbeStatusTrue, Messages: []string{"success from prober2"}})
+			Return(Result{Status: StatusTrue, Messages: []string{"success from prober2"}})
 
 		l := And{prober1, prober2}
 
 		r := l.Probe(&unstructured.Unstructured{})
-		assert.Equal(t, ProbeStatusTrue, r.Status)
+		assert.Equal(t, StatusTrue, r.Status)
 		assert.Equal(t, []string{"success from prober1", "success from prober2"}, r.Messages)
 	})
 }
