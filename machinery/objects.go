@@ -226,7 +226,7 @@ func (e *ObjectEngine) Reconcile(
 			return nil, fmt.Errorf("creating resource: %w", err)
 		}
 
-		if err := e.migrateFieldManagersToSSA(ctx, desiredObject); err != nil {
+		if err := e.migrateFieldManagersToSSA(ctx, desiredObject, options); err != nil {
 			return nil, fmt.Errorf("migrating to SSA after create: %w", err)
 		}
 
@@ -441,7 +441,7 @@ func (e *ObjectEngine) create(
 	options types.ObjectReconcileOptions, opts ...client.CreateOption,
 ) error {
 	if options.Paused {
-		return nil
+		opts = append(opts, client.DryRunAll)
 	}
 
 	return e.writer.Create(ctx, obj, opts...)
@@ -458,7 +458,7 @@ func (e *ObjectEngine) patch(
 		return nil
 	}
 
-	if err := e.migrateFieldManagersToSSA(ctx, obj); err != nil {
+	if err := e.migrateFieldManagersToSSA(ctx, obj, options); err != nil {
 		return err
 	}
 
@@ -542,8 +542,12 @@ func (e *ObjectEngine) getObjectRevision(obj client.Object) (int64, error) {
 // Migrate field ownerships to be compatible with server-side apply.
 // SSA really is complicated: https://github.com/kubernetes/kubernetes/issues/99003
 func (e *ObjectEngine) migrateFieldManagersToSSA(
-	ctx context.Context, object Object,
+	ctx context.Context, object Object, options types.ObjectReconcileOptions,
 ) error {
+	if options.Paused {
+		return nil
+	}
+
 	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
 		object, sets.New(e.fieldOwner), e.fieldOwner)
 
