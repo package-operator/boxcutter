@@ -227,8 +227,6 @@ type PhaseResult interface {
 	IsComplete() bool
 	// HasProgressed returns true when all objects have been progressed to a newer revision.
 	HasProgressed() bool
-	// GetProbesStatus returns a human readable status of all failing probes on all objects.
-	GetProbesStatus() string
 	String() string
 }
 
@@ -305,26 +303,6 @@ func (r *phaseResult) IsComplete() bool {
 	}
 
 	return true
-}
-
-func (r *phaseResult) GetProbesStatus() string {
-	if r.IsComplete() {
-		return ""
-	}
-
-	messages := []string{}
-
-	ores := r.GetObjects()
-	for _, o := range ores {
-		if !o.Success() {
-			messages = append(messages,
-				o.Object().GetObjectKind().GroupVersionKind().Kind+"/"+
-					o.Object().GetName()+": "+
-					strings.Join(o.Probes()[types.ProgressProbeType].Messages, ", "))
-		}
-	}
-
-	return strings.Join(messages, ",")
 }
 
 func (r *phaseResult) String() string {

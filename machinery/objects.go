@@ -237,7 +237,7 @@ func (e *ObjectEngine) Reconcile(
 		if errors.IsAlreadyExists(err) {
 			// Might be a slow cache or an object created by a different actor
 			// but excluded by the cache selector.
-			return nil, &CreateCollisionError{Object: desiredObject, Msg: err.Error()}
+			return nil, &CreateCollisionError{object: desiredObject, msg: err.Error()}
 		}
 
 		if err != nil {
@@ -587,7 +587,7 @@ func removeBoxcutterManagedLabel(
 
 	labels := updated.GetLabels()
 
-	delete(labels, "boxcutter-managed")
+	delete(labels, boxcutterManagedLabel)
 	updated.SetLabels(labels)
 
 	if err := w.Patch(ctx, updated, client.MergeFrom(obj)); err != nil {

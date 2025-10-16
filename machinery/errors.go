@@ -11,11 +11,11 @@ import (
 // This happens when another actor has created the object and caches are slow,
 // or the colliding object is excluded via cache selectors.
 type CreateCollisionError struct {
-	Object client.Object
-	Msg    string
+	object client.Object
+	msg    string
 }
 
 // Error implements golangs error interface.
 func (e CreateCollisionError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Object, e.Msg)
+	return fmt.Sprintf("%s: %s", e.object, e.msg)
 }

@@ -136,6 +136,9 @@ func TestObjectEngine(t *testing.T) {
 						"annotations": map[string]interface{}{
 							"testtest.xxx/revision": "1",
 						},
+						"labels": map[string]interface{}{
+							"boxcutter-managed": "True",
+						},
 					},
 				},
 			},
@@ -198,6 +201,9 @@ func TestObjectEngine(t *testing.T) {
 						},
 						"annotations": map[string]interface{}{
 							"testtest.xxx/revision": "1",
+						},
+						"labels": map[string]interface{}{
+							"boxcutter-managed": "True",
 						},
 					},
 				},
@@ -444,6 +450,9 @@ func TestObjectEngine(t *testing.T) {
 						"annotations": map[string]interface{}{
 							"testtest.xxx/revision": "1",
 						},
+						"labels": map[string]interface{}{
+							"boxcutter-managed": "True",
+						},
 						"ownerReferences": []interface{}{
 							map[string]interface{}{
 								"apiVersion":         "v1",
@@ -538,6 +547,9 @@ func TestObjectEngine(t *testing.T) {
 						"namespace": "test",
 						"annotations": map[string]interface{}{
 							"testtest.xxx/revision": "1",
+						},
+						"labels": map[string]interface{}{
+							"boxcutter-managed": "True",
 						},
 						"ownerReferences": []interface{}{
 							map[string]interface{}{
@@ -722,6 +734,9 @@ func TestObjectEngine(t *testing.T) {
 						"namespace": "test",
 						"annotations": map[string]interface{}{
 							"testtest.xxx/revision": "1",
+						},
+						"labels": map[string]interface{}{
+							"boxcutter-managed": "True",
 						},
 						"ownerReferences": []interface{}{
 							map[string]interface{}{
