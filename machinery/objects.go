@@ -587,7 +587,7 @@ func removeBoxcutterManagedLabel(
 
 	labels := updated.GetLabels()
 
-	delete(labels, "boxcutter-managed")
+	delete(labels, boxcutterManagedLabel)
 	updated.SetLabels(labels)
 
 	if err := w.Patch(ctx, updated, client.MergeFrom(obj)); err != nil {
