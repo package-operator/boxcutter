@@ -3,6 +3,7 @@ package managedcache
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,8 +84,16 @@ func TestTrackingCache_createTeardownInformers(t *testing.T) {
 		On("RemoveInformer", mock.Anything, mock.Anything).
 		Return(nil)
 
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
-		err := tc.Start(t.Context())
+		defer doneWG.Done()
+
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -106,6 +115,9 @@ func TestTrackingCache_createTeardownInformers(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
+
+	cancel()
+	doneWG.Wait()
 }
 
 func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
@@ -154,8 +166,16 @@ func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
 		On("RemoveInformer", mock.Anything, mock.Anything).
 		Return(nil)
 
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
-		err := tc.Start(t.Context())
+		defer doneWG.Done()
+
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -173,6 +193,9 @@ func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
+
+	cancel()
+	doneWG.Wait()
 }
 
 func TestTrackingCache_WatchFree(t *testing.T) {
@@ -221,8 +244,16 @@ func TestTrackingCache_WatchFree(t *testing.T) {
 		On("RemoveInformer", mock.Anything, mock.Anything).
 		Return(nil)
 
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
-		err := tc.Start(t.Context())
+		defer doneWG.Done()
+
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -252,6 +283,9 @@ func TestTrackingCache_WatchFree(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
+
+	cancel()
+	doneWG.Wait()
 }
 
 func TestTrackingCache_handleCacheWatchError(t *testing.T) {
@@ -400,11 +434,19 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 			{Version: "v1", Kind: "ConfigMap"},
 		}, nil)
 
+	ctx, cancel := context.WithCancel(t.Context())
+
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
 	go func() {
-		err := tc.Start(t.Context())
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
+
+		doneWG.Done()
 	}()
 
 	cmObj := &corev1.ConfigMap{}
@@ -419,6 +461,9 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
+
+	cancel()
+	doneWG.Wait()
 }
 
 func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
@@ -478,11 +523,19 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 			{Version: "v1", Kind: "ConfigMap"},
 		}, nil)
 
+	ctx, cancel := context.WithCancel(t.Context())
+
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
 	go func() {
-		err := tc.Start(t.Context())
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
+
+		doneWG.Done()
 	}()
 
 	cmObj := &corev1.ConfigMapList{}
@@ -491,6 +544,9 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 
 	reflectorWatchErrorHandlerMock.AssertCalled(
 		t, "ErrorHandler", mock.Anything, mock.Anything, mock.Anything)
+
+	cancel()
+	doneWG.Wait()
 }
 
 func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
@@ -519,9 +575,6 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	cacheMock.
 		On("GetInformer", mock.Anything, mock.Anything, mock.Anything).
 		Return(informerMock, nil)
-	informerMock.
-		On("HasSynced").
-		Return(false).Once()
 	informerMock.
 		On("HasSynced").
 		Return(true)
@@ -553,11 +606,19 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 		}).
 		Return(nil)
 
+	ctx, cancel := context.WithCancel(t.Context())
+
+	var doneWG sync.WaitGroup
+
+	doneWG.Add(1)
+
 	go func() {
-		err := tc.Start(t.Context())
+		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
+
+		doneWG.Done()
 	}()
 
 	// No informers
@@ -599,6 +660,9 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
+
+	cancel()
+	doneWG.Wait()
 }
 
 type reflectorWatchErrorHandlerMock struct {
