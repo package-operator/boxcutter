@@ -181,16 +181,16 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Preflight
-	err := e.phaseValidator.Validate(ctx, owner, phase)
-	if err != nil {
-		var perr validation.PhaseValidationError
-		if errors.As(err, &perr) {
-			pres.validationError = &perr
+	if err := e.runPreflightCheck(ctx, owner, phase, pres); err != nil {
+		return pres, err
+	}
 
+	if pres.validationError != nil {
+		if options.EarlyReturn {
 			return pres, nil
 		}
-
-		return pres, fmt.Errorf("validating: %w", err)
+		// Pause
+		types.WithPaused{}.ApplyToPhaseReconcileOptions(&options)
 	}
 
 	// Reconcile
@@ -209,6 +209,25 @@ func (e *PhaseEngine) Reconcile(
 	return pres, nil
 }
 
+func (e *PhaseEngine) runPreflightCheck(
+	ctx context.Context, owner client.Object, phase types.Phase,
+	pres *phaseResult,
+) error {
+	err := e.phaseValidator.Validate(ctx, owner, phase)
+	if err != nil {
+		var perr validation.PhaseValidationError
+		if errors.As(err, &perr) {
+			pres.validationError = &perr
+
+			return nil
+		}
+
+		return fmt.Errorf("validating: %w", err)
+	}
+
+	return nil
+}
+
 // PhaseResult interface to access results of phase reconcile.
 type PhaseResult interface {
 	// GetName returns the name of the phase.
@@ -225,6 +244,11 @@ type PhaseResult interface {
 	// IsComplete returns true when all objects have successfully
 	// been reconciled and pass their "Progress" probes.
 	IsComplete() bool
+	// IsOnCluster returns true when the objects all exist on the cluster.
+	IsOnCluster() bool
+	// IsToSpec returns true when the objects on the cluster contain the desired spec.
+	// Info: The objects might have _additional_ fields set by other controllers.
+	IsToSpec() bool
 	// HasProgressed returns true when all objects have been progressed to a newer revision.
 	HasProgressed() bool
 	String() string
@@ -303,6 +327,29 @@ func (r *phaseResult) IsComplete() bool {
 
 	for _, o := range r.objects {
 		if !o.IsComplete() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IsOnCluster returns true when the objects all exist on the cluster.
+func (r *phaseResult) IsOnCluster() bool {
+	for _, o := range r.objects {
+		if !o.IsOnCluster() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IsToSpec returns true when the objects on the cluster contain the desired spec.
+// Info: The objects might have _additional_ fields set by other controllers.
+func (r *phaseResult) IsToSpec() bool {
+	for _, o := range r.objects {
+		if !o.IsToSpec() {
 			return false
 		}
 	}

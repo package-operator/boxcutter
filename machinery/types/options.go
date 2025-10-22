@@ -57,6 +57,9 @@ type PhaseReconcileOptions struct {
 	DefaultObjectOptions []ObjectReconcileOption
 	// ObjectOptions maps ObjectOptions for specific objects.
 	ObjectOptions map[ObjectRef][]ObjectReconcileOption
+	// EarlyReturn will exit the reconcile operation on preflight errors.
+	// If set to false (default) the library will still run object updates as dry-run to generate a complete report.
+	EarlyReturn bool
 }
 
 // ForObject returns the options for the given object.
@@ -185,6 +188,12 @@ type WithEarlyReturn struct{}
 
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
 func (p WithEarlyReturn) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.EarlyReturn = true
+	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+// ApplyToPhaseReconcileOptions implements PhaseOption.
+func (p WithEarlyReturn) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
 	opts.EarlyReturn = true
 }
 

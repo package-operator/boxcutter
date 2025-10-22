@@ -68,6 +68,11 @@ type RevisionResult interface {
 	// IsComplete returns true when all objects have successfully
 	// been reconciled and pass their "Progress" probes.
 	IsComplete() bool
+	// IsOnCluster returns true when the object exists on the cluster.
+	IsOnCluster() bool
+	// IsToSpec returns true when the object on the cluster contains the desired spec.
+	// Info: The object might have _additional_ fields set by other controllers.
+	IsToSpec() bool
 	// HasProgressed returns true when all phases have been progressed to a newer revision.
 	HasProgressed() bool
 	String() string
@@ -130,6 +135,39 @@ func (r *revisionResult) IsComplete() bool {
 
 	for _, p := range r.phasesResults {
 		if !p.IsComplete() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IsOnCluster returns true when the object exists on the cluster.
+func (r *revisionResult) IsOnCluster() bool {
+	if len(r.phasesResults) < len(r.phases) {
+		// not all phases have been acted on.
+		return false
+	}
+
+	for _, p := range r.phasesResults {
+		if !p.IsOnCluster() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IsToSpec returns true when the object on the cluster contains the desired spec.
+// Info: The object might have _additional_ fields set by other controllers.
+func (r *revisionResult) IsToSpec() bool {
+	if len(r.phasesResults) < len(r.phases) {
+		// not all phases have been acted on.
+		return false
+	}
+
+	for _, p := range r.phasesResults {
+		if !p.IsToSpec() {
 			return false
 		}
 	}

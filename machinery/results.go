@@ -23,6 +23,11 @@ type ObjectResult interface {
 	// - there has been no collision
 	// - the progression probe succeeded
 	IsComplete() bool
+	// IsOnCluster returns true when the object exists on the cluster.
+	IsOnCluster() bool
+	// IsToSpec returns true when the object on the cluster contains the desired spec.
+	// Info: The object might have _additional_ fields set by other controllers.
+	IsToSpec() bool
 	// Probes returns the results from the given object Probes.
 	Probes() types.ProbeContainer
 	// String returns a human readable description of the Result.
@@ -77,6 +82,18 @@ func (r ObjectResultCreated) IsPaused() bool {
 // - the progression probe succeeded.
 func (r ObjectResultCreated) IsComplete() bool {
 	return isComplete(ActionCreated, r.probeResults, r.options)
+}
+
+// IsOnCluster returns true when the object exists on the cluster.
+func (r ObjectResultCreated) IsOnCluster() bool {
+	// return true if not paused, because the object has just been created.
+	return !r.IsPaused()
+}
+
+// IsToSpec returns true when the object on the cluster contains the desired spec.
+// Info: The object might have _additional_ fields set by other controllers.
+func (r ObjectResultCreated) IsToSpec() bool {
+	return r.IsOnCluster()
 }
 
 // Probes returns the results from the given object Probe.
@@ -204,7 +221,19 @@ func (r normalResult) IsPaused() bool {
 // - there has been no collision
 // - the progression probe succeeded.
 func (r normalResult) IsComplete() bool {
-	return isComplete(r.action, r.probeResults, r.options)
+	return isComplete(r.action, r.probeResults, r.options) && r.IsToSpec()
+}
+
+// IsOnCluster returns true when the object exists on the cluster.
+func (r normalResult) IsOnCluster() bool {
+	// normalResults are all Results that are not Created.
+	return true
+}
+
+// IsToSpec returns true when the object on the cluster contains the desired spec.
+// Info: The object might have _additional_ fields set by other controllers.
+func (r normalResult) IsToSpec() bool {
+	return r.IsOnCluster() && !r.compareResult.IsConflict() && len(r.compareResult.Modified()) == 0
 }
 
 // String returns a human readable description of the Result.
