@@ -177,7 +177,7 @@ func TestRevisionResult_String(t *testing.T) {
 					PhaseError: errTest,
 				},
 				objects: []ObjectResult{
-					newObjectResultCreated(obj, nil),
+					newObjectResultCreated(obj, types.ObjectReconcileOptions{}),
 				},
 			},
 		},

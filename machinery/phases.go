@@ -297,11 +297,7 @@ func (r *phaseResult) IsComplete() bool {
 	}
 
 	for _, o := range r.objects {
-		if o.Action() == ActionCollision {
-			return false
-		}
-
-		if probe, ok := o.Probes()[types.ProgressProbeType]; ok && !probe.Success {
+		if !o.IsComplete() {
 			return false
 		}
 	}
