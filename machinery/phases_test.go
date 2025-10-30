@@ -251,7 +251,7 @@ func TestPhaseResult(t *testing.T) {
 				pr := &phaseResult{
 					objects: test.res,
 				}
-				assert.Equal(t, test.expected, pr.InTransistion())
+				assert.Equal(t, test.expected, pr.InTransition())
 			})
 		}
 	})
