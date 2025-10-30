@@ -231,7 +231,7 @@ func (e *ObjectEngine) Reconcile(
 		}
 
 		return newObjectResultCreated(
-			desiredObject, options.Probes), nil
+			desiredObject, options), nil
 
 	case err != nil:
 		return nil, fmt.Errorf("getting object: %w", err)
@@ -271,7 +271,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// Leave object alone.
 		// It's already owned by a later revision.
 		return newObjectResultProgressed(
-			actualObject, compareRes, options.Probes,
+			actualObject, compareRes, options,
 		), nil
 	}
 
@@ -290,7 +290,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			// No conflict with another field manager
 			// and no modification needed.
 			return newObjectResultIdle(
-				actualObject, compareRes, options.Probes,
+				actualObject, compareRes, options,
 			), nil
 		}
 
@@ -306,7 +306,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			}
 
 			return newObjectResultUpdated(
-				desiredObject, compareRes, options.Probes,
+				desiredObject, compareRes, options,
 			), nil
 		}
 
@@ -340,12 +340,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 		if options.Paused {
 			return newObjectResultRecovered(
-				actualObject, compareRes, options.Probes,
+				actualObject, compareRes, options,
 			), nil
 		}
 
 		return newObjectResultRecovered(
-			desiredObject, compareRes, options.Probes,
+			desiredObject, compareRes, options,
 		), nil
 
 		// Taking control checklist:
@@ -359,7 +359,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 		if options.CollisionProtection != types.CollisionProtectionNone {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probes,
+				actualOwner, options,
 			), nil
 		}
 
@@ -371,7 +371,7 @@ func (e *ObjectEngine) objectUpdateHandling(
 			e.hasSystemAnnotationsOrLabels(actualObject) {
 			return newObjectResultConflict(
 				actualObject, compareRes,
-				actualOwner, options.Probes,
+				actualOwner, options,
 			), nil
 		}
 
@@ -411,12 +411,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 
 	if options.Paused {
 		return newObjectResultUpdated(
-			actualObject, compareRes, options.Probes,
+			actualObject, compareRes, options,
 		), nil
 	}
 
 	return newObjectResultUpdated(
-		desiredObject, compareRes, options.Probes,
+		desiredObject, compareRes, options,
 	), nil
 }
 

@@ -28,6 +28,7 @@ import (
 
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/managedcache"
+	"pkg.package-operator.run/boxcutter/probing"
 	"pkg.package-operator.run/boxcutter/util"
 )
 
@@ -421,20 +422,30 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		boxcutter.WithPreviousOwners(previous),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,
-			boxcutter.ProbeFunc(func(obj client.Object) (success bool, messages []string) {
+			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {
 				u, ok := obj.(*unstructured.Unstructured)
 				if obj.GetObjectKind().GroupVersionKind().Kind != "ConfigMap" || !ok {
-					return true, nil
+					return probing.Result{
+						Status: probing.StatusTrue,
+					}
 				}
 				f, ok, _ := unstructured.NestedString(u.Object, "data", "continue")
 				if !ok {
-					return false, []string{".data.continue not set"}
+					return probing.Result{
+						Status:   probing.StatusFalse,
+						Messages: []string{".data.continue not set"},
+					}
 				}
 				if f != "yes" {
-					return false, []string{`.data.continue not set to "yes"`}
+					return probing.Result{
+						Status:   probing.StatusFalse,
+						Messages: []string{`.data.continue not set to "yes"`},
+					}
 				}
 
-				return true, nil
+				return probing.Result{
+					Status: probing.StatusTrue,
+				}
 			})),
 	}
 

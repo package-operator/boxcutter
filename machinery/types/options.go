@@ -214,27 +214,6 @@ func (p WithPaused) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptio
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
-// ProgressProbeType is a well-known probe type used to guard phase progression.
-const ProgressProbeType = "Progress"
-
-// Prober needs to be implemented by any probing implementation.
-type Prober interface {
-	Probe(obj client.Object) (success bool, messages []string)
-}
-
-// ProbeFunc wraps the given function to work with the Prober interface.
-func ProbeFunc(fn func(obj client.Object) (success bool, messages []string)) Prober {
-	return &probeFn{Fn: fn}
-}
-
-type probeFn struct {
-	Fn func(obj client.Object) (success bool, messages []string)
-}
-
-func (p *probeFn) Probe(obj client.Object) (success bool, messages []string) {
-	return p.Fn(obj)
-}
-
 // WithProbe registers the given probe to evaluate state of objects.
 func WithProbe(t string, probe Prober) ObjectReconcileOption {
 	return &optionFn{

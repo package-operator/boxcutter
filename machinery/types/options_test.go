@@ -343,24 +343,24 @@ func TestProbeFunc(t *testing.T) {
 	t.Run("wraps function correctly", func(t *testing.T) {
 		t.Parallel()
 
-		expectedSuccess := true
-		expectedMessages := []string{"test message"}
-
-		probeFn := ProbeFunc(func(_ client.Object) (bool, []string) {
-			return expectedSuccess, expectedMessages
+		expectedResult := ProbeResult{
+			Status:   ProbeStatusTrue,
+			Messages: []string{"test message"},
+		}
+		probeFn := ProbeFunc(func(_ client.Object) ProbeResult {
+			return expectedResult
 		})
 
-		success, messages := probeFn.Probe(obj)
-		assert.Equal(t, expectedSuccess, success)
-		assert.Equal(t, expectedMessages, messages)
+		r := probeFn.Probe(obj)
+		assert.Equal(t, expectedResult, r)
 	})
 }
 
 func TestWithProbe(t *testing.T) {
 	t.Parallel()
 
-	probe := ProbeFunc(func(_ client.Object) (bool, []string) {
-		return true, []string{"success"}
+	probe := ProbeFunc(func(_ client.Object) ProbeResult {
+		return ProbeResult{Status: ProbeStatusTrue, Messages: []string{"success"}}
 	})
 
 	probeOption := WithProbe("test-probe", probe)
@@ -379,8 +379,8 @@ func TestWithProbe(t *testing.T) {
 	t.Run("preserves existing probes", func(t *testing.T) {
 		t.Parallel()
 
-		existingProbe := ProbeFunc(func(_ client.Object) (bool, []string) {
-			return false, []string{"existing"}
+		existingProbe := ProbeFunc(func(_ client.Object) ProbeResult {
+			return ProbeResult{Status: ProbeStatusFalse, Messages: []string{"existing"}}
 		})
 
 		opts := &ObjectReconcileOptions{
