@@ -746,7 +746,7 @@ func TestObjectEngine(t *testing.T) {
 				types.WithPaused{},
 			},
 			mockSetup: func(
-				cache *cacheMock, _ *testutil.CtrlClient,
+				cache *cacheMock, writer *testutil.CtrlClient,
 				_ *comparatorMock, _ *unstructured.Unstructured,
 			) {
 				cache.
@@ -754,12 +754,12 @@ func TestObjectEngine(t *testing.T) {
 						client.ObjectKey{Name: "testi", Namespace: "test"},
 						mock.Anything, mock.Anything).
 					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+
+				writer.
+					On("Create", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
 			},
 			expectedAction: ActionCreated,
-			afterAssert: func(t *testing.T, writer *testutil.CtrlClient) {
-				t.Helper()
-				writer.AssertNotCalled(t, "Create")
-			},
 		},
 		{
 			name:          "Paused, apply skipped",
@@ -939,6 +939,104 @@ func TestObjectEngine(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestObjectEngine_Collision(t *testing.T) {
+	t.Parallel()
+
+	t.Run("non paused", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+			"",
+			nil,
+		)
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oe-test",
+				Namespace: "test",
+			},
+			Data: map[string]string{
+				"test1": "test",
+				"test2": "test",
+			},
+		}
+
+		ctx := t.Context()
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
+			Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+
+		writer.
+			On("Create", mock.Anything, mock.Anything, mock.Anything).
+			Return(apierrors.NewAlreadyExists(schema.GroupResource{
+				Group: "test", Resource: "banana",
+			}, "cavendish"))
+
+		_, err := oe.Reconcile(ctx, 1, configMap)
+
+		var terr *CreateCollisionError
+
+		require.ErrorAs(t, err, &terr)
+		require.ErrorContains(t, err, `banana.test "cavendish" already exists`)
+	})
+
+	t.Run("paused", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+			"",
+			nil,
+		)
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oe-test",
+				Namespace: "test",
+			},
+			Data: map[string]string{
+				"test1": "test",
+				"test2": "test",
+			},
+		}
+
+		ctx := t.Context()
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
+			Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+
+		writer.
+			On("Create", mock.Anything, mock.Anything, mock.Anything).
+			Return(apierrors.NewAlreadyExists(schema.GroupResource{
+				Group: "test", Resource: "banana",
+			}, "cavendish"))
+
+		_, err := oe.Reconcile(ctx, 1, configMap, types.WithPaused{})
+
+		var terr *CreateCollisionError
+
+		require.ErrorAs(t, err, &terr)
+		require.ErrorContains(t, err, `banana.test "cavendish" already exists`)
+	})
 }
 
 func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
@@ -1655,7 +1753,7 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 		},
 	}
 
-	err := oe.migrateFieldManagersToSSA(context.Background(), obj)
+	err := oe.migrateFieldManagersToSSA(context.Background(), obj, types.ObjectReconcileOptions{})
 	require.NoError(t, err)
 
 	writer.AssertNotCalled(t, "Patch")
