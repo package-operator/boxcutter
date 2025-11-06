@@ -425,27 +425,17 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {
 				u, ok := obj.(*unstructured.Unstructured)
 				if obj.GetObjectKind().GroupVersionKind().Kind != "ConfigMap" || !ok {
-					return probing.Result{
-						Status: probing.StatusTrue,
-					}
+					return probing.TrueResult()
 				}
 				f, ok, _ := unstructured.NestedString(u.Object, "data", "continue")
 				if !ok {
-					return probing.Result{
-						Status:   probing.StatusFalse,
-						Messages: []string{".data.continue not set"},
-					}
+					return probing.FalseResult(".data.continue not set")
 				}
 				if f != "yes" {
-					return probing.Result{
-						Status:   probing.StatusFalse,
-						Messages: []string{`.data.continue not set to "yes"`},
-					}
+					return probing.FalseResult(`.data.continue not set to "yes"`)
 				}
 
-				return probing.Result{
-					Status: probing.StatusTrue,
-				}
+				return probing.TrueResult()
 			})),
 	}
 

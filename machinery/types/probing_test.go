@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProbeContainerType(t *testing.T) {
+func TestProbeResultContainerType(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty", func(t *testing.T) {
 		t.Parallel()
 
-		c := ProbeContainer{}
+		c := ProbeResultContainer{}
 
 		r := c.Type("Test")
 		assert.Equal(t, ProbeResult{
@@ -28,7 +28,7 @@ func TestProbeContainerType(t *testing.T) {
 			Status:   ProbeStatusTrue,
 			Messages: []string{"test123"},
 		}
-		c := ProbeContainer{
+		c := ProbeResultContainer{
 			"Test": expected,
 		}
 

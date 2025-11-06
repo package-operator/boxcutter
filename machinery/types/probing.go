@@ -34,11 +34,11 @@ type ProbeResult struct {
 	Messages []string
 }
 
-// ProbeContainer holds results from multiple probes.
-type ProbeContainer map[string]ProbeResult
+// ProbeResultContainer holds results from multiple probes.
+type ProbeResultContainer map[string]ProbeResult
 
 // Type returns the probe result for the given probe type.
-func (c ProbeContainer) Type(t string) ProbeResult {
+func (c ProbeResultContainer) Type(t string) ProbeResult {
 	if r, ok := c[t]; ok {
 		return r
 	}

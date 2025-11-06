@@ -17,7 +17,7 @@ type ObjectResult interface {
 	// Object as last seen on the cluster after creation/update.
 	Object() Object
 	// Probes returns the results from the given object Probes.
-	Probes() types.ProbeContainer
+	ProbeResults() types.ProbeResultContainer
 	// String returns a human readable description of the Result.
 	String() string
 	// IsComplete returns true when:
@@ -51,7 +51,7 @@ var (
 // ObjectResultCreated is returned when the Object was just created.
 type ObjectResultCreated struct {
 	obj          Object
-	probeResults types.ProbeContainer
+	probeResults types.ProbeResultContainer
 	options      types.ObjectReconcileOptions
 }
 
@@ -93,8 +93,8 @@ func (r ObjectResultCreated) IsComplete() bool {
 	return isComplete(ActionCreated, r.probeResults, r.options)
 }
 
-// Probes returns the results from the given object Probe.
-func (r ObjectResultCreated) Probes() types.ProbeContainer {
+// ProbeResults returns the results from the given object Probe.
+func (r ObjectResultCreated) ProbeResults() types.ProbeResultContainer {
 	return r.probeResults
 }
 
@@ -166,7 +166,7 @@ func newObjectResultRecovered(
 type normalResult struct {
 	action        Action
 	obj           Object
-	probeResults  types.ProbeContainer
+	probeResults  types.ProbeResultContainer
 	compareResult CompareResult
 	options       types.ObjectReconcileOptions
 }
@@ -207,8 +207,8 @@ func (r normalResult) CompareResult() CompareResult {
 	return r.compareResult
 }
 
-// Probe returns the results from the given object Probe.
-func (r normalResult) Probes() types.ProbeContainer {
+// ProbeResults returns the results from the given object Probe.
+func (r normalResult) ProbeResults() types.ProbeResultContainer {
 	return r.probeResults
 }
 
@@ -313,7 +313,7 @@ func reportStart(or ObjectResult) string {
 		actionStr, or.Action(),
 	)
 
-	probes := or.Probes()
+	probes := or.ProbeResults()
 	probeTypes := make([]string, 0, len(probes))
 
 	for k := range probes {
@@ -345,8 +345,8 @@ func reportStart(or ObjectResult) string {
 	return msg
 }
 
-func runProbes(obj Object, probes map[string]types.Prober) types.ProbeContainer {
-	results := types.ProbeContainer{}
+func runProbes(obj Object, probes map[string]types.Prober) types.ProbeResultContainer {
+	results := types.ProbeResultContainer{}
 
 	for t, probe := range probes {
 		results[t] = probe.Probe(obj)
@@ -365,7 +365,7 @@ func runProbes(obj Object, probes map[string]types.Prober) types.ProbeContainer 
 // - the progression probe failed or returned unknown.
 func isComplete(
 	action Action,
-	probeResults types.ProbeContainer,
+	probeResults types.ProbeResultContainer,
 	options types.ObjectReconcileOptions,
 ) bool {
 	if action == ActionCollision {

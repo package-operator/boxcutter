@@ -63,3 +63,34 @@ func TestAnd(t *testing.T) {
 		assert.Equal(t, []string{"success from prober1", "success from prober2"}, r.Messages)
 	})
 }
+
+func TestResultHelpers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("TrueResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := TrueResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusTrue, r.Status)
+	})
+
+	t.Run("FalseResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := FalseResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusFalse, r.Status)
+	})
+
+	t.Run("UnknownResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := UnknownResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusUnknown, r.Status)
+	})
+}

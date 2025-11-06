@@ -80,6 +80,21 @@ func (p And) Probe(obj client.Object) Result {
 	}
 }
 
+// TrueResult is a helper returning a True ProbeResult with the given messages.
+func TrueResult(msgs ...string) Result {
+	return Result{Status: StatusTrue, Messages: msgs}
+}
+
+// FalseResult is a helper returning a False ProbeResult with the given messages.
+func FalseResult(msgs ...string) Result {
+	return Result{Status: StatusFalse, Messages: msgs}
+}
+
+// UnknownResult is a helper returning a Unknown ProbeResult with the given messages.
+func UnknownResult(msgs ...string) Result {
+	return Result{Status: StatusUnknown, Messages: msgs}
+}
+
 func toUnstructured(obj client.Object) *unstructured.Unstructured {
 	unstr, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {

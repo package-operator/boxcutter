@@ -300,7 +300,7 @@ func Test_isComplete(t *testing.T) {
 	tests := []struct {
 		name         string
 		action       Action
-		probeResults types.ProbeContainer
+		probeResults types.ProbeResultContainer
 		options      types.ObjectReconcileOptions
 		expected     bool
 	}{
@@ -311,7 +311,7 @@ func Test_isComplete(t *testing.T) {
 				// must be defined in options or probe results will be ignored
 				Probes: map[string]types.Prober{types.ProgressProbeType: &probeStub{}},
 			},
-			probeResults: types.ProbeContainer{
+			probeResults: types.ProbeResultContainer{
 				types.ProgressProbeType: types.ProbeResult{Status: types.ProbeStatusFalse},
 			},
 			expected: false,
@@ -323,7 +323,7 @@ func Test_isComplete(t *testing.T) {
 				// must be defined in options or probe results will be ignored
 				Probes: map[string]types.Prober{types.ProgressProbeType: &probeStub{}},
 			},
-			probeResults: types.ProbeContainer{
+			probeResults: types.ProbeResultContainer{
 				types.ProgressProbeType: types.ProbeResult{Status: types.ProbeStatusFalse},
 				"other":                 types.ProbeResult{Status: types.ProbeStatusTrue},
 			},
@@ -332,7 +332,7 @@ func Test_isComplete(t *testing.T) {
 		{
 			name:   "true when progression probe succeeds, but other probe fails",
 			action: ActionUpdated,
-			probeResults: types.ProbeContainer{
+			probeResults: types.ProbeResultContainer{
 				types.ProgressProbeType: types.ProbeResult{Status: types.ProbeStatusTrue},
 				"other":                 types.ProbeResult{Status: types.ProbeStatusFalse},
 			},
