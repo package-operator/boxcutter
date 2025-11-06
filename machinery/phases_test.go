@@ -52,7 +52,7 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
+		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
 	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
 		Name: "test",
@@ -95,7 +95,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(validation.PhaseValidationError{})
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
+		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
 	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
 		Name: "test",
@@ -209,16 +209,16 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true - progressed",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultProgressed(nil, CompareResult{}, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultProgressed(nil, CompareResult{}, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
 			{
 				name: "true - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultConflict(nil, CompareResult{}, nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
@@ -239,7 +239,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - created",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
 				},
 				expected: false,
 			},
@@ -259,8 +259,9 @@ func TestPhaseResult(t *testing.T) {
 	t.Run("IsComplete", func(t *testing.T) {
 		t.Parallel()
 
-		failedProbeRes := newObjectResultCreated(nil, nil).(ObjectResultCreated)
-		failedProbeRes.probeResults[types.ProgressProbeType] = ObjectProbeResult{Success: false}
+		failedProbeRes := newObjectResultCreated(nil, types.ObjectReconcileOptions{
+			Paused: true,
+		}).(ObjectResultCreated)
 
 		tests := []struct {
 			name     string
@@ -271,7 +272,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
@@ -284,8 +285,8 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultConflict(nil, CompareResult{}, nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, types.ObjectReconcileOptions{}),
 				},
 				expected: false,
 			},
@@ -332,7 +333,7 @@ func TestPhaseResult_String(t *testing.T) {
 			PhaseError: errTest,
 		},
 		objects: []ObjectResult{
-			newObjectResultCreated(obj, nil),
+			newObjectResultCreated(obj, types.ObjectReconcileOptions{}),
 		},
 	}
 
@@ -465,7 +466,7 @@ func TestPhaseResult_GetObjects(t *testing.T) {
 	}
 
 	objects := []ObjectResult{
-		newObjectResultCreated(obj, map[string]types.Prober{}),
+		newObjectResultCreated(obj, types.ObjectReconcileOptions{}),
 	}
 
 	result := &phaseResult{

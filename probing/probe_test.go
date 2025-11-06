@@ -15,12 +15,10 @@ type proberMock struct {
 	mock.Mock
 }
 
-func (m *proberMock) Probe(obj client.Object) (
-	success bool, messages []string,
-) {
+func (m *proberMock) Probe(obj client.Object) Result {
 	args := m.Called(obj)
 
-	return args.Bool(0), args.Get(1).([]string)
+	return args.Get(0).(Result)
 }
 
 func TestAnd(t *testing.T) {
@@ -33,17 +31,18 @@ func TestAnd(t *testing.T) {
 
 		prober1.
 			On("Probe", mock.Anything).
-			Return(false, []string{"error from prober1"})
+			Return(Result{Status: StatusFalse, Messages: []string{"error from prober1"}})
 		prober2.
 			On("Probe", mock.Anything).
-			Return(false, []string{"error from prober2"})
+			Return(Result{Status: StatusFalse, Messages: []string{"error from prober2"}})
 
 		l := And{prober1, prober2}
 
-		s, m := l.Probe(&unstructured.Unstructured{})
-		assert.False(t, s)
-		assert.Equal(t, []string{"error from prober1", "error from prober2"}, m)
+		r := l.Probe(&unstructured.Unstructured{})
+		assert.Equal(t, StatusFalse, r.Status)
+		assert.Equal(t, []string{"error from prober1", "error from prober2"}, r.Messages)
 	})
+
 	t.Run("succeeds when all subprobes succeed", func(t *testing.T) {
 		t.Parallel()
 
@@ -52,15 +51,46 @@ func TestAnd(t *testing.T) {
 
 		prober1.
 			On("Probe", mock.Anything).
-			Return(true, []string{})
+			Return(Result{Status: StatusTrue, Messages: []string{"success from prober1"}})
 		prober2.
 			On("Probe", mock.Anything).
-			Return(true, []string{})
+			Return(Result{Status: StatusTrue, Messages: []string{"success from prober2"}})
 
 		l := And{prober1, prober2}
 
-		s, m := l.Probe(&unstructured.Unstructured{})
-		assert.True(t, s)
-		assert.Nil(t, m)
+		r := l.Probe(&unstructured.Unstructured{})
+		assert.Equal(t, StatusTrue, r.Status)
+		assert.Equal(t, []string{"success from prober1", "success from prober2"}, r.Messages)
+	})
+}
+
+func TestResultHelpers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("TrueResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := TrueResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusTrue, r.Status)
+	})
+
+	t.Run("FalseResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := FalseResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusFalse, r.Status)
+	})
+
+	t.Run("UnknownResult", func(t *testing.T) {
+		t.Parallel()
+
+		msgs := []string{"m1", "m2", "m3"}
+		r := UnknownResult(msgs...)
+		assert.Equal(t, msgs, r.Messages)
+		assert.Equal(t, StatusUnknown, r.Status)
 	})
 }
