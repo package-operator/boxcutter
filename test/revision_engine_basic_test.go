@@ -99,7 +99,7 @@ func TestRevisionEngine(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete(), "Revision should not be complete.")
-	assert.True(t, res.InTransistion(), "Revision should be in transition.")
+	assert.True(t, res.InTransition(), "Revision should be in transition.")
 
 	cm := &corev1.ConfigMap{}
 	require.NoError(t, Client.Get(
@@ -117,7 +117,7 @@ func TestRevisionEngine(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, res.IsComplete(), "Revision should be complete.")
-	assert.False(t, res.InTransistion(), "Revision should not be in transition.")
+	assert.False(t, res.InTransition(), "Revision should not be in transition.")
 	assert.NoError(t, Client.Get(ctx, client.ObjectKey{Name: "test-rev-obj-1", Namespace: "default"}, cm),
 		"test-rev-obj-1 should have been created")
 	assert.NoError(t, Client.Get(ctx, client.ObjectKey{Name: "test-rev-obj-2", Namespace: "default"}, cm),

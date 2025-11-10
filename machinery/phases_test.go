@@ -197,7 +197,7 @@ func (m *phaseValidatorMock) Validate(
 
 func TestPhaseResult(t *testing.T) {
 	t.Parallel()
-	t.Run("InTransistion", func(t *testing.T) {
+	t.Run("InTransition", func(t *testing.T) {
 		t.Parallel()
 
 		tests := []struct {
@@ -251,7 +251,7 @@ func TestPhaseResult(t *testing.T) {
 				pr := &phaseResult{
 					objects: test.res,
 				}
-				assert.Equal(t, test.expected, pr.InTransistion())
+				assert.Equal(t, test.expected, pr.InTransition())
 			})
 		}
 	})

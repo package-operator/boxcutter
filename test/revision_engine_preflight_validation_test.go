@@ -63,7 +63,7 @@ func TestWithOwnerReference(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.False(t, res.IsComplete())
-			assert.False(t, res.InTransistion())
+			assert.False(t, res.InTransition())
 
 			var objValErr validation.ObjectValidationError
 
