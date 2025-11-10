@@ -90,7 +90,7 @@ func (r *revisionResult) GetValidationError() *validation.RevisionValidationErro
 // if objects have unresolved conflicts.
 func (r *revisionResult) InTransistion() bool {
 	for _, p := range r.phasesResults {
-		if p.InTransistion() {
+		if p.InTransition() {
 			return true
 		}
 	}
