@@ -53,7 +53,7 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
-	assert.True(t, res.InTransistion())
+	assert.True(t, res.InTransition())
 
 	phases := res.GetPhases()
 	require.Len(t, phases, 1)
@@ -105,7 +105,7 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
-	assert.True(t, res.InTransistion())
+	assert.True(t, res.InTransition())
 	require.Len(t, res.GetPhases(), 1)
 	phase := res.GetPhases()[0]
 	require.Len(t, phase.GetObjects(), 1)

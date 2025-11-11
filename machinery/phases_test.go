@@ -197,7 +197,7 @@ func (m *phaseValidatorMock) Validate(
 
 func TestPhaseResult(t *testing.T) {
 	t.Parallel()
-	t.Run("InTransistion", func(t *testing.T) {
+	t.Run("InTransition", func(t *testing.T) {
 		t.Parallel()
 
 		tests := []struct {
