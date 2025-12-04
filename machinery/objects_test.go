@@ -1108,6 +1108,51 @@ func TestObjectEngine_Teardown(t *testing.T) {
 	}
 }
 
+func TestObjectEngine_Teardown_Orphan(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "testi",
+				"namespace": "test",
+			},
+		},
+	}
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+	divergeDetector := &comparatorMock{}
+
+	cache.
+		On("Watch", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		ownerStrategy, divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+	)
+	deleted, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithOrphan())
+	require.NoError(t, err)
+
+	assert.True(t, deleted)
+}
+
 func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	t.Parallel()
 

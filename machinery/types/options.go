@@ -127,7 +127,9 @@ var (
 )
 
 // ObjectTeardownOptions holds configuration options changing object teardown.
-type ObjectTeardownOptions struct{}
+type ObjectTeardownOptions struct {
+	Orphan bool
+}
 
 // Default sets empty Option fields to their default value.
 func (opts *ObjectTeardownOptions) Default() {}
@@ -222,6 +224,17 @@ func WithProbe(t string, probe Prober) ObjectReconcileOption {
 				opts.Probes = map[string]Prober{}
 			}
 			opts.Probes[t] = probe
+		},
+	}
+}
+
+// WithOrphan exclude objects from Teardown.
+// use it as WithObjectTeardownOptions(obj, WithOrphan()) to exclude individual objects or
+// use it as WithPhaseTeardownOptions("my-phase", WithOrphan()) to exclude a whole phase.
+func WithOrphan() ObjectTeardownOption {
+	return &teardownOptionFn{
+		fn: func(opts *ObjectTeardownOptions) {
+			opts.Orphan = true
 		},
 	}
 }
@@ -340,5 +353,24 @@ func (p *optionFn) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
 
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
 func (p *optionFn) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+type teardownOptionFn struct {
+	fn func(opts *ObjectTeardownOptions)
+}
+
+// ApplyToObjectTeardownOptions implements ObjectTeardownOption.
+func (p *teardownOptionFn) ApplyToObjectTeardownOptions(opts *ObjectTeardownOptions) {
+	p.fn(opts)
+}
+
+// ApplyToPhaseTeardownOptions implements PhaseOption.
+func (p *teardownOptionFn) ApplyToPhaseTeardownOptions(opts *PhaseTeardownOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
+}
+
+// ApplyToRevisionTeardownOptions implements RevisionTeardownOptions.
+func (p *teardownOptionFn) ApplyToRevisionTeardownOptions(opts *RevisionTeardownOptions) {
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
