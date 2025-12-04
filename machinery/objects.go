@@ -109,7 +109,7 @@ func (e *ObjectEngine) Teardown(
 	// Shortcut when Owner is orphaning its dependents.
 	// If we don't check this, we might be too quick and start deleting
 	// dependents that should be kept on the cluster!
-	if controllerutil.ContainsFinalizer(owner, "orphan") {
+	if controllerutil.ContainsFinalizer(owner, "orphan") || options.Orphan {
 		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
 		if err != nil {
 			return false, err
