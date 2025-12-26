@@ -1,6 +1,6 @@
 module pkg.package-operator.run/boxcutter
 
-go 1.24.6
+go 1.25.0
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -8,13 +8,13 @@ require (
 	github.com/google/cel-go v0.26.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.19.0
-	k8s.io/api v0.34.3
+	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.34.2
-	k8s.io/apimachinery v0.34.3
+	k8s.io/apimachinery v0.35.0
 	k8s.io/apiserver v0.34.3
-	k8s.io/client-go v0.34.3
-	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b
-	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
+	k8s.io/client-go v0.35.0
+	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	pkg.package-operator.run/cardboard v0.0.4
 	pkg.package-operator.run/cardboard/kubeutils v0.0.4
 	pkg.package-operator.run/cardboard/modules/kind v0.0.4
@@ -97,7 +97,7 @@ require (
 	k8s.io/component-base v0.34.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	pkg.package-operator.run/cardboard/modules/kubeclients v0.0.4 // indirect
-	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
+	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kind v0.30.0 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 )
