@@ -2,13 +2,14 @@ package machinery
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -171,7 +172,7 @@ func TestObjectEngine(t *testing.T) {
 						},
 						mock.Anything, mock.Anything,
 					).
-					Return(errors.NewNotFound(schema.GroupResource{}, ""))
+					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
 				ddm.
 					On("Compare", owner, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
@@ -898,6 +899,116 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	})
 }
 
+func TestObjectEngine_TeardownWithTeardownWriter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+
+		mockSetup func(
+			*testutil.CtrlClient,
+		)
+
+		expectedResult bool
+		expectedError  error
+	}{
+		{
+			name: "deletes with teardown client",
+			mockSetup: func(teardownWriter *testutil.CtrlClient) {
+				teardownWriter.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+			},
+			expectedResult: false,
+		},
+		{
+			name: "returns teardown client errors",
+			mockSetup: func(teardownWriter *testutil.CtrlClient) {
+				teardownWriter.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(errors.New("test error"))
+			},
+			expectedError:  errors.New("deleting object: test error"),
+			expectedResult: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			owner := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					UID:       "12345-678-91011",
+					Name:      "some-owner",
+					Namespace: "test-namespace",
+				},
+			}
+
+			obj := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Secret",
+					"metadata": map[string]interface{}{
+						"name":      "test-package",
+						"namespace": "test-namespace",
+						"annotations": map[string]interface{}{
+							"testtest.xxx/revision": "1",
+						},
+					},
+				},
+			}
+			err := controllerutil.SetControllerReference(owner, obj, scheme.Scheme)
+			require.NoError(t, err)
+
+			cache := &cacheMock{}
+			engineWriter := testutil.NewClient()   // default engine writer
+			teardownWriter := testutil.NewClient() // used during tearDown
+			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+			divergeDetector := &comparatorMock{}
+
+			cache.
+				On("Watch", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+
+			cache.
+				On(
+					"Get", mock.Anything,
+					client.ObjectKeyFromObject(obj),
+					mock.Anything, mock.Anything,
+				).
+				Run(func(args mock.Arguments) {
+					objArg := args.Get(2).(*unstructured.Unstructured)
+					*objArg = *obj
+				}).
+				Return(nil)
+
+			engineWriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+			engineWriter.On("Delete", mock.Anything, mock.Anything, mock.Anything).
+				Panic("Delete should not be called on the engine writer when WithTeardownWriter options is used")
+
+			test.mockSetup(teardownWriter)
+
+			oe := NewObjectEngine(
+				scheme.Scheme,
+				cache, engineWriter,
+				ownerStrategy, divergeDetector,
+				testFieldOwner,
+				testSystemPrefix,
+			)
+
+			result, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithTeardownWriter(teardownWriter))
+			if test.expectedError != nil {
+				assert.EqualError(t, err, test.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, test.expectedResult, result)
+			}
+		})
+	}
+}
+
 func TestObjectEngine_Teardown(t *testing.T) {
 	t.Parallel()
 
@@ -923,9 +1034,8 @@ func TestObjectEngine_Teardown(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name          string
-		revision      int64
-		desiredObject *unstructured.Unstructured
+		name     string
+		revision int64
 
 		mockSetup func(
 			*cacheMock,
@@ -936,9 +1046,8 @@ func TestObjectEngine_Teardown(t *testing.T) {
 		expectedError  error
 	}{
 		{
-			name:          "deletes",
-			revision:      1,
-			desiredObject: obj,
+			name:     "deletes",
+			revision: 1,
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -986,9 +1095,8 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			},
 		},
 		{
-			name:          "revision error",
-			revision:      1,
-			desiredObject: obj,
+			name:     "revision error",
+			revision: 1,
 
 			mockSetup: func(
 				cache *cacheMock, _ *testutil.CtrlClient,
@@ -1033,9 +1141,8 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			expectedResult: true,
 		},
 		{
-			name:          "owner error",
-			revision:      1,
-			desiredObject: obj,
+			name:     "owner error",
+			revision: 1,
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
