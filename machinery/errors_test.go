@@ -51,9 +51,10 @@ func TestCreateCollisionError_Error(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := CreateCollisionError{object: tt.obj, msg: tt.msg}
+			err := NewCreateCollisionError(tt.obj, tt.msg)
 			got := err.Error()
 			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.obj, err.Object())
 		})
 	}
 }
