@@ -29,26 +29,10 @@ type restMapper interface {
 type ObjectValidator struct {
 	restMapper restMapper
 	writer     client.Writer
-
-	// Allows creating objects in namespaces different to Owner.
-	allowNamespaceEscalation bool
 }
 
-// NewClusterObjectValidator returns an ObjectValidator for cross-cluster deployments.
-func NewClusterObjectValidator(
-	restMapper restMapper,
-	writer client.Writer,
-) *ObjectValidator {
-	return &ObjectValidator{
-		restMapper: restMapper,
-		writer:     writer,
-
-		allowNamespaceEscalation: true,
-	}
-}
-
-// NewNamespacedObjectValidator returns an ObjecctValidator for single-namespace deployments.
-func NewNamespacedObjectValidator(
+// NewObjectValidator returns an ObjectValidator.
+func NewObjectValidator(
 	restMapper restMapper,
 	writer client.Writer,
 ) *ObjectValidator {
@@ -63,21 +47,17 @@ func NewNamespacedObjectValidator(
 // It returns an ObjectValidationError when it was successfully able to validate the Object.
 // It returns a different error when unable to validate the object.
 func (d *ObjectValidator) Validate(
-	ctx context.Context, owner client.Object,
+	ctx context.Context, metadata bctypes.RevisionMetadata,
 	obj *unstructured.Unstructured,
 ) error {
 	// Static metadata validation.
 	errs := validateObjectMetadata(obj)
 
-	if !d.allowNamespaceEscalation {
-		// Ensure we are not leaving the namespace we are operating in.
-		if err := validateNamespace(
-			d.restMapper, owner.GetNamespace(), obj,
-		); err != nil {
-			errs = append(errs, err)
-			// we don't want to do a dry-run when this already fails.
-			return NewObjectValidationError(bctypes.ToObjectRef(obj), errs...)
-		}
+	// Check if namespace is allowed by the metadata.
+	if !metadata.IsNamespaceAllowed(obj) {
+		errs = append(errs, NamespaceNotAllowedError{Namespace: obj.GetNamespace()})
+		// we don't want to do a dry-run when this already fails.
+		return NewObjectValidationError(bctypes.ToObjectRef(obj), errs...)
 	}
 
 	// Dry run against API server to catch any other surprises.
@@ -91,6 +71,17 @@ func (d *ObjectValidator) Validate(
 	}
 
 	return err
+}
+
+// NamespaceNotAllowedError is returned when an object is in a namespace
+// not allowed by the RevisionMetadata.
+type NamespaceNotAllowedError struct {
+	Namespace string
+}
+
+// Error implements the error interface.
+func (e NamespaceNotAllowedError) Error() string {
+	return fmt.Sprintf("namespace %q is not allowed by the revision metadata", e.Namespace)
 }
 
 // MustBeNamespaceScopedResourceError is returned when a cluster-scoped

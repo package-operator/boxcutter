@@ -8,13 +8,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 type mockRestMapper struct {
@@ -70,62 +74,58 @@ func (m *mockWriter) DeleteAllOf(ctx context.Context, obj client.Object, opts ..
 	return args.Error(0)
 }
 
-func TestNewClusterObjectValidator(t *testing.T) {
+func TestNewObjectValidator(t *testing.T) {
 	t.Parallel()
 
 	restMapper := &mockRestMapper{}
 	writer := &mockWriter{}
 
-	validator := NewClusterObjectValidator(restMapper, writer)
+	validator := NewObjectValidator(restMapper, writer)
 
 	assert.NotNil(t, validator)
-	assert.True(t, validator.allowNamespaceEscalation)
-	assert.Equal(t, restMapper, validator.restMapper)
-	assert.Equal(t, writer, validator.writer)
 }
 
-func TestNewNamespacedObjectValidator(t *testing.T) {
-	t.Parallel()
+// testScheme returns a scheme with corev1 types registered for testing.
+func testScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
 
-	restMapper := &mockRestMapper{}
-	writer := &mockWriter{}
+	return scheme
+}
 
-	validator := NewNamespacedObjectValidator(restMapper, writer)
-
-	assert.NotNil(t, validator)
-	assert.False(t, validator.allowNamespaceEscalation)
-	assert.Equal(t, restMapper, validator.restMapper)
-	assert.Equal(t, writer, validator.writer)
+// testOwner creates a ConfigMap owner with a UID for testing.
+func testOwner(namespace string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-owner",
+			Namespace: namespace,
+			UID:       types.UID("test-owner-uid"),
+		},
+	}
 }
 
 func TestObjectValidator_Validate(t *testing.T) {
 	t.Parallel()
 
+	scheme := testScheme()
+
 	tests := []struct {
-		name                     string
-		allowNamespaceEscalation bool
-		obj                      *unstructured.Unstructured
-		owner                    client.Object
-		mockSetup                func(*mockRestMapper, *mockWriter)
-		expectError              bool
-		expectValidationError    bool
+		name                  string
+		ownerNamespace        string
+		obj                   *unstructured.Unstructured
+		mockSetup             func(*mockRestMapper, *mockWriter)
+		expectError           bool
+		expectValidationError bool
 	}{
 		{
-			name:                     "valid object with cluster validator",
-			allowNamespaceEscalation: true,
+			name:           "valid object with cross-namespace allowed",
+			ownerNamespace: "default",
 			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
 					"metadata": map[string]interface{}{
 						"name":      "test",
-						"namespace": "default",
-					},
-				},
-			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
 						"namespace": "default",
 					},
 				},
@@ -137,8 +137,8 @@ func TestObjectValidator_Validate(t *testing.T) {
 			expectValidationError: false,
 		},
 		{
-			name:                     "valid object with namespaced validator",
-			allowNamespaceEscalation: false,
+			name:           "valid object in same namespace",
+			ownerNamespace: "default",
 			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -149,24 +149,15 @@ func TestObjectValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
-			mockSetup: func(restMapper *mockRestMapper, writer *mockWriter) {
-				restMapper.On("RESTMapping", schema.GroupKind{Group: "", Kind: "ConfigMap"}, []string{"v1"}).Return(
-					&meta.RESTMapping{Scope: meta.RESTScopeNamespace}, nil)
+			mockSetup: func(_ *mockRestMapper, writer *mockWriter) {
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectError:           false,
 			expectValidationError: false,
 		},
 		{
-			name:                     "namespace validation fails",
-			allowNamespaceEscalation: false,
+			name:           "namespace validation fails - cross-namespace not allowed",
+			ownerNamespace: "default",
 			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
@@ -177,36 +168,19 @@ func TestObjectValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
-			mockSetup: func(restMapper *mockRestMapper, _ *mockWriter) {
-				restMapper.On("RESTMapping", schema.GroupKind{Group: "", Kind: "ConfigMap"}, []string{"v1"}).Return(
-					&meta.RESTMapping{Scope: meta.RESTScopeNamespace}, nil)
-			},
+			mockSetup:             func(_ *mockRestMapper, _ *mockWriter) {},
 			expectError:           true,
 			expectValidationError: true,
 		},
 		{
-			name:                     "dry run validation fails",
-			allowNamespaceEscalation: true,
+			name:           "dry run validation fails",
+			ownerNamespace: "default",
 			obj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
 					"metadata": map[string]interface{}{
 						"name":      "test",
-						"namespace": "default",
-					},
-				},
-			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
 						"namespace": "default",
 					},
 				},
@@ -232,13 +206,12 @@ func TestObjectValidator_Validate(t *testing.T) {
 			writer := &mockWriter{}
 			test.mockSetup(restMapper, writer)
 
-			validator := &ObjectValidator{
-				restMapper:               restMapper,
-				writer:                   writer,
-				allowNamespaceEscalation: test.allowNamespaceEscalation,
-			}
+			validator := NewObjectValidator(restMapper, writer)
 
-			err := validator.Validate(t.Context(), test.owner, test.obj)
+			owner := testOwner(test.ownerNamespace)
+			metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
+
+			err := validator.Validate(t.Context(), metadata, test.obj)
 
 			if test.expectError {
 				require.Error(t, err)

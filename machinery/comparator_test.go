@@ -32,10 +32,9 @@ func TestComparator_Unstructured(t *testing.T) {
 	a := &dummyOpenAPIAccessor{
 		openAPI: oapi,
 	}
-	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
+		scheme:          scheme.Scheme,
 		fieldOwner:      testFieldOwner,
 	}
 
@@ -46,6 +45,7 @@ func TestComparator_Unstructured(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 
 	// Test Case 1
 	// Another actor has updated .data.test and the field owner has changed.
@@ -96,7 +96,7 @@ func TestComparator_Unstructured(t *testing.T) {
 			},
 		},
 	}
-	err = n.SetControllerReference(owner, actualNewFieldOwner)
+	err = ownerMetadata.SetCurrent(actualNewFieldOwner)
 	require.NoError(t, err)
 
 	// Test Case 2
@@ -172,7 +172,7 @@ func TestComparator_Unstructured(t *testing.T) {
 			},
 		},
 	}
-	err = n.SetControllerReference(owner, pod)
+	err = ownerMetadata.SetCurrent(pod)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -202,7 +202,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(ownerMetadata, test.desired, test.actual)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedReport, res.String())
@@ -256,10 +256,10 @@ func TestComparator_Unstructured(t *testing.T) {
 				},
 			},
 		}
-		err = n.SetControllerReference(owner, actualValueChange)
+		err = ownerMetadata.SetCurrent(actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(ownerMetadata, desiredValueChange, actualValueChange)
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -281,10 +281,9 @@ func TestComparator_Structured(t *testing.T) {
 	a := &dummyOpenAPIAccessor{
 		openAPI: oapi,
 	}
-	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
+		scheme:          scheme.Scheme,
 		fieldOwner:      testFieldOwner,
 	}
 
@@ -297,6 +296,7 @@ func TestComparator_Structured(t *testing.T) {
 			CreationTimestamp: now,
 		},
 	}
+	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 
 	// Test Case 1
 	// Another actor has updated .data.test and the field owner has changed.
@@ -351,7 +351,7 @@ func TestComparator_Structured(t *testing.T) {
 			"test": []byte("test123"),
 		},
 	}
-	err = n.SetControllerReference(owner, actualNewFieldOwner)
+	err = ownerMetadata.SetCurrent(actualNewFieldOwner)
 	require.NoError(t, err)
 
 	// Test Case 2
@@ -461,7 +461,7 @@ func TestComparator_Structured(t *testing.T) {
 			},
 		},
 	}
-	err = n.SetControllerReference(owner, actualPod)
+	err = ownerMetadata.SetCurrent(actualPod)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -491,7 +491,7 @@ func TestComparator_Structured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(ownerMetadata, test.desired, test.actual)
 			require.NoError(t, err)
 
 			if res.Comparison != nil {
@@ -543,10 +543,10 @@ func TestComparator_Structured(t *testing.T) {
 				},
 			},
 		}
-		err = n.SetControllerReference(owner, actualValueChange)
+		err = ownerMetadata.SetCurrent(actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(ownerMetadata, desiredValueChange, actualValueChange)
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)

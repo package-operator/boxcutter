@@ -109,7 +109,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -175,7 +175,7 @@ func TestObjectEngine(t *testing.T) {
 					).
 					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -257,7 +257,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -336,7 +336,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -427,7 +427,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{
 						Comparison: &typed.Comparison{
 							Added:    &fieldpath.Set{},
@@ -527,7 +527,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{
 						ConflictingMangers: []CompareResultManagedFields{
 							{Manager: "xxx"},
@@ -625,7 +625,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -672,7 +672,7 @@ func TestObjectEngine(t *testing.T) {
 				},
 			},
 			opts: []types.ObjectReconcileOption{
-				types.WithPreviousOwners{oldOwner},
+				types.WithPreviousOwners{ownerhandling.NewNativeRevisionMetadata(oldOwner, scheme.Scheme)},
 			},
 
 			mockSetup: func(
@@ -718,7 +718,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -809,7 +809,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -839,13 +839,12 @@ func TestObjectEngine(t *testing.T) {
 
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
-			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &comparatorMock{}
 
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, writer,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
@@ -854,8 +853,9 @@ func TestObjectEngine(t *testing.T) {
 
 			//nolint:usetesting
 			ctx := context.Background()
+			ownerMeta := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 			res, err := oe.Reconcile(
-				ctx, owner, 1, test.desiredObject,
+				ctx, ownerMeta, 1, test.desiredObject,
 				test.opts...,
 			)
 			require.NoError(t, err)
@@ -882,20 +882,25 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Parallel()
 
 	oe := &ObjectEngine{}
-	owner := &unstructured.Unstructured{}
 	desired := &unstructured.Unstructured{}
 
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
+
+		mockMeta := &mockRevisionMetadata{}
+
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Reconcile(t.Context(), owner, 0, desired)
+			_, _ = oe.Reconcile(t.Context(), mockMeta, 0, desired)
 		})
 	})
 
-	t.Run("missing owner.UID", func(t *testing.T) {
+	t.Run("missing owner.UID in NewNativeRevisionMetadata", func(t *testing.T) {
 		t.Parallel()
-		assert.PanicsWithValue(t, "owner must be persistet to cluster, empty UID", func() {
-			_, _ = oe.Reconcile(t.Context(), owner, 1, desired)
+
+		owner := &unstructured.Unstructured{}
+
+		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
+			_ = ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 		})
 	})
 }
@@ -916,13 +921,13 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 
 		cache := &cacheMock{}
 		writer := testutil.NewClient()
-		ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+		revisionMetadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 		divergeDetector := &comparatorMock{}
 
 		oe := NewObjectEngine(
 			scheme.Scheme,
 			cache, writer,
-			ownerStrategy, divergeDetector,
+			divergeDetector,
 			testFieldOwner,
 			testSystemPrefix,
 		)
@@ -972,7 +977,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 		fs := &fieldpath.Set{}
 		fs.Insert(fieldpath.MakePathOrDie("data", "key"))
 		divergeDetector.
-			On("Compare", owner, mock.Anything, mock.Anything).
+			On("Compare", revisionMetadata, mock.Anything, mock.Anything).
 			Return(CompareResult{
 				Comparison: &typed.Comparison{
 					Added:    &fieldpath.Set{},
@@ -983,7 +988,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 
 		//nolint:usetesting
 		ctx := context.Background()
-		res, err := oe.Reconcile(ctx, owner, 1, desiredObject)
+		res, err := oe.Reconcile(ctx, revisionMetadata, 1, desiredObject)
 
 		// Should return UnsupportedApplyConfigurationError
 		require.Error(t, err)
@@ -1061,7 +1066,7 @@ func TestObjectEngine_TeardownWithTeardownWriter(t *testing.T) {
 			cache := &cacheMock{}
 			engineWriter := testutil.NewClient()   // default engine writer
 			teardownWriter := testutil.NewClient() // used during tearDown
-			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+			revisionMetadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 			divergeDetector := &comparatorMock{}
 
 			cache.
@@ -1090,12 +1095,12 @@ func TestObjectEngine_TeardownWithTeardownWriter(t *testing.T) {
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, engineWriter,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
 
-			result, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithTeardownWriter(teardownWriter))
+			result, err := oe.Teardown(t.Context(), revisionMetadata, 1, obj, types.WithTeardownWriter(teardownWriter))
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
 			} else {
@@ -1283,7 +1288,6 @@ func TestObjectEngine_Teardown(t *testing.T) {
 
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
-			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &comparatorMock{}
 
 			cache.
@@ -1296,12 +1300,14 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, writer,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
 
-			deleted, err := oe.Teardown(t.Context(), owner, 1, obj)
+			ownerMeta := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
+
+			deleted, err := oe.Teardown(t.Context(), ownerMeta, 1, obj)
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
 			} else {
@@ -1336,7 +1342,6 @@ func TestObjectEngine_Teardown_Orphan(t *testing.T) {
 
 	cache := &cacheMock{}
 	writer := testutil.NewClient()
-	ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 	divergeDetector := &comparatorMock{}
 
 	cache.
@@ -1347,11 +1352,12 @@ func TestObjectEngine_Teardown_Orphan(t *testing.T) {
 	oe := NewObjectEngine(
 		scheme.Scheme,
 		cache, writer,
-		ownerStrategy, divergeDetector,
+		divergeDetector,
 		testFieldOwner,
 		testSystemPrefix,
 	)
-	deleted, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithOrphan())
+	ownerMeta := ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
+	deleted, err := oe.Teardown(t.Context(), ownerMeta, 1, obj, types.WithOrphan())
 	require.NoError(t, err)
 
 	assert.True(t, deleted)
@@ -1361,20 +1367,25 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	t.Parallel()
 
 	oe := &ObjectEngine{}
-	owner := &unstructured.Unstructured{}
 	desired := &unstructured.Unstructured{}
 
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
+
+		mockMeta := &mockRevisionMetadata{}
+
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Teardown(t.Context(), owner, 0, desired)
+			_, _ = oe.Teardown(t.Context(), mockMeta, 0, desired)
 		})
 	})
 
-	t.Run("missing owner.UID", func(t *testing.T) {
+	t.Run("missing owner.UID in NewNativeRevisionMetadata", func(t *testing.T) {
 		t.Parallel()
+
+		owner := &unstructured.Unstructured{}
+
 		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
-			_, _ = oe.Teardown(t.Context(), owner, 1, desired)
+			_ = ownerhandling.NewNativeRevisionMetadata(owner, scheme.Scheme)
 		})
 	})
 }
@@ -1388,10 +1399,25 @@ type comparatorMock struct {
 }
 
 func (m *comparatorMock) Compare(
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	desiredObject, actualObject Object,
 ) (CompareResult, error) {
-	args := m.Called(owner, desiredObject, actualObject)
+	args := m.Called(metadata, desiredObject, actualObject)
 
 	return args.Get(0).(CompareResult), args.Error(1)
 }
+
+type mockRevisionMetadata struct{}
+
+func (m *mockRevisionMetadata) GetReconcileOptions() []types.RevisionReconcileOption { return nil }
+func (m *mockRevisionMetadata) GetTeardownOptions() []types.RevisionTeardownOption   { return nil }
+func (m *mockRevisionMetadata) SetCurrent(_ metav1.Object, _ ...types.SetCurrentOption) error {
+	return nil
+}
+func (m *mockRevisionMetadata) IsCurrent(_ metav1.Object) bool                     { return false }
+func (m *mockRevisionMetadata) RemoveFrom(_ metav1.Object)                         {}
+func (m *mockRevisionMetadata) IsNamespaceAllowed(_ metav1.Object) bool            { return true }
+func (m *mockRevisionMetadata) CopyReferences(_, _ metav1.Object)                  {}
+func (m *mockRevisionMetadata) GetCurrent(_ metav1.Object) types.RevisionReference { return nil }
+
+var _ types.RevisionMetadata = &mockRevisionMetadata{}

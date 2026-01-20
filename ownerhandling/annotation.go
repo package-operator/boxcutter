@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,158 +18,133 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 )
 
-var _ ownerStrategy = (*OwnerStrategyAnnotation)(nil)
+// AnnotationStrategy can be used to create a RevisionMetadata which uses an
+// annotation key to store owner references, and an event handler that enqueues
+// reconcile requests for the object referenced by the annotation. The
+// AnnotationStrategy itself specifies the annotation key to use.
+type AnnotationStrategy string
 
-// OwnerStrategyAnnotation handling strategy uses .metadata.annotations.
-// Allows cross-namespace owner references.
-type OwnerStrategyAnnotation struct {
+// NewAnnotationStrategy creates an AnnotationStrategy which uses the given
+// annotation key.
+func NewAnnotationStrategy(annotationKey string) AnnotationStrategy {
+	return AnnotationStrategy(annotationKey)
+}
+
+// Ensure AnnotationRevisionMetadata implements RevisionMetadata.
+var _ bctypes.RevisionMetadata = (*annotationRevisionMetadata)(nil)
+
+// annotationRevisionMetadata uses annotations for cross-namespace ownership tracking.
+// Cross-namespace is always allowed (this is the primary purpose of annotation-based ownership).
+type annotationRevisionMetadata struct {
+	owner         client.Object
 	scheme        *runtime.Scheme
 	annotationKey string
 }
 
-// NewAnnotation returns a new OwnerStrategyAnnotation instance.
-func NewAnnotation(scheme *runtime.Scheme, annotationKey string) *OwnerStrategyAnnotation {
-	return &OwnerStrategyAnnotation{
+// NewRevisionMetadata creates a RevisionMetadata using annotation-based ownership.
+// IsNamespaceAllowed() always returns true since cross-namespace support is the primary
+// purpose of annotation-based ownership.
+// Panics if owner has an empty UID (not persisted to cluster).
+func (h AnnotationStrategy) NewRevisionMetadata(
+	owner client.Object,
+	scheme *runtime.Scheme,
+) bctypes.RevisionMetadata {
+	if len(owner.GetUID()) == 0 {
+		panic("owner must be persisted to cluster, empty UID")
+	}
+
+	return &annotationRevisionMetadata{
+		owner:         owner,
 		scheme:        scheme,
-		annotationKey: annotationKey,
+		annotationKey: string(h),
 	}
 }
 
-// GetController returns the OwnerReference with Controller==true, if one exist.
-func (s *OwnerStrategyAnnotation) GetController(obj metav1.Object) (
-	metav1.OwnerReference, bool,
-) {
-	for _, ref := range s.getOwnerReferences(obj) {
-		if ref.Controller != nil && *ref.Controller {
-			return ref.ToMetaV1OwnerRef(), true
-		}
-	}
-
-	return metav1.OwnerReference{}, false
-}
-
-// CopyOwnerReferences copies all OwnerReferences from objA to objB,
-// overriding any existing OwnerReferences on objB.
-func (s *OwnerStrategyAnnotation) CopyOwnerReferences(objA, objB metav1.Object) {
-	s.setOwnerReferences(objB, s.getOwnerReferences(objA))
-}
-
-// EnqueueRequestForOwner returns a EventHandler to enqueue the owner.
-func (s *OwnerStrategyAnnotation) EnqueueRequestForOwner(
-	ownerType client.Object, _ meta.RESTMapper, isController bool,
-) handler.EventHandler {
-	a := &AnnotationEnqueueRequestForOwner{
-		OwnerType:     ownerType,
-		IsController:  isController,
-		ownerStrategy: s,
-	}
-	if err := a.parseOwnerTypeGroupKind(s.scheme); err != nil {
-		// This (passing a type that is not in the scheme) HAS to be a
-		// programmer error and can't be recovered at runtime anyways.
-		panic(err)
-	}
-
-	return a
-}
-
-// SetOwnerReference adds owner as OwnerReference to obj, with Controller set to false.
-func (s *OwnerStrategyAnnotation) SetOwnerReference(owner, obj metav1.Object) error {
-	ownerRefs := s.getOwnerReferences(obj)
-
-	gvk, err := apiutil.GVKForObject(owner.(runtime.Object), s.scheme)
-	if err != nil {
-		return err
-	}
-
-	ownerRef := annotationOwnerRef{
-		APIVersion: gvk.GroupVersion().String(),
-		Kind:       gvk.Kind,
-		UID:        owner.GetUID(),
-		Name:       owner.GetName(),
-		Namespace:  owner.GetNamespace(),
-	}
-
-	ownerIndex := s.indexOf(ownerRefs, ownerRef)
-	if ownerIndex != -1 {
-		ownerRefs[ownerIndex] = ownerRef
-	} else {
-		ownerRefs = append(ownerRefs, ownerRef)
-	}
-
-	s.setOwnerReferences(obj, ownerRefs)
-
+// GetReconcileOptions returns a set of options that will added to any
+// revision reconciliation options.
+// For annotation-based ownership, there are no default reconciliation options.
+func (m *annotationRevisionMetadata) GetReconcileOptions() []bctypes.RevisionReconcileOption {
 	return nil
 }
 
-// SetControllerReference adds owner as OwnerReference to obj, with Controller set to true.
-func (s *OwnerStrategyAnnotation) SetControllerReference(owner, obj metav1.Object) error {
-	ownerRefComp := s.ownerRefForCompare(owner)
-	ownerRefs := s.getOwnerReferences(obj)
+// GetTeardownOptions returns a set of options that will added to any
+// revision teardown options.
+// For annotation-based ownership, there are no default teardown options.
+func (m *annotationRevisionMetadata) GetTeardownOptions() []bctypes.RevisionTeardownOption {
+	return nil
+}
+
+// SetCurrent updates obj to mark this RevisionMetadata as the current (controlling) revision.
+// Returns an error if the object already has a different current revision.
+func (m *annotationRevisionMetadata) SetCurrent(obj metav1.Object, opts ...bctypes.SetCurrentOption) error {
+	options := &bctypes.SetCurrentOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	ownerRefComp := annotationOwnerRefForCompare(m.owner, m.scheme)
+	ownerRefs := m.getOwnerReferences(obj)
 
 	// Ensure that there is no controller already.
-	for _, ownerRef := range ownerRefs {
-		if !s.referSameObject(ownerRefComp, ownerRef) &&
-			ownerRef.Controller != nil && *ownerRef.Controller {
-			return &controllerutil.AlreadyOwnedError{
-				Object: obj,
-				Owner: metav1.OwnerReference{
-					APIVersion: ownerRef.APIVersion,
-					Kind:       ownerRef.Kind,
-					Name:       ownerRef.Name,
-					Controller: ownerRef.Controller,
-					UID:        ownerRef.UID,
-				},
+	for i := range ownerRefs {
+		ownerRef := &ownerRefs[i]
+		if !referSameObject(&ownerRefComp, ownerRef) && ownerRef.Controller != nil && *ownerRef.Controller {
+			if !options.AllowUpdate {
+				return &controllerutil.AlreadyOwnedError{
+					Object: obj,
+					Owner: metav1.OwnerReference{
+						APIVersion: ownerRef.APIVersion,
+						Kind:       ownerRef.Kind,
+						Name:       ownerRef.Name,
+						Controller: ownerRef.Controller,
+						UID:        ownerRef.UID,
+					},
+				}
 			}
+
+			ownerRef.Controller = nil
 		}
 	}
 
-	gvk, err := apiutil.GVKForObject(owner.(runtime.Object), s.scheme)
+	gvk, err := apiutil.GVKForObject(m.owner.(runtime.Object), m.scheme)
 	if err != nil {
 		return err
 	}
 
 	ownerRef := annotationOwnerRef{
-		APIVersion: gvk.GroupVersion().String(),
-		Kind:       gvk.Kind,
-		UID:        owner.GetUID(),
-		Name:       owner.GetName(),
-		Namespace:  owner.GetNamespace(),
-		Controller: ptr.To(true),
+		OwnerReference: metav1.OwnerReference{
+			APIVersion: gvk.GroupVersion().String(),
+			Kind:       gvk.Kind,
+			UID:        m.owner.GetUID(),
+			Name:       m.owner.GetName(),
+			Controller: ptr.To(true),
+		},
+		Namespace: m.owner.GetNamespace(),
 	}
 
-	ownerIndex := s.indexOf(ownerRefs, ownerRef)
+	ownerIndex := slices.IndexFunc(ownerRefs, func(ref annotationOwnerRef) bool {
+		return referSameObject(&ownerRef, &ref)
+	})
 	if ownerIndex != -1 {
 		ownerRefs[ownerIndex] = ownerRef
 	} else {
 		ownerRefs = append(ownerRefs, ownerRef)
 	}
 
-	s.setOwnerReferences(obj, ownerRefs)
+	m.setOwnerReferences(obj, ownerRefs)
 
 	return nil
 }
 
-// IsOwner returns true if owner is contained in object OwnerReference list.
-func (s *OwnerStrategyAnnotation) IsOwner(owner, obj metav1.Object) bool {
-	ownerRefComp := s.ownerRefForCompare(owner)
-	for _, ownerRef := range s.getOwnerReferences(obj) {
-		if s.referSameObject(ownerRefComp, ownerRef) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// IsController returns true if the given owner is the controller of obj.
-func (s *OwnerStrategyAnnotation) IsController(
-	owner, obj metav1.Object,
-) bool {
-	ownerRefComp := s.ownerRefForCompare(owner)
-	for _, ownerRef := range s.getOwnerReferences(obj) {
-		if s.referSameObject(ownerRefComp, ownerRef) &&
+// IsCurrent returns true if this RevisionMetadata is the current (controlling) revision of obj.
+func (m *annotationRevisionMetadata) IsCurrent(obj metav1.Object) bool {
+	ownerRefComp := annotationOwnerRefForCompare(m.owner, m.scheme)
+	for _, ownerRef := range m.getOwnerReferences(obj) {
+		if referSameObject(&ownerRefComp, &ownerRef) &&
 			ownerRef.Controller != nil &&
 			*ownerRef.Controller {
 			return true
@@ -180,15 +154,14 @@ func (s *OwnerStrategyAnnotation) IsController(
 	return false
 }
 
-// RemoveOwner removes the owner from objs OwnerReference list.
-func (s *OwnerStrategyAnnotation) RemoveOwner(owner, obj metav1.Object) {
-	ownerRefComp := s.ownerRefForCompare(owner)
-	ownerRefs := s.getOwnerReferences(obj)
+// RemoveFrom removes this RevisionMetadata from obj, whether it is the current revision or otherwise.
+func (m *annotationRevisionMetadata) RemoveFrom(obj metav1.Object) {
+	ownerRefComp := annotationOwnerRefForCompare(m.owner, m.scheme)
+	ownerRefs := m.getOwnerReferences(obj)
 	foundIndex := -1
 
 	for i, ownerRef := range ownerRefs {
-		if s.referSameObject(ownerRefComp, ownerRef) {
-			// remove owner
+		if referSameObject(&ownerRefComp, &ownerRef) {
 			foundIndex = i
 
 			break
@@ -196,39 +169,67 @@ func (s *OwnerStrategyAnnotation) RemoveOwner(owner, obj metav1.Object) {
 	}
 
 	if foundIndex != -1 {
-		s.setOwnerReferences(obj, remove(ownerRefs, foundIndex))
+		m.setOwnerReferences(obj, slices.Delete(ownerRefs, foundIndex, foundIndex+1))
 	}
 }
 
-// ReleaseController sets all OwnerReferences Controller to false.
-func (s *OwnerStrategyAnnotation) ReleaseController(obj metav1.Object) {
-	ownerRefs := s.getOwnerReferences(obj)
+// IsNamespaceAllowed returns true if objects may be created/managed in the namespace of obj.
+// For annotation-based ownership, cross-namespace is always allowed.
+func (m *annotationRevisionMetadata) IsNamespaceAllowed(_ metav1.Object) bool {
+	return true
+}
+
+// CopyReferences copies all revision metadata from objA to objB except the current revision marker.
+// This is used when taking over control from a previous owner while preserving their watch references.
+func (m *annotationRevisionMetadata) CopyReferences(objA, objB metav1.Object) {
+	// Copy owner references from A to B.
+	ownerRefs := m.getOwnerReferences(objA)
+	// Release controller (set all Controller fields to nil/false).
 	for i := range ownerRefs {
 		ownerRefs[i].Controller = nil
 	}
 
-	s.setOwnerReferences(obj, ownerRefs)
+	m.setOwnerReferences(objB, ownerRefs)
 }
 
-func (s *OwnerStrategyAnnotation) getOwnerReferences(obj metav1.Object) []annotationOwnerRef {
+// GetCurrent returns a RevisionReference describing the current revision of obj.
+// Returns nil if there is no current revision set.
+func (m *annotationRevisionMetadata) GetCurrent(obj metav1.Object) bctypes.RevisionReference {
+	for _, ref := range m.getOwnerReferences(obj) {
+		if ref.Controller != nil && *ref.Controller {
+			// The returned value is only used in log messages. We return the
+			// owner reference for continuity with the original implementation.
+			return &ref.OwnerReference
+		}
+	}
+
+	return nil
+}
+
+func (m *annotationRevisionMetadata) getOwnerReferences(obj metav1.Object) []annotationOwnerRef {
+	return getAnnotationOwnerReferences(obj, m.annotationKey)
+}
+
+// getAnnotationOwnerReferences returns the owner references stored in the given annotation key.
+func getAnnotationOwnerReferences(obj metav1.Object, annotationKey string) []annotationOwnerRef {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		return nil
 	}
 
-	if len(annotations[s.annotationKey]) == 0 {
+	if len(annotations[annotationKey]) == 0 {
 		return nil
 	}
 
 	var ownerReferences []annotationOwnerRef
-	if err := json.Unmarshal([]byte(annotations[s.annotationKey]), &ownerReferences); err != nil {
+	if err := json.Unmarshal([]byte(annotations[annotationKey]), &ownerReferences); err != nil {
 		panic(err)
 	}
 
 	return ownerReferences
 }
 
-func (s *OwnerStrategyAnnotation) setOwnerReferences(obj metav1.Object, owners []annotationOwnerRef) {
+func (m *annotationRevisionMetadata) setOwnerReferences(obj metav1.Object, owners []annotationOwnerRef) {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
@@ -239,45 +240,31 @@ func (s *OwnerStrategyAnnotation) setOwnerReferences(obj metav1.Object, owners [
 		panic(err)
 	}
 
-	annotations[s.annotationKey] = string(j)
+	annotations[m.annotationKey] = string(j)
 	obj.SetAnnotations(annotations)
 }
 
-func (s *OwnerStrategyAnnotation) indexOf(ownerRefs []annotationOwnerRef, ownerRef annotationOwnerRef) int {
-	for i := range ownerRefs {
-		if s.referSameObject(ownerRef, ownerRefs[i]) {
-			return i
-		}
-	}
-
-	return -1
-}
-
-func (s *OwnerStrategyAnnotation) ownerRefForCompare(owner metav1.Object) annotationOwnerRef {
-	// Validate the owner.
-	ro, ok := owner.(runtime.Object)
-	if !ok {
-		panic(fmt.Sprintf("%T is not a runtime.Object, cannot call SetOwnerReference", owner))
-	}
-
+func annotationOwnerRefForCompare(obj client.Object, scheme *runtime.Scheme) annotationOwnerRef {
 	// Create a new owner ref.
-	gvk, err := apiutil.GVKForObject(ro, s.scheme)
+	gvk, err := apiutil.GVKForObject(obj, scheme)
 	if err != nil {
 		panic(err)
 	}
 
 	ref := annotationOwnerRef{
-		APIVersion: gvk.GroupVersion().String(),
-		Kind:       gvk.Kind,
-		UID:        owner.GetUID(),
-		Name:       owner.GetName(),
+		OwnerReference: metav1.OwnerReference{
+			APIVersion: gvk.GroupVersion().String(),
+			Kind:       gvk.Kind,
+			UID:        obj.GetUID(),
+			Name:       obj.GetName(),
+		},
+		Namespace: obj.GetNamespace(),
 	}
 
 	return ref
 }
 
-// Returns true if a and b point to the same object.
-func (s *OwnerStrategyAnnotation) referSameObject(a, b annotationOwnerRef) bool {
+func referSameObject(a, b *annotationOwnerRef) bool {
 	aGV, err := schema.ParseGroupVersion(a.APIVersion)
 	if err != nil {
 		return false
@@ -291,57 +278,58 @@ func (s *OwnerStrategyAnnotation) referSameObject(a, b annotationOwnerRef) bool 
 	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name && a.UID == b.UID
 }
 
+// annotationOwnerRef represents an owner reference stored in annotations.
+// This is used for cross-namespace ownership tracking where native ownerReferences cannot be used.
 type annotationOwnerRef struct {
-	// API version of the referent.
-	APIVersion string `json:"apiVersion"`
-	// Kind of the referent.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-	Kind string `json:"kind"`
-	// Name of the referent.
-	// More info: http://kubernetes.io/docs/user-guide/identifiers#names
-	Name string `json:"name"`
-	// Name of the referent.
+	metav1.OwnerReference
+
+	// Namespace of the referent.
 	// More info: http://kubernetes.io/docs/user-guide/identifiers#namespaces
 	Namespace string `json:"namespace"`
-	// UID of the referent.
-	// More info: http://kubernetes.io/docs/user-guide/identifiers#uids
-	UID types.UID `json:"uid"`
-	// If true, this reference struct points to the managing controller.
-	// +optional
-	Controller *bool `json:"controller,omitempty"`
 }
 
 func (r *annotationOwnerRef) isController() bool {
 	return r.Controller != nil && *r.Controller
 }
 
-func (r *annotationOwnerRef) ToMetaV1OwnerRef() metav1.OwnerReference {
-	return metav1.OwnerReference{
-		APIVersion:         r.APIVersion,
-		Kind:               r.Kind,
-		Name:               r.Name,
-		UID:                r.UID,
-		Controller:         r.Controller,
-		BlockOwnerDeletion: ptr.To(true),
+// EnqueueRequestForOwner returns an EventHandler that enqueues reconcile requests
+// for the owner of the object that triggered the event, using annotation-based owner references.
+func (h AnnotationStrategy) EnqueueRequestForOwner(
+	scheme *runtime.Scheme,
+	ownerType client.Object,
+	isController bool,
+) handler.EventHandler {
+	e := &annotationEnqueueRequestForOwner{
+		ownerType:     ownerType,
+		isController:  isController,
+		annotationKey: string(h),
 	}
+	if err := e.parseOwnerTypeGroupKind(scheme); err != nil {
+		panic(err)
+	}
+
+	return e
 }
 
-// AnnotationEnqueueRequestForOwner implements an EventHandler using the annotation ownerStrategy.
-type AnnotationEnqueueRequestForOwner struct {
-	// OwnerType is the type of the Owner object to look for in OwnerReferences.  Only Group and Kind are compared.
-	OwnerType client.Object
+// annotationEnqueueRequestForOwner implements an EventHandler using annotation-based owner references.
+type annotationEnqueueRequestForOwner struct {
+	// ownerType is the type of the Owner object to look for in OwnerReferences.  Only Group and Kind are compared.
+	ownerType client.Object
 
-	// IsController if set will only look at the first OwnerReference with Controller: true.
-	IsController bool
+	// isController if set will only look at the first OwnerReference with Controller: true.
+	isController bool
 
-	// OwnerType is the type of the Owner object to look for in OwnerReferences.  Only Group and Kind are compared.
+	// annotationKey is the annotation key used to store owner references.
+	annotationKey string
+
+	// ownerGK is the cached Group and Kind for the OwnerType.
 	ownerGK schema.GroupKind
-
-	ownerStrategy *OwnerStrategyAnnotation
 }
+
+var _ handler.EventHandler = (*annotationEnqueueRequestForOwner)(nil)
 
 // Create implements EventHandler.
-func (e *AnnotationEnqueueRequestForOwner) Create(
+func (e *annotationEnqueueRequestForOwner) Create(
 	_ context.Context, evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
@@ -350,7 +338,7 @@ func (e *AnnotationEnqueueRequestForOwner) Create(
 }
 
 // Update implements EventHandler.
-func (e *AnnotationEnqueueRequestForOwner) Update(
+func (e *annotationEnqueueRequestForOwner) Update(
 	_ context.Context, evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, req := range e.getOwnerReconcileRequest(evt.ObjectOld) {
@@ -363,7 +351,7 @@ func (e *AnnotationEnqueueRequestForOwner) Update(
 }
 
 // Delete implements EventHandler.
-func (e *AnnotationEnqueueRequestForOwner) Delete(
+func (e *annotationEnqueueRequestForOwner) Delete(
 	_ context.Context, evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
@@ -372,7 +360,7 @@ func (e *AnnotationEnqueueRequestForOwner) Delete(
 }
 
 // Generic implements EventHandler.
-func (e *AnnotationEnqueueRequestForOwner) Generic(
+func (e *annotationEnqueueRequestForOwner) Generic(
 	_ context.Context, evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request],
 ) {
 	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
@@ -380,8 +368,8 @@ func (e *AnnotationEnqueueRequestForOwner) Generic(
 	}
 }
 
-func (e *AnnotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
-	ownerReferences := e.ownerStrategy.getOwnerReferences(object)
+func (e *annotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav1.Object) []reconcile.Request {
+	ownerReferences := getAnnotationOwnerReferences(object, e.annotationKey)
 	requests := make([]reconcile.Request, 0, len(ownerReferences))
 
 	for _, ownerRef := range ownerReferences {
@@ -395,7 +383,7 @@ func (e *AnnotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav
 			continue
 		}
 
-		if e.IsController && !ownerRef.isController() {
+		if e.isController && !ownerRef.isController() {
 			continue
 		}
 
@@ -414,15 +402,15 @@ func (e *AnnotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav
 var ErrMultipleKinds = errors.New("multiple kinds error: expected exactly one kind")
 
 // parseOwnerTypeGroupKind parses the OwnerType into a Group and Kind and caches the result.
-func (e *AnnotationEnqueueRequestForOwner) parseOwnerTypeGroupKind(scheme *runtime.Scheme) error {
+func (e *annotationEnqueueRequestForOwner) parseOwnerTypeGroupKind(scheme *runtime.Scheme) error {
 	// Get the kinds of the type
-	kinds, _, err := scheme.ObjectKinds(e.OwnerType)
+	kinds, _, err := scheme.ObjectKinds(e.ownerType)
 	if err != nil {
 		return err
 	}
 	// Expect only 1 kind.  If there is more than one kind this is probably an edge case such as ListOptions.
 	if len(kinds) != 1 {
-		return fmt.Errorf("%w. For ownerType %T, found %s kinds", ErrMultipleKinds, e.OwnerType, kinds)
+		return fmt.Errorf("%w. For ownerType %T, found %s kinds", ErrMultipleKinds, e.ownerType, kinds)
 	}
 	// Cache the Group and Kind for the OwnerType
 	e.ownerGK = schema.GroupKind{Group: kinds[0].Group, Kind: kinds[0].Kind}

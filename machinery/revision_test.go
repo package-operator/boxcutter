@@ -10,10 +10,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"pkg.package-operator.run/boxcutter/internal/testutil"
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -26,6 +27,11 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 
 	re := NewRevisionEngine(pe, rv, c)
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -34,8 +40,10 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		},
 	}
 
+	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
+
 	rev := types.Revision{
-		Owner:    owner,
+		Metadata: metadata,
 		Revision: 3,
 		Phases: []types.Phase{
 			{Name: "phase-1"},
@@ -45,7 +53,7 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 	}
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{}, nil)
 
 	res, err := re.Teardown(t.Context(), rev)
@@ -72,6 +80,11 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 
 	re := NewRevisionEngine(pe, rv, c)
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -80,8 +93,10 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 		},
 	}
 
+	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
+
 	rev := types.Revision{
-		Owner:    owner,
+		Metadata: metadata,
 		Revision: 3,
 		Phases: []types.Phase{
 			{Name: "phase-1"},
@@ -92,11 +107,11 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	}
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(&phaseTeardownResult{}, nil)
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{waiting: []types.ObjectRef{
 			{},
 		}}, nil)
@@ -120,24 +135,24 @@ type phaseEngineMock struct {
 
 func (m *phaseEngineMock) Reconcile(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseReconcileOption,
 ) (PhaseResult, error) {
-	args := m.Called(ctx, owner, revision, phase, opts)
+	args := m.Called(ctx, metadata, revision, phase, opts)
 
 	return args.Get(0).(PhaseResult), args.Error(1)
 }
 
 func (m *phaseEngineMock) Teardown(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseTeardownOption,
 ) (PhaseTeardownResult, error) {
-	args := m.Called(ctx, owner, revision, phase, opts)
+	args := m.Called(ctx, metadata, revision, phase, opts)
 
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
 }

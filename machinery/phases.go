@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/validation"
@@ -35,7 +34,7 @@ func NewPhaseEngine(
 type phaseValidator interface {
 	Validate(
 		ctx context.Context,
-		owner client.Object,
+		metadata types.RevisionMetadata,
 		phase types.Phase,
 	) error
 }
@@ -43,14 +42,14 @@ type phaseValidator interface {
 type objectEngine interface {
 	Reconcile(
 		ctx context.Context,
-		owner client.Object, // Owner of the object.
+		metadata types.RevisionMetadata, // Metadata for the owner.
 		revision int64, // Revision number, must start at 1.
 		desiredObject Object,
 		opts ...types.ObjectReconcileOption,
 	) (ObjectResult, error)
 	Teardown(
 		ctx context.Context,
-		owner client.Object, // Owner of the object.
+		metadata types.RevisionMetadata, // Metadata for the owner.
 		revision int64, // Revision number, must start at 1.
 		desiredObject Object,
 		opts ...types.ObjectTeardownOption,
@@ -132,7 +131,7 @@ func (r *phaseTeardownResult) Waiting() []types.ObjectRef {
 // Teardown ensures the given phase is safely removed from the cluster.
 func (e *PhaseEngine) Teardown(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseTeardownOption,
@@ -148,7 +147,7 @@ func (e *PhaseEngine) Teardown(
 		obj := &o
 
 		gone, err := e.objectEngine.Teardown(
-			ctx, owner, revision, obj, options.ForObject(obj)...)
+			ctx, metadata, revision, obj, options.ForObject(obj)...)
 		if err != nil {
 			return res, fmt.Errorf("teardown object: %w", err)
 		}
@@ -166,7 +165,7 @@ func (e *PhaseEngine) Teardown(
 // Reconcile runs actions to bring actual state closer to desired.
 func (e *PhaseEngine) Reconcile(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseReconcileOption,
@@ -181,7 +180,7 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Preflight
-	err := e.phaseValidator.Validate(ctx, owner, phase)
+	err := e.phaseValidator.Validate(ctx, metadata, phase)
 	if err != nil {
 		var perr validation.PhaseValidationError
 		if errors.As(err, &perr) {
@@ -198,7 +197,7 @@ func (e *PhaseEngine) Reconcile(
 		obj := &o
 
 		ores, err := e.objectEngine.Reconcile(
-			ctx, owner, revision, obj, options.ForObject(obj)...)
+			ctx, metadata, revision, obj, options.ForObject(obj)...)
 		if err != nil {
 			return pres, fmt.Errorf("reconciling object: %w", err)
 		}

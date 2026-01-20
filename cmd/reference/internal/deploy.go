@@ -28,6 +28,7 @@ import (
 
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/managedcache"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/probing"
 	"pkg.package-operator.run/boxcutter/util"
 )
@@ -146,7 +147,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 	if len(existingRevisions) > 0 {
 		maybeCurrentObjectSet := existingRevisions[len(existingRevisions)-1]
 
-		annotations := maybeCurrentObjectSet.GetOwner().GetAnnotations()
+		annotations := getNativeOwner(maybeCurrentObjectSet).GetAnnotations()
 		if annotations != nil {
 			if hash, ok := annotations[hashAnnotation]; ok &&
 				hash == currentHash {
@@ -197,7 +198,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 			break
 		}
 
-		if err := client.IgnoreNotFound(c.client.Delete(ctx, prevRev.GetOwner())); err != nil {
+		if err := client.IgnoreNotFound(c.client.Delete(ctx, getNativeOwner(prevRev))); err != nil {
 			return res, fmt.Errorf("failed to delete revision (history limit): %w", err)
 		}
 
@@ -401,12 +402,14 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 
 	rev := &boxcutter.Revision{
 		Name:     cm.Name,
-		Owner:    cm,
+		Metadata: ownerhandling.NewNativeRevisionMetadata(cm, c.scheme),
 		Revision: revision,
 	}
 
-	for _, obj := range previousUnstr {
-		previous = append(previous, &obj)
+	previousMetadata := make([]boxcutter.RevisionMetadata, len(previousUnstr))
+	for i := range previousUnstr {
+		previousMetadata[i] = ownerhandling.NewNativeRevisionMetadata(&previousUnstr[i], c.scheme)
+		previous = append(previous, &previousUnstr[i])
 	}
 
 	for _, phase := range phases {
@@ -419,7 +422,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	}
 
 	opts = []boxcutter.RevisionReconcileOption{
-		boxcutter.WithPreviousOwners(previous),
+		boxcutter.WithPreviousOwners(previousMetadata),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,
 			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {

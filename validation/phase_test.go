@@ -13,14 +13,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 type mockObjectValidator struct {
 	mock.Mock
 }
 
-func (m *mockObjectValidator) Validate(ctx context.Context, owner client.Object, obj *unstructured.Unstructured) error {
-	args := m.Called(ctx, owner, obj)
+func (m *mockObjectValidator) Validate(ctx context.Context, metadata types.RevisionMetadata, obj *unstructured.Unstructured) error {
+	args := m.Called(ctx, metadata, obj)
 
 	return args.Error(0)
 }
@@ -30,7 +31,7 @@ type testablePhaseValidator struct {
 	mockObjValidator *mockObjectValidator
 }
 
-func (v *testablePhaseValidator) Validate(ctx context.Context, owner client.Object, phase types.Phase) error {
+func (v *testablePhaseValidator) Validate(ctx context.Context, metadata types.RevisionMetadata, phase types.Phase) error {
 	phaseError := validatePhaseName(phase)
 
 	var (
@@ -41,7 +42,7 @@ func (v *testablePhaseValidator) Validate(ctx context.Context, owner client.Obje
 	for _, o := range phase.GetObjects() {
 		obj := &o
 
-		err := v.mockObjValidator.Validate(ctx, owner, obj)
+		err := v.mockObjValidator.Validate(ctx, metadata, obj)
 		if err == nil {
 			continue
 		}
@@ -66,39 +67,27 @@ func (v *testablePhaseValidator) Validate(ctx context.Context, owner client.Obje
 	return result
 }
 
-func TestNewClusterPhaseValidator(t *testing.T) {
+func TestNewPhaseValidator(t *testing.T) {
 	t.Parallel()
 
 	restMapper := &mockRestMapper{}
 	writer := &mockWriter{}
 
-	validator := NewClusterPhaseValidator(restMapper, writer)
+	validator := NewPhaseValidator(restMapper, writer)
 
 	assert.NotNil(t, validator)
 	assert.NotNil(t, validator.ObjectValidator)
-	assert.True(t, validator.allowNamespaceEscalation)
-}
-
-func TestNewNamespacedPhaseValidator(t *testing.T) {
-	t.Parallel()
-
-	restMapper := &mockRestMapper{}
-	writer := &mockWriter{}
-
-	validator := NewNamespacedPhaseValidator(restMapper, writer)
-
-	assert.NotNil(t, validator)
-	assert.NotNil(t, validator.ObjectValidator)
-	assert.False(t, validator.allowNamespaceEscalation)
 }
 
 func TestPhaseValidator_Validate(t *testing.T) {
 	t.Parallel()
 
+	scheme := testScheme()
+
 	tests := []struct {
 		name                     string
 		phase                    types.Phase
-		owner                    client.Object
+		ownerNamespace           string
 		mockSetup                func(*mockObjectValidator)
 		expectError              bool
 		expectPhaseValidationErr bool
@@ -121,13 +110,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
+			ownerNamespace: "default",
 			mockSetup: func(objValidator *mockObjectValidator) {
 				objValidator.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
@@ -150,13 +133,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
+			ownerNamespace: "default",
 			mockSetup: func(objValidator *mockObjectValidator) {
 				objValidator.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
@@ -180,13 +157,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
+			ownerNamespace: "default",
 			mockSetup: func(objValidator *mockObjectValidator) {
 				objErr := &ObjectValidationError{
 					ObjectRef: testObjRef,
@@ -215,13 +186,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
+			ownerNamespace: "default",
 			mockSetup: func(objValidator *mockObjectValidator) {
 				objValidator.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(
 					errors.New("unknown error"))
@@ -256,13 +221,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"namespace": "default",
-					},
-				},
-			},
+			ownerNamespace: "default",
 			mockSetup: func(objValidator *mockObjectValidator) {
 				objValidator.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
@@ -279,6 +238,9 @@ func TestPhaseValidator_Validate(t *testing.T) {
 
 			var objValidator *mockObjectValidator
 
+			owner := testOwner(test.ownerNamespace)
+			metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
+
 			if test.useRealValidator {
 				restMapper := &mockRestMapper{}
 				writer := &mockWriter{}
@@ -287,8 +249,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					&meta.RESTMapping{Scope: meta.RESTScopeNamespace}, nil)
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-				realValidator := NewClusterPhaseValidator(restMapper, writer)
-				err = realValidator.Validate(t.Context(), test.owner, test.phase)
+				realValidator := NewPhaseValidator(restMapper, writer)
+				err = realValidator.Validate(t.Context(), metadata, test.phase)
 			} else {
 				objValidator = &mockObjectValidator{}
 				test.mockSetup(objValidator)
@@ -298,7 +260,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 					mockObjValidator: objValidator,
 				}
 
-				err = validator.Validate(t.Context(), test.owner, test.phase)
+				err = validator.Validate(t.Context(), metadata, test.phase)
 			}
 
 			if test.expectError {

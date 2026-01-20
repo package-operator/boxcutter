@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -46,11 +47,13 @@ func TestWithOwnerReference(t *testing.T) {
 				},
 			}
 
+			ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
+
 			re := newTestRevisionEngine()
 			res, err := re.Reconcile(ctx, types.Revision{
 				Name:     "test-collision-prevention-invalid-set",
 				Revision: 1,
-				Owner:    owner,
+				Metadata: ownerMetadata,
 				Phases: []types.Phase{
 					{
 						Name: "simple",
