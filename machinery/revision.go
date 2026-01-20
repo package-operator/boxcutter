@@ -40,14 +40,14 @@ type revisionValidator interface {
 type phaseEngine interface {
 	Reconcile(
 		ctx context.Context,
-		owner client.Object,
+		metadata types.RevisionMetadata,
 		revision int64,
 		phase types.Phase,
 		opts ...types.PhaseReconcileOption,
 	) (PhaseResult, error)
 	Teardown(
 		ctx context.Context,
-		owner client.Object,
+		metadata types.RevisionMetadata,
 		revision int64,
 		phase types.Phase,
 		opts ...types.PhaseTeardownOption,
@@ -204,7 +204,7 @@ func (re *RevisionEngine) Reconcile(
 	// Reconcile
 	for _, phase := range rev.GetPhases() {
 		pres, err := re.phaseEngine.Reconcile(
-			ctx, rev.GetOwner(), rev.GetRevisionNumber(),
+			ctx, rev.GetMetadata(), rev.GetRevisionNumber(),
 			phase, options.ForPhase(phase.GetName())...)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
@@ -336,7 +336,7 @@ func (re *RevisionEngine) Teardown(
 		res.active = p.GetName()
 
 		pres, err := re.phaseEngine.Teardown(
-			ctx, rev.GetOwner(), rev.GetRevisionNumber(),
+			ctx, rev.GetMetadata(), rev.GetRevisionNumber(),
 			p, options.ForPhase(p.GetName())...)
 		if err != nil {
 			return nil, fmt.Errorf("teardown phase: %w", err)

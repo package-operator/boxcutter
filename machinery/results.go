@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
@@ -236,11 +235,11 @@ func (r normalResult) String() string {
 type ObjectResultCollision struct {
 	normalResult
 	// conflictingOwner is provided when Refusing due to Collision.
-	conflictingOwner *metav1.OwnerReference
+	conflictingOwner types.RevisionReference
 }
 
 // ConflictingOwner Conflicting owner if Action == RefusingConflict.
-func (r ObjectResultCollision) ConflictingOwner() (*metav1.OwnerReference, bool) {
+func (r ObjectResultCollision) ConflictingOwner() (types.RevisionReference, bool) {
 	return r.conflictingOwner, r.conflictingOwner != nil
 }
 
@@ -262,7 +261,7 @@ func (r ObjectResultCollision) String() string {
 func newObjectResultConflict(
 	obj Object,
 	diverged CompareResult,
-	conflictingOwner *metav1.OwnerReference,
+	conflictingOwner types.RevisionReference,
 	options types.ObjectReconcileOptions,
 ) ObjectResult {
 	return ObjectResultCollision{

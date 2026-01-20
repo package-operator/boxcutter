@@ -21,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v6/typed"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 // Comparator detects divergent state between desired and actual
@@ -28,7 +30,6 @@ import (
 // If not all fields from desired are owned by the same field owner in actual,
 // we know that the object has been updated by another actor.
 type Comparator struct {
-	ownerStrategy   divergeDetectorOwnerStrategy
 	openAPIAccessor openAPIAccessor
 	scheme          *runtime.Scheme
 	fieldOwner      string
@@ -38,23 +39,17 @@ type discoveryClient interface {
 	OpenAPIV3() openapi.Client
 }
 
-type divergeDetectorOwnerStrategy interface {
-	SetControllerReference(owner, obj metav1.Object) error
-}
-
 type openAPIAccessor interface {
 	Get(gv schema.GroupVersion) (*spec3.OpenAPI, error)
 }
 
 // NewComparator returns a new Comparator instance.
 func NewComparator(
-	ownerStrategy divergeDetectorOwnerStrategy,
 	discoveryClient discoveryClient,
 	scheme *runtime.Scheme,
 	fieldOwner string,
 ) *Comparator {
 	return &Comparator{
-		ownerStrategy: ownerStrategy,
 		openAPIAccessor: &defaultOpenAPIAccessor{
 			c: discoveryClient.OpenAPIV3(),
 		},
@@ -178,7 +173,7 @@ func (d CompareResult) Modified() []string {
 
 // Compare checks if a resource has been changed from desired.
 func (d *Comparator) Compare(
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	desiredObject, actualObject Object,
 ) (res CompareResult, err error) {
 	if err := ensureGVKIsSet(desiredObject, d.scheme); err != nil {
@@ -227,7 +222,7 @@ func (d *Comparator) Compare(
 
 	// Extrapolate a field set from desired.
 	desiredObject = desiredObject.DeepCopyObject().(Object)
-	if err := d.ownerStrategy.SetControllerReference(owner, desiredObject); err != nil {
+	if err := metadata.SetCurrent(desiredObject); err != nil {
 		return res, err
 	}
 
