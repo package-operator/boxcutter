@@ -877,6 +877,110 @@ func TestObjectEngine(t *testing.T) {
 	}
 }
 
+func TestObjectEngine_Collision(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	t.Run("non paused", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			ownerStrategy, divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oe-test",
+				Namespace: "test",
+			},
+			Data: map[string]string{
+				"test1": "test",
+				"test2": "test",
+			},
+		}
+
+		ctx := t.Context()
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
+			Return(errors.NewNotFound(schema.GroupResource{}, ""))
+
+		writer.
+			On("Create", mock.Anything, mock.Anything, mock.Anything).
+			Return(errors.NewAlreadyExists(schema.GroupResource{
+				Group: "test", Resource: "banana",
+			}, "cavendish"))
+
+		_, err := oe.Reconcile(ctx, owner, 1, configMap)
+
+		var terr *CreateCollisionError
+
+		require.ErrorAs(t, err, &terr)
+		require.EqualError(t, err, `banana.test "cavendish" already exists`)
+	})
+
+	t.Run("paused", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			ownerStrategy, divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oe-test",
+				Namespace: "test",
+			},
+			Data: map[string]string{
+				"test1": "test",
+				"test2": "test",
+			},
+		}
+
+		ctx := t.Context()
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
+			Return(errors.NewNotFound(schema.GroupResource{}, ""))
+
+		writer.
+			On("Create", mock.Anything, mock.Anything, mock.Anything).
+			Return(errors.NewAlreadyExists(schema.GroupResource{
+				Group: "test", Resource: "banana",
+			}, "cavendish"))
+
+		_, err := oe.Reconcile(ctx, owner, 1, configMap, types.WithPaused{})
+
+		var terr *CreateCollisionError
+
+		require.ErrorAs(t, err, &terr)
+		require.EqualError(t, err, `banana.test "cavendish" already exists`)
+	})
+}
+
 func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Parallel()
 
