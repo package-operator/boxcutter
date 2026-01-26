@@ -9,6 +9,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// Note: RevisionMetadata and RevisionReference interfaces are defined in metadata.go
+
 // ObjectRef holds information to identify an object.
 type ObjectRef struct {
 	schema.GroupVersionKind
@@ -50,9 +52,8 @@ func (p *Phase) GetObjects() []unstructured.Unstructured {
 type Revision struct {
 	// Name of the Revision.
 	Name string
-	// Owner object will be added as OwnerReference
-	// to all objects managed by this revision.
-	Owner client.Object
+	// Metadata manages revision ownership metadata of objects.
+	Metadata RevisionMetadata
 	// Revision number.
 	Revision int64
 	// Ordered list of phases.
@@ -64,9 +65,9 @@ func (r *Revision) GetName() string {
 	return r.Name
 }
 
-// GetOwner returns the owning object.
-func (r *Revision) GetOwner() client.Object {
-	return r.Owner
+// GetMetadata returns the revision metadata handler.
+func (r *Revision) GetMetadata() RevisionMetadata {
+	return r.Metadata
 }
 
 // GetRevisionNumber returns the current revision number.

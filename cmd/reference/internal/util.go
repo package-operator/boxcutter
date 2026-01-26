@@ -7,7 +7,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"pkg.package-operator.run/boxcutter"
 	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 type revisionAscending []bctypes.Revision
@@ -29,11 +31,16 @@ func latestRevisionNumber(prevRevisions []bctypes.Revision) int64 {
 	return prevRevisions[len(prevRevisions)-1].GetRevisionNumber()
 }
 
+func getNativeOwner(revision boxcutter.Revision) client.Object {
+	// NOTE: Will panic if not a NativeRevisionMetadata
+	return revision.Metadata.(*ownerhandling.NativeRevisionMetadata).GetOwner()
+}
+
 func prevJSON(prevRevisions []bctypes.Revision) string {
 	data := make([]unstructured.Unstructured, 0, len(prevRevisions))
 
 	for _, rev := range prevRevisions {
-		refObj := rev.GetOwner()
+		refObj := getNativeOwner(rev)
 		ref := unstructured.Unstructured{}
 		ref.SetGroupVersionKind(refObj.GetObjectKind().GroupVersionKind())
 		ref.SetName(refObj.GetName())

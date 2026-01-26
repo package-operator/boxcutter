@@ -19,29 +19,19 @@ type PhaseValidator struct {
 	*ObjectValidator
 }
 
-// NewClusterPhaseValidator returns an PhaseValidator for cross-cluster deployments.
-func NewClusterPhaseValidator(
+// NewPhaseValidator returns a PhaseValidator.
+func NewPhaseValidator(
 	restMapper restMapper,
 	writer client.Writer,
 ) *PhaseValidator {
 	return &PhaseValidator{
-		ObjectValidator: NewClusterObjectValidator(restMapper, writer),
-	}
-}
-
-// NewNamespacedPhaseValidator returns an ObjecctValidator for single-namespace deployments.
-func NewNamespacedPhaseValidator(
-	restMapper restMapper,
-	writer client.Writer,
-) *PhaseValidator {
-	return &PhaseValidator{
-		ObjectValidator: NewNamespacedObjectValidator(restMapper, writer),
+		ObjectValidator: NewObjectValidator(restMapper, writer),
 	}
 }
 
 // Validate runs validation of the phase and its objects.
 func (v *PhaseValidator) Validate(
-	ctx context.Context, owner client.Object, phase types.Phase,
+	ctx context.Context, metadata types.RevisionMetadata, phase types.Phase,
 ) error {
 	phaseError := validatePhaseName(phase)
 
@@ -53,7 +43,7 @@ func (v *PhaseValidator) Validate(
 	for _, o := range phase.GetObjects() {
 		obj := &o
 
-		err := v.ObjectValidator.Validate(ctx, owner, obj)
+		err := v.ObjectValidator.Validate(ctx, metadata, obj)
 		if err == nil {
 			continue
 		}

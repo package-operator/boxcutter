@@ -101,7 +101,7 @@ type PhaseTeardownOption interface {
 // ObjectReconcileOptions holds configuration options changing object reconciliation.
 type ObjectReconcileOptions struct {
 	CollisionProtection CollisionProtection
-	PreviousOwners      []client.Object
+	PreviousOwners      []RevisionMetadata
 	Paused              bool
 	Probes              map[string]Prober
 }
@@ -180,9 +180,9 @@ func (p WithCollisionProtection) ApplyToRevisionReconcileOptions(opts *RevisionR
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
-// WithPreviousOwners is a list of known objects allowed to take ownership from.
+// WithPreviousOwners is a list of known revision metadata allowed to take ownership from.
 // Objects from this list will not trigger collision detection and prevention.
-type WithPreviousOwners []client.Object
+type WithPreviousOwners []RevisionMetadata
 
 // ApplyToObjectReconcileOptions implements ObjectReconcileOption.
 func (p WithPreviousOwners) ApplyToObjectReconcileOptions(opts *ObjectReconcileOptions) {
