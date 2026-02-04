@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
@@ -53,67 +53,67 @@ func TestComparator(t *testing.T) {
 		}
 	})
 
-	// ConfigMap structured
-	actualConfigMap := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "comp-test-1",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			"test": "test",
+	// ConfigMap unstructured
+	actualConfigMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "comp-test-1",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"test": "test",
+			},
 		},
 	}
-	desiredConfigMap := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "comp-test-1",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			"test":  "testxx",
-			"test1": "test1",
+	desiredConfigMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "comp-test-1",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"test":  "testxx",
+				"test1": "test1",
+			},
 		},
 	}
 
-	// Deployment structured
-	actualDeployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "comp-test-2",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.To[int32](1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "com-test-2",
-				},
+	// Deployment unstructured
+	actualDeployment := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "comp-test-2",
+				"namespace": "default",
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
 						"app": "com-test-2",
 					},
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "app",
-							Image: "does-not-matter",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "XXX",
-									Value: "XXX",
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app": "com-test-2",
+						},
+					},
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "app",
+								"image": "does-not-matter",
+								"env": []interface{}{
+									map[string]interface{}{
+										"name":  "XXX",
+										"value": "XXX",
+									},
 								},
 							},
 						},
@@ -122,37 +122,37 @@ func TestComparator(t *testing.T) {
 			},
 		},
 	}
-	desiredDeployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "comp-test-2",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.To[int32](1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "com-test-2",
-				},
+	desiredDeployment := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "comp-test-2",
+				"namespace": "default",
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
 						"app": "com-test-2",
 					},
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "app",
-							Image: "still-does-not-matter",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "XXX",
-									Value: "XXX",
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app": "com-test-2",
+						},
+					},
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "app",
+								"image": "still-does-not-matter",
+								"env": []interface{}{
+									map[string]interface{}{
+										"name":  "XXX",
+										"value": "XXX",
+									},
 								},
 							},
 						},
@@ -165,9 +165,9 @@ func TestComparator(t *testing.T) {
 	tests := []struct {
 		name string
 		// object to create on the cluster
-		actualObj  client.Object
-		desiredObj client.Object
-		updateFn   func(ctx context.Context, actualObj client.Object) error
+		actualObj  *unstructured.Unstructured
+		desiredObj *unstructured.Unstructured
+		updateFn   func(ctx context.Context, actualObj *unstructured.Unstructured) error
 		report     string
 	}{
 		{
@@ -192,6 +192,7 @@ func TestComparator(t *testing.T) {
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -222,6 +223,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
@@ -231,11 +233,12 @@ Comparison:
 		{
 			name:      "Deployment update conflict",
 			actualObj: actualDeployment.DeepCopy(),
-			updateFn: func(ctx context.Context, actualObj client.Object) error {
-				obj := actualObj.(*appsv1.Deployment)
-				obj.Spec.Replicas = ptr.To[int32](2)
+			updateFn: func(ctx context.Context, actualObj *unstructured.Unstructured) error {
+				if err := unstructured.SetNestedField(actualObj.Object, int64(2), "spec", "replicas"); err != nil {
+					return err
+				}
 
-				return Client.Update(ctx, obj)
+				return Client.Update(ctx, actualObj)
 			},
 			desiredObj: desiredDeployment.DeepCopy(),
 			report: `Conflicts:
@@ -248,6 +251,7 @@ Other:
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -278,6 +282,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
@@ -288,12 +293,10 @@ Comparison:
 		{
 			name:      "Deployment multiple managers",
 			actualObj: actualDeployment.DeepCopy(),
-			updateFn: func(ctx context.Context, actualObj client.Object) error {
-				obj := actualObj.(*appsv1.Deployment)
-
+			updateFn: func(ctx context.Context, actualObj *unstructured.Unstructured) error {
 				// Forced conflict
 				err := Client.Patch(ctx,
-					obj, client.RawPatch(client.Apply.Type(), []byte(
+					actualObj, client.RawPatch(types.ApplyPatchType, []byte(
 						`{"apiVersion":"apps/v1","kind":"Deployment","spec":{"replicas": 2}}`,
 					)),
 					client.FieldOwner("Hans"), client.ForceOwnership,
@@ -303,7 +306,7 @@ Comparison:
 				}
 
 				return Client.Patch(ctx,
-					obj, client.RawPatch(client.Apply.Type(), []byte(
+					actualObj, client.RawPatch(types.ApplyPatchType, []byte(
 						`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations": {"test":"test"}}}`,
 					)),
 					client.FieldOwner("Franz"),
@@ -322,6 +325,7 @@ Other:
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -353,6 +357,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
@@ -366,8 +371,10 @@ Comparison:
 		t.Run(test.name, func(t *testing.T) {
 			require.NoError(t,
 				controllerutil.SetControllerReference(owner, test.actualObj, Scheme))
+
+			ac := client.ApplyConfigurationFromUnstructured(test.actualObj)
 			require.NoError(t,
-				Client.Patch(ctx, test.actualObj, client.Apply, client.FieldOwner(fieldOwner)))
+				Client.Apply(ctx, ac, client.FieldOwner(fieldOwner)))
 			t.Cleanup(func() {
 				if err := Client.Delete(ctx, test.actualObj); err != nil {
 					t.Error(err)
@@ -379,7 +386,7 @@ Comparison:
 				require.NoError(t, err)
 			}
 
-			if _, ok := test.actualObj.(*appsv1.Deployment); ok {
+			if test.actualObj.GetKind() == "Deployment" {
 				err := Waiter.WaitForCondition(ctx, test.actualObj, "Available", metav1.ConditionFalse)
 				require.NoError(t, err)
 			}
