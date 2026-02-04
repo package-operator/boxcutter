@@ -192,6 +192,7 @@ func TestComparator(t *testing.T) {
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -222,6 +223,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
@@ -249,6 +251,7 @@ Other:
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -279,6 +282,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
@@ -321,6 +325,7 @@ Other:
   .status.conditions
   .status.observedGeneration
   .status.replicas
+  .status.terminatingReplicas
   .status.unavailableReplicas
   .status.updatedReplicas
   .status.conditions[type="Available"]
@@ -352,6 +357,7 @@ Comparison:
   .spec.template.spec.securityContext
   .spec.template.spec.terminationGracePeriodSeconds
   .spec.template.spec.containers[name="app"].imagePullPolicy
+  .spec.template.spec.containers[name="app"].resources
   .spec.template.spec.containers[name="app"].terminationMessagePath
   .spec.template.spec.containers[name="app"].terminationMessagePolicy
 - Modified:
