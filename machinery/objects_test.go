@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
@@ -112,7 +113,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(CompareResult{}, nil)
 
 				writer.
-					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
 
@@ -436,7 +437,7 @@ func TestObjectEngine(t *testing.T) {
 					}, nil)
 
 				writer.
-					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
 
@@ -534,7 +535,7 @@ func TestObjectEngine(t *testing.T) {
 					}, nil)
 
 				writer.
-					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
 
@@ -721,7 +722,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(CompareResult{}, nil)
 
 				writer.
-					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
 
@@ -896,6 +897,102 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 		assert.PanicsWithValue(t, "owner must be persistet to cluster, empty UID", func() {
 			_, _ = oe.Reconcile(t.Context(), owner, 1, desired)
 		})
+	})
+}
+
+func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	t.Run("returns error when updating typed object", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			ownerStrategy, divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		// Use a typed object (not unstructured)
+		desiredObject := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test",
+			},
+		}
+
+		// Actual object exists, so we'll hit the update path
+		actualObject := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test",
+				Annotations: map[string]string{
+					testSystemPrefix + "/revision": "1",
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "v1",
+						Kind:               "ConfigMap",
+						Controller:         ptr.To(true),
+						Name:               "owner",
+						UID:                "12345-678",
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
+			},
+		}
+
+		// Mock setup
+		cache.
+			On(
+				"Get", mock.Anything,
+				client.ObjectKeyFromObject(desiredObject),
+				mock.Anything, mock.Anything,
+			).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*corev1.Secret)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		fs := &fieldpath.Set{}
+		fs.Insert(fieldpath.MakePathOrDie("data", "key"))
+		divergeDetector.
+			On("Compare", owner, mock.Anything, mock.Anything).
+			Return(CompareResult{
+				Comparison: &typed.Comparison{
+					Added:    &fieldpath.Set{},
+					Removed:  &fieldpath.Set{},
+					Modified: fs,
+				},
+			}, nil)
+
+		//nolint:usetesting
+		ctx := context.Background()
+		res, err := oe.Reconcile(ctx, owner, 1, desiredObject)
+
+		// Should return UnsupportedApplyConfigurationError
+		require.Error(t, err)
+
+		var unsupportedErr *UnsupportedApplyConfigurationError
+
+		require.ErrorAs(t, err, &unsupportedErr, "expected UnsupportedApplyConfigurationError")
+		assert.Contains(t, err.Error(), "does not support ApplyConfiguration: *v1.Secret")
+		assert.Nil(t, res)
 	})
 }
 

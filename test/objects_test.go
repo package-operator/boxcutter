@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery"
@@ -73,7 +74,7 @@ Action: "Idle"
 	// Add other participant.
 	err = Client.Patch(ctx,
 		configMap.DeepCopy(),
-		client.RawPatch(client.Apply.Type(), []byte(
+		client.RawPatch(machinerytypes.ApplyYAMLPatchType, []byte(
 			`{"apiVersion":"v1","kind":"ConfigMap","data":{"test5": "xxx"}}`,
 		)),
 		client.FieldOwner("Franz"),

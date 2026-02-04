@@ -582,6 +582,16 @@ func Test_openAPICanonicalName(t *testing.T) {
 			cn: "io.k8s.api.core.v1.Pod",
 		},
 		{
+			name: "ConfigMap",
+			obj: unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "ConfigMap",
+				},
+			},
+			cn: "io.k8s.api.core.v1.ConfigMap",
+		},
+		{
 			name: "Secret",
 			obj: unstructured.Unstructured{
 				Object: map[string]interface{}{
