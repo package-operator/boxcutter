@@ -223,8 +223,8 @@ pkg.package-operator.run/cardboard v0.0.4 h1:a5wus35NCnpVkJmqzq1WZukLM3SOPiRoYD3
 pkg.package-operator.run/cardboard v0.0.4/go.mod h1:txTwfizKr008RFlNrfa2USO5oQnPOSnkEdRJ4bb4nvQ=
 pkg.package-operator.run/cardboard/kubeutils v0.0.4 h1:rsDqBsnnqN3NaCI3yUdoePqVzJQUVxjLBY3s0wRSoW4=
 pkg.package-operator.run/cardboard/kubeutils v0.0.4/go.mod h1:Un8SWMuALmnjjPBti2L74ouCSJM27olSGodK/G1kmUk=
-pkg.package-operator.run/cardboard/modules/kind v0.0.4 h1:pjwFHk/j2Wsnfw21cfJuOKY8hN6w+48mX65kKbWIGtk=
-pkg.package-operator.run/cardboard/modules/kind v0.0.4/go.mod h1:zUzn+mq/FWIKqZc/HMRyd7fZDFPZlxoMy2sinODfVtM=
+pkg.package-operator.run/cardboard/modules/kind v0.1.0 h1:VKrcT4RX9qOzWt+uTuNN6ZVa8m7ezobs70OpJ4vwTvw=
+pkg.package-operator.run/cardboard/modules/kind v0.1.0/go.mod h1:fpynjrh+7ThzwQ8sB52uwoLxV9vCnTfvnSmnubAgmqI=
 pkg.package-operator.run/cardboard/modules/kubeclients v0.0.4 h1:G2VUnke/EoKfIFDb52K4hqevPd4OR0QEwwi0t2dbsXA=
 pkg.package-operator.run/cardboard/modules/kubeclients v0.0.4/go.mod h1:79YMBeCAtFrvH6NyuyZs+U6EWWoOK/7vVJdcINl2tVA=
 sigs.k8s.io/controller-runtime v0.23.1 h1:TjJSM80Nf43Mg21+RCy3J70aj/W6KyvDtOlpKf+PupE=
