@@ -34,9 +34,8 @@ func sanitizeCompareResult(r *machinery.CompareResult) {
 
 //nolint:maintidx
 func TestComparator(t *testing.T) {
-	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(
-		os, DiscoveryClient, Scheme, fieldOwner)
+		DiscoveryClient, Scheme, fieldOwner)
 
 	ctx := t.Context()
 	owner := &corev1.ConfigMap{
@@ -52,6 +51,8 @@ func TestComparator(t *testing.T) {
 			t.Error(err)
 		}
 	})
+
+	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
 
 	// ConfigMap unstructured
 	actualConfigMap := &unstructured.Unstructured{
@@ -391,7 +392,7 @@ Comparison:
 				require.NoError(t, err)
 			}
 
-			r, err := comp.Compare(owner, test.desiredObj, test.actualObj)
+			r, err := comp.Compare(ownerMetadata, test.desiredObj, test.actualObj)
 			require.NoError(t, err)
 			sanitizeCompareResult(&r)
 

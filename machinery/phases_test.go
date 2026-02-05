@@ -11,10 +11,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -27,6 +29,11 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -34,6 +41,8 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
+	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
 
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -51,10 +60,10 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
-	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
+	oe.On("Reconcile", mock.Anything, mock.Anything, revision, obj, mock.Anything).
 		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
+	_, err := pe.Reconcile(t.Context(), metadata, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -70,6 +79,11 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -77,6 +91,8 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
+	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
 
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -94,10 +110,10 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(validation.PhaseValidationError{})
-	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
+	oe.On("Reconcile", mock.Anything, mock.Anything, revision, obj, mock.Anything).
 		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
+	_, err := pe.Reconcile(t.Context(), metadata, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj,
@@ -117,6 +133,11 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	pv := &phaseValidatorMock{}
 	pe := NewPhaseEngine(oe, pv)
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345-678",
@@ -124,6 +145,8 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
+	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
 
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -138,10 +161,10 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 
 	var revision int64 = 1
 
-	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything, mock.Anything).
+	oe.On("Teardown", mock.Anything, mock.Anything, revision, obj, mock.Anything, mock.Anything).
 		Return(true, nil)
 
-	deleted, err := pe.Teardown(t.Context(), owner, revision, types.Phase{
+	deleted, err := pe.Teardown(t.Context(), metadata, revision, types.Phase{
 		Name: "test",
 		Objects: []unstructured.Unstructured{
 			*obj, *obj,
@@ -159,24 +182,24 @@ type objectEngineMock struct {
 
 func (m *objectEngineMock) Reconcile(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectReconcileOption,
 ) (ObjectResult, error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, metadata, revision, desiredObject, opts)
 
 	return args.Get(0).(ObjectResult), args.Error(1)
 }
 
 func (m *objectEngineMock) Teardown(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectTeardownOption,
 ) (objectDeleted bool, err error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, metadata, revision, desiredObject, opts)
 
 	return args.Bool(0), args.Error(1)
 }
@@ -187,10 +210,10 @@ type phaseValidatorMock struct {
 
 func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
-	owner client.Object,
+	metadata types.RevisionMetadata,
 	phase types.Phase,
 ) error {
-	args := m.Called(ctx, owner, phase)
+	args := m.Called(ctx, metadata, phase)
 
 	return args.Error(0)
 }

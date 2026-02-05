@@ -18,6 +18,7 @@ import (
 
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 func TestCollisionProtectionPreventUnowned(t *testing.T) {
@@ -37,11 +38,13 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 
 	colliding.Data["apple"] = "pie"
 
+	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
+
 	re := newTestRevisionEngine()
 	res, err := re.Reconcile(ctx, types.Revision{
 		Name:     "test-collision-prevention-prevent-unowned-cm",
 		Revision: 1,
-		Owner:    owner,
+		Metadata: ownerMetadata,
 		Phases: []types.Phase{
 			{
 				Name: "simple",
@@ -89,11 +92,13 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 	require.NoError(t, Client.Create(ctx, owner))
 	cleanupOnSuccess(t, owner)
 
+	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
+
 	re := newTestRevisionEngine()
 	res, err := re.Reconcile(ctx, types.Revision{
 		Name:     "test-collision-prevention-prevent-owned-cm",
 		Revision: 1,
-		Owner:    owner,
+		Metadata: ownerMetadata,
 		Phases: []types.Phase{
 			{
 				Name: "simple",
@@ -122,13 +127,16 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 		// hco, ok := object.(*machinery.ObjectResultCollision)
 		// Crude workaround:
 		type hasConflictingOwner interface {
-			ConflictingOwner() (*metav1.OwnerReference, bool)
+			ConflictingOwner() (types.RevisionReference, bool)
 		}
 
 		hco, ok := object.(hasConflictingOwner)
 		require.True(t, ok)
 		conflictingOwner, ok := hco.ConflictingOwner()
 		require.True(t, ok)
-		assert.Equal(t, existingOwner.GetUID(), conflictingOwner.UID)
+		// RevisionReference is an interface - type assert to get the OwnerReference
+		ownerRef, ok := conflictingOwner.(*metav1.OwnerReference)
+		require.True(t, ok)
+		assert.Equal(t, existingOwner.GetUID(), ownerRef.UID)
 	}
 }

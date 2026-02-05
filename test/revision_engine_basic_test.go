@@ -23,6 +23,8 @@ import (
 )
 
 func TestRevisionEngine(t *testing.T) {
+	ctx := t.Context()
+
 	revOwner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "rev-test",
@@ -52,9 +54,19 @@ func TestRevisionEngine(t *testing.T) {
 			},
 		},
 	}
+
+	// Owner has to be there first:
+	err := Client.Create(ctx, revOwner)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		//nolint:usetesting
+		require.NoError(t, Client.Delete(context.Background(), revOwner))
+	})
+
+	revOwnerMetadata := ownerhandling.NewNativeRevisionMetadata(revOwner, Scheme)
 	rev := boxcutter.Revision{
 		Name:     "rev-1",
-		Owner:    revOwner,
+		Metadata: revOwnerMetadata,
 		Revision: 1,
 		Phases: []boxcutter.Phase{
 			{
@@ -68,25 +80,14 @@ func TestRevisionEngine(t *testing.T) {
 		},
 	}
 
-	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
 	)
-	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
+	pval := validation.NewPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)
 	rval := validation.NewRevisionValidator()
 	re := machinery.NewRevisionEngine(pe, rval, Client)
-
-	ctx := t.Context()
-
-	// Owner has to be there first:
-	err := Client.Create(ctx, revOwner)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		//nolint:usetesting
-		require.NoError(t, Client.Delete(context.Background(), revOwner))
-	})
 
 	// Test execution
 	// --------------
