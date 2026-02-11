@@ -7,8 +7,6 @@ updates:
   allow:
   - dependency-type: all
     dependency-name: "*"
-  reviewers:
-    - package-operator/core-maintainers/dependency-maintainers
   open-pull-requests-limit: 100
   groups:
     kube:
@@ -25,8 +23,6 @@ updates:
   directory: /
   schedule:
     interval: daily
-  reviewers:
-    - package-operator/core-maintainers/dependency-maintainers
   open-pull-requests-limit: 100
   commit-message:
     prefix: "build(deps)"
