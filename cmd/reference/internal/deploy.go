@@ -28,6 +28,7 @@ import (
 
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/managedcache"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/probing"
 	"pkg.package-operator.run/boxcutter/util"
 )
@@ -42,6 +43,10 @@ const (
 
 	revisionHistoryLimit = 5
 )
+
+// revisionT is a type alias for a Revision using NativeRevisionMetadata for metadata.
+// It is the revision type used by the reconciler.
+type revisionT = boxcutter.RevisionImpl[*ownerhandling.NativeRevisionMetadata]
 
 type Reconciler struct {
 	client          client.Client
@@ -122,7 +127,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 		return res, fmt.Errorf("listing revisions: %w", err)
 	}
 
-	existingRevisions := make([]boxcutter.Revision, 0, len(existingRevisionsRaw.Items))
+	existingRevisions := make([]*revisionT, 0, len(existingRevisionsRaw.Items))
 
 	for _, rev := range existingRevisionsRaw.Items {
 		r, _, _, err := c.toRevision(cm.Name, &rev)
@@ -130,7 +135,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 			return res, fmt.Errorf("to revision: %w", err)
 		}
 
-		existingRevisions = append(existingRevisions, *r)
+		existingRevisions = append(existingRevisions, r)
 	}
 
 	sort.Sort(revisionAscending(existingRevisions))
@@ -139,18 +144,18 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 
 	// Sort into current and previous revisions.
 	var (
-		currentRevision *boxcutter.Revision
-		prevRevisions   []boxcutter.Revision
+		currentRevision *revisionT
+		prevRevisions   []*revisionT
 	)
 
 	if len(existingRevisions) > 0 {
 		maybeCurrentObjectSet := existingRevisions[len(existingRevisions)-1]
 
-		annotations := maybeCurrentObjectSet.GetOwner().GetAnnotations()
+		annotations := getNativeOwner(maybeCurrentObjectSet).GetAnnotations()
 		if annotations != nil {
 			if hash, ok := annotations[hashAnnotation]; ok &&
 				hash == currentHash {
-				currentRevision = &maybeCurrentObjectSet
+				currentRevision = maybeCurrentObjectSet
 				prevRevisions = existingRevisions[0 : len(existingRevisions)-1] // previous is everything excluding current
 			}
 		}
@@ -197,7 +202,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 			break
 		}
 
-		if err := client.IgnoreNotFound(c.client.Delete(ctx, prevRev.GetOwner())); err != nil {
+		if err := client.IgnoreNotFound(c.client.Delete(ctx, getNativeOwner(prevRev))); err != nil {
 			return res, fmt.Errorf("failed to delete revision (history limit): %w", err)
 		}
 
@@ -243,7 +248,7 @@ func (c *Reconciler) handleRevision(
 
 	if !revisionCM.DeletionTimestamp.IsZero() ||
 		revisionCM.Data[cmStateKey] == "Archived" {
-		tres, err := re.Teardown(ctx, *revision)
+		tres, err := re.Teardown(ctx, revision)
 		if err != nil {
 			return res, fmt.Errorf("revision teardown: %w", err)
 		}
@@ -270,7 +275,7 @@ func (c *Reconciler) handleRevision(
 		return res, err
 	}
 
-	rres, err := re.Reconcile(ctx, *revision, opts...)
+	rres, err := re.Reconcile(ctx, revision, opts...)
 	if err != nil {
 		return res, fmt.Errorf("revision reconcile: %w", err)
 	}
@@ -330,7 +335,7 @@ func (e RevisionNumberNotSetError) Error() string {
 }
 
 func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
-	r *boxcutter.Revision, opts []boxcutter.RevisionReconcileOption, previous []client.Object, err error,
+	r *revisionT, opts []boxcutter.RevisionReconcileOption, previous []client.Object, err error,
 ) {
 	var (
 		phases        []string
@@ -399,14 +404,17 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		return nil, nil, nil, RevisionNumberNotSetError{msg: "revision not set"}
 	}
 
-	rev := &boxcutter.Revision{
-		Name:     cm.Name,
-		Owner:    cm,
-		Revision: revision,
-	}
+	rev := boxcutter.NewRevision(
+		cm.Name,
+		ownerhandling.NewNativeRevisionMetadata(cm, c.scheme),
+		revision,
+		nil,
+	)
 
-	for _, obj := range previousUnstr {
-		previous = append(previous, &obj)
+	previousMetadata := make([]boxcutter.RevisionMetadata, len(previousUnstr))
+	for i := range previousUnstr {
+		previousMetadata[i] = ownerhandling.NewNativeRevisionMetadata(&previousUnstr[i], c.scheme)
+		previous = append(previous, &previousUnstr[i])
 	}
 
 	for _, phase := range phases {
@@ -419,7 +427,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	}
 
 	opts = []boxcutter.RevisionReconcileOption{
-		boxcutter.WithPreviousOwners(previous),
+		boxcutter.WithPreviousOwners(previousMetadata),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,
 			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {

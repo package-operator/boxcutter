@@ -256,27 +256,17 @@ func TestWithCollisionProtection(t *testing.T) {
 func TestWithPreviousOwners(t *testing.T) {
 	t.Parallel()
 
-	owner1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner1",
-			Namespace: "test",
-		},
-	}
-	owner2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner2",
-			Namespace: "test",
-		},
-	}
+	meta1 := &mockRevisionMetadata{name: "owner1"}
+	meta2 := &mockRevisionMetadata{name: "owner2"}
 
-	previousOwners := WithPreviousOwners{owner1, owner2}
+	previousOwners := WithPreviousOwners{meta1, meta2}
 
 	t.Run("applies to object reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &ObjectReconcileOptions{}
 		previousOwners.ApplyToObjectReconcileOptions(opts)
-		assert.Equal(t, []client.Object{owner1, owner2}, opts.PreviousOwners)
+		assert.Equal(t, []RevisionMetadata{meta1, meta2}, opts.PreviousOwners)
 	})
 
 	t.Run("applies to phase reconcile options", func(t *testing.T) {

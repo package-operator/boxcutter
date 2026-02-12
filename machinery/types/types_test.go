@@ -201,34 +201,29 @@ func TestPhase_GetObjects(t *testing.T) {
 func TestRevision_GetName(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Name: "test-revision",
 	}
 
 	assert.Equal(t, "test-revision", revision.GetName())
 }
 
-func TestRevision_GetOwner(t *testing.T) {
+func TestRevision_GetMetadata(t *testing.T) {
 	t.Parallel()
 
-	owner := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner",
-			Namespace: "test",
-		},
+	metadata := &mockRevisionMetadata{name: "test"}
+
+	revision := &RevisionImpl[RevisionMetadata]{
+		Metadata: metadata,
 	}
 
-	revision := &Revision{
-		Owner: owner,
-	}
-
-	assert.Equal(t, owner, revision.GetOwner())
+	assert.Equal(t, metadata, revision.GetMetadata())
 }
 
 func TestRevision_GetRevisionNumber(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Revision: 42,
 	}
 
@@ -269,7 +264,7 @@ func TestRevision_GetPhases(t *testing.T) {
 		},
 	}
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Phases: phases,
 	}
 
