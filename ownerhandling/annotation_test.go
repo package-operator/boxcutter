@@ -357,7 +357,7 @@ func TestAnnotationRevisionMetadata_CopyReferences(t *testing.T) {
 		},
 	}
 	h := NewAnnotationStrategy(testAnnotationKey)
-	m := h.NewRevisionMetadata(dummyOwner, testScheme).(*annotationRevisionMetadata)
+	m := h.NewRevisionMetadata(dummyOwner, testScheme)
 
 	objA := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

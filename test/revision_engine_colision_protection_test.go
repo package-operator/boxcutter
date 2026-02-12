@@ -41,11 +41,11 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
 
 	re := newTestRevisionEngine()
-	res, err := re.Reconcile(ctx, types.Revision{
-		Name:     "test-collision-prevention-prevent-unowned-cm",
-		Revision: 1,
-		Metadata: ownerMetadata,
-		Phases: []types.Phase{
+	res, err := re.Reconcile(ctx, types.NewRevision(
+		"test-collision-prevention-prevent-unowned-cm",
+		ownerMetadata,
+		1,
+		[]types.Phase{
 			{
 				Name: "simple",
 				Objects: []unstructured.Unstructured{
@@ -53,7 +53,7 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 				},
 			},
 		},
-	})
+	))
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
 	assert.True(t, res.InTransition())
@@ -95,11 +95,11 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 	ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
 
 	re := newTestRevisionEngine()
-	res, err := re.Reconcile(ctx, types.Revision{
-		Name:     "test-collision-prevention-prevent-owned-cm",
-		Revision: 1,
-		Metadata: ownerMetadata,
-		Phases: []types.Phase{
+	res, err := re.Reconcile(ctx, types.NewRevision(
+		"test-collision-prevention-prevent-owned-cm",
+		ownerMetadata,
+		1,
+		[]types.Phase{
 			{
 				Name: "simple",
 				Objects: []unstructured.Unstructured{
@@ -107,7 +107,7 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 				},
 			},
 		},
-	})
+	))
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
 	assert.True(t, res.InTransition())

@@ -50,11 +50,11 @@ func TestWithOwnerReference(t *testing.T) {
 			ownerMetadata := ownerhandling.NewNativeRevisionMetadata(owner, Scheme)
 
 			re := newTestRevisionEngine()
-			res, err := re.Reconcile(ctx, types.Revision{
-				Name:     "test-collision-prevention-invalid-set",
-				Revision: 1,
-				Metadata: ownerMetadata,
-				Phases: []types.Phase{
+			res, err := re.Reconcile(ctx, types.NewRevision(
+				"test-collision-prevention-invalid-set",
+				ownerMetadata,
+				1,
+				[]types.Phase{
 					{
 						Name: "simple",
 						Objects: []unstructured.Unstructured{
@@ -62,7 +62,7 @@ func TestWithOwnerReference(t *testing.T) {
 						},
 					},
 				},
-			})
+			))
 
 			require.NoError(t, err)
 			assert.False(t, res.IsComplete())

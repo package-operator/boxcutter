@@ -505,7 +505,7 @@ func TestNativeRevisionMetadata_GetOwner(t *testing.T) {
 		},
 	}
 
-	m := NewNativeRevisionMetadata(owner, testScheme).(*NativeRevisionMetadata)
+	m := NewNativeRevisionMetadata(owner, testScheme)
 	assert.Equal(t, owner, m.GetOwner())
 }
 

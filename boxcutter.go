@@ -12,8 +12,16 @@ import (
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
+// NewRevision creates a new Revision instance using type inference to determine the concrete type of the revision metadata.
+func NewRevision[T types.RevisionMetadata](name string, metadata T, revision int64, phases []types.Phase) *RevisionImpl[T] {
+	return types.NewRevision(name, metadata, revision, phases)
+}
+
 // Revision represents multiple phases at a given point in time.
 type Revision = types.Revision
+
+// RevisionImpl is an implementation of the Revision interface whose revision metadata is of concrete type T.
+type RevisionImpl[T types.RevisionMetadata] = types.RevisionImpl[T]
 
 // Phase represents a collection of objects lifecycled together.
 type Phase = types.Phase

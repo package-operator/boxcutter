@@ -180,7 +180,7 @@ func (re *RevisionEngine) Reconcile(
 	opts ...types.RevisionReconcileOption,
 ) (RevisionResult, error) {
 	var options types.RevisionReconcileOptions
-	for _, opt := range slices.Concat(rev.Metadata.GetReconcileOptions(), opts) {
+	for _, opt := range slices.Concat(rev.GetMetadata().GetReconcileOptions(), opts) {
 		opt.ApplyToRevisionReconcileOptions(&options)
 	}
 
@@ -315,7 +315,7 @@ func (re *RevisionEngine) Teardown(
 	opts ...types.RevisionTeardownOption,
 ) (RevisionTeardownResult, error) {
 	var options types.RevisionTeardownOptions
-	for _, opt := range slices.Concat(rev.Metadata.GetTeardownOptions(), opts) {
+	for _, opt := range slices.Concat(rev.GetMetadata().GetTeardownOptions(), opts) {
 		opt.ApplyToRevisionTeardownOptions(&options)
 	}
 

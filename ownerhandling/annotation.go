@@ -35,11 +35,11 @@ func NewAnnotationStrategy(annotationKey string) AnnotationStrategy {
 }
 
 // Ensure AnnotationRevisionMetadata implements RevisionMetadata.
-var _ bctypes.RevisionMetadata = (*annotationRevisionMetadata)(nil)
+var _ bctypes.RevisionMetadata = (*AnnotationRevisionMetadata)(nil)
 
-// annotationRevisionMetadata uses annotations for cross-namespace ownership tracking.
+// AnnotationRevisionMetadata uses annotations for cross-namespace ownership tracking.
 // Cross-namespace is always allowed (this is the primary purpose of annotation-based ownership).
-type annotationRevisionMetadata struct {
+type AnnotationRevisionMetadata struct {
 	owner         client.Object
 	scheme        *runtime.Scheme
 	annotationKey string
@@ -52,12 +52,12 @@ type annotationRevisionMetadata struct {
 func (h AnnotationStrategy) NewRevisionMetadata(
 	owner client.Object,
 	scheme *runtime.Scheme,
-) bctypes.RevisionMetadata {
+) *AnnotationRevisionMetadata {
 	if len(owner.GetUID()) == 0 {
 		panic("owner must be persisted to cluster, empty UID")
 	}
 
-	return &annotationRevisionMetadata{
+	return &AnnotationRevisionMetadata{
 		owner:         owner,
 		scheme:        scheme,
 		annotationKey: string(h),
@@ -67,20 +67,20 @@ func (h AnnotationStrategy) NewRevisionMetadata(
 // GetReconcileOptions returns a set of options that will added to any
 // revision reconciliation options.
 // For annotation-based ownership, there are no default reconciliation options.
-func (m *annotationRevisionMetadata) GetReconcileOptions() []bctypes.RevisionReconcileOption {
+func (m *AnnotationRevisionMetadata) GetReconcileOptions() []bctypes.RevisionReconcileOption {
 	return nil
 }
 
 // GetTeardownOptions returns a set of options that will added to any
 // revision teardown options.
 // For annotation-based ownership, there are no default teardown options.
-func (m *annotationRevisionMetadata) GetTeardownOptions() []bctypes.RevisionTeardownOption {
+func (m *AnnotationRevisionMetadata) GetTeardownOptions() []bctypes.RevisionTeardownOption {
 	return nil
 }
 
 // SetCurrent updates obj to mark this RevisionMetadata as the current (controlling) revision.
 // Returns an error if the object already has a different current revision.
-func (m *annotationRevisionMetadata) SetCurrent(obj metav1.Object, opts ...bctypes.SetCurrentOption) error {
+func (m *AnnotationRevisionMetadata) SetCurrent(obj metav1.Object, opts ...bctypes.SetCurrentOption) error {
 	options := &bctypes.SetCurrentOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -141,7 +141,7 @@ func (m *annotationRevisionMetadata) SetCurrent(obj metav1.Object, opts ...bctyp
 }
 
 // IsCurrent returns true if this RevisionMetadata is the current (controlling) revision of obj.
-func (m *annotationRevisionMetadata) IsCurrent(obj metav1.Object) bool {
+func (m *AnnotationRevisionMetadata) IsCurrent(obj metav1.Object) bool {
 	ownerRefComp := annotationOwnerRefForCompare(m.owner, m.scheme)
 	for _, ownerRef := range m.getOwnerReferences(obj) {
 		if referSameObject(&ownerRefComp, &ownerRef) &&
@@ -155,7 +155,7 @@ func (m *annotationRevisionMetadata) IsCurrent(obj metav1.Object) bool {
 }
 
 // RemoveFrom removes this RevisionMetadata from obj, whether it is the current revision or otherwise.
-func (m *annotationRevisionMetadata) RemoveFrom(obj metav1.Object) {
+func (m *AnnotationRevisionMetadata) RemoveFrom(obj metav1.Object) {
 	ownerRefComp := annotationOwnerRefForCompare(m.owner, m.scheme)
 	ownerRefs := m.getOwnerReferences(obj)
 	foundIndex := -1
@@ -175,13 +175,13 @@ func (m *annotationRevisionMetadata) RemoveFrom(obj metav1.Object) {
 
 // IsNamespaceAllowed returns true if objects may be created/managed in the namespace of obj.
 // For annotation-based ownership, cross-namespace is always allowed.
-func (m *annotationRevisionMetadata) IsNamespaceAllowed(_ metav1.Object) bool {
+func (m *AnnotationRevisionMetadata) IsNamespaceAllowed(_ metav1.Object) bool {
 	return true
 }
 
 // CopyReferences copies all revision metadata from objA to objB except the current revision marker.
 // This is used when taking over control from a previous owner while preserving their watch references.
-func (m *annotationRevisionMetadata) CopyReferences(objA, objB metav1.Object) {
+func (m *AnnotationRevisionMetadata) CopyReferences(objA, objB metav1.Object) {
 	// Copy owner references from A to B.
 	ownerRefs := m.getOwnerReferences(objA)
 	// Release controller (set all Controller fields to nil/false).
@@ -194,7 +194,7 @@ func (m *annotationRevisionMetadata) CopyReferences(objA, objB metav1.Object) {
 
 // GetCurrent returns a RevisionReference describing the current revision of obj.
 // Returns nil if there is no current revision set.
-func (m *annotationRevisionMetadata) GetCurrent(obj metav1.Object) bctypes.RevisionReference {
+func (m *AnnotationRevisionMetadata) GetCurrent(obj metav1.Object) bctypes.RevisionReference {
 	for _, ref := range m.getOwnerReferences(obj) {
 		if ref.Controller != nil && *ref.Controller {
 			// The returned value is only used in log messages. We return the
@@ -206,7 +206,7 @@ func (m *annotationRevisionMetadata) GetCurrent(obj metav1.Object) bctypes.Revis
 	return nil
 }
 
-func (m *annotationRevisionMetadata) getOwnerReferences(obj metav1.Object) []annotationOwnerRef {
+func (m *AnnotationRevisionMetadata) getOwnerReferences(obj metav1.Object) []annotationOwnerRef {
 	return getAnnotationOwnerReferences(obj, m.annotationKey)
 }
 
@@ -229,7 +229,7 @@ func getAnnotationOwnerReferences(obj metav1.Object, annotationKey string) []ann
 	return ownerReferences
 }
 
-func (m *annotationRevisionMetadata) setOwnerReferences(obj metav1.Object, owners []annotationOwnerRef) {
+func (m *AnnotationRevisionMetadata) setOwnerReferences(obj metav1.Object, owners []annotationOwnerRef) {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}

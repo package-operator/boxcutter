@@ -64,11 +64,11 @@ func TestRevisionEngine(t *testing.T) {
 	})
 
 	revOwnerMetadata := ownerhandling.NewNativeRevisionMetadata(revOwner, Scheme)
-	rev := boxcutter.Revision{
-		Name:     "rev-1",
-		Metadata: revOwnerMetadata,
-		Revision: 1,
-		Phases: []boxcutter.Phase{
+	rev := boxcutter.NewRevision(
+		"rev-1",
+		revOwnerMetadata,
+		1,
+		[]boxcutter.Phase{
 			{
 				Name:    "phase-1",
 				Objects: []unstructured.Unstructured{*obj1},
@@ -78,7 +78,7 @@ func TestRevisionEngine(t *testing.T) {
 				Objects: []unstructured.Unstructured{*obj2},
 			},
 		},
-	}
+	)
 
 	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(

@@ -29,10 +29,11 @@ func TestRevisionValidator_Validate(t *testing.T) {
 	}{
 		{
 			name: "valid revision",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
+			revision: types.NewRevision[types.RevisionMetadata](
+				"test-revision",
+				nil,
+				1,
+				[]types.Phase{
 					{
 						Name: "phase1",
 						Objects: []unstructured.Unstructured{
@@ -64,15 +65,16 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			expectError: false,
 		},
 		{
 			name: "revision with invalid phase name",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
+			revision: types.NewRevision[types.RevisionMetadata](
+				"test-revision",
+				nil,
+				1,
+				[]types.Phase{
 					{
 						Name: "Invalid_Phase_Name",
 						Objects: []unstructured.Unstructured{
@@ -89,16 +91,17 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
 			name: "revision with metadata validation errors",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
+			revision: types.NewRevision[types.RevisionMetadata](
+				"test-revision",
+				nil,
+				1,
+				[]types.Phase{
 					{
 						Name: "phase1",
 						Objects: []unstructured.Unstructured{
@@ -114,16 +117,17 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
 			name: "revision with duplicate objects across phases",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
+			revision: types.NewRevision[types.RevisionMetadata](
+				"test-revision",
+				nil,
+				1,
+				[]types.Phase{
 					{
 						Name: "phase1",
 						Objects: []unstructured.Unstructured{
@@ -155,18 +159,19 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			// Duplicate detection now works properly
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
 			name: "empty revision",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases:   []types.Phase{},
-			},
+			revision: types.NewRevision[types.RevisionMetadata](
+				"test-revision",
+				nil,
+				1,
+				[]types.Phase{},
+			),
 			expectError: false,
 		},
 	}

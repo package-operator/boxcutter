@@ -201,7 +201,7 @@ func TestPhase_GetObjects(t *testing.T) {
 func TestRevision_GetName(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Name: "test-revision",
 	}
 
@@ -213,7 +213,7 @@ func TestRevision_GetMetadata(t *testing.T) {
 
 	metadata := &mockRevisionMetadata{name: "test"}
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Metadata: metadata,
 	}
 
@@ -223,7 +223,7 @@ func TestRevision_GetMetadata(t *testing.T) {
 func TestRevision_GetRevisionNumber(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Revision: 42,
 	}
 
@@ -264,7 +264,7 @@ func TestRevision_GetPhases(t *testing.T) {
 		},
 	}
 
-	revision := &Revision{
+	revision := &RevisionImpl[RevisionMetadata]{
 		Phases: phases,
 	}
 

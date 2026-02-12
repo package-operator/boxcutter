@@ -42,15 +42,15 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 
 	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
 
-	rev := types.Revision{
-		Metadata: metadata,
-		Revision: 3,
-		Phases: []types.Phase{
+	rev := types.NewRevision(
+		"test",
+		metadata,
+		3, []types.Phase{
 			{Name: "phase-1"},
 			{Name: "phase-2"},
 			{Name: "phase-3"},
 		},
-	}
+	)
 
 	pe.
 		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -95,16 +95,16 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 
 	metadata := ownerhandling.NewNativeRevisionMetadata(owner, scheme)
 
-	rev := types.Revision{
-		Metadata: metadata,
-		Revision: 3,
-		Phases: []types.Phase{
+	rev := types.NewRevision(
+		"test",
+		metadata,
+		3, []types.Phase{
 			{Name: "phase-1"},
 			{Name: "phase-2"},
 			{Name: "phase-3"},
 			{Name: "phase-4"},
 		},
-	}
+	)
 
 	pe.
 		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).

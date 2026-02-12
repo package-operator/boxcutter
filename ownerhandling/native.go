@@ -31,7 +31,7 @@ type NativeRevisionMetadata struct {
 func NewNativeRevisionMetadata(
 	owner client.Object,
 	scheme *runtime.Scheme,
-) types.RevisionMetadata {
+) *NativeRevisionMetadata {
 	if len(owner.GetUID()) == 0 {
 		panic("owner must be persisted to cluster, empty UID")
 	}
