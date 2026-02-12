@@ -7,5 +7,22 @@ updates:
   allow:
   - dependency-type: all
     dependency-name: "*"
-  assignees: [thetechnick]
   open-pull-requests-limit: 100
+  groups:
+    kube:
+      applies-to: version-updates
+      patterns:
+        - k8s.io/*
+    golangx:
+      applies-to: version-updates
+      patterns:
+        - golang.org/x/*
+  commit-message:
+    prefix: "build(deps)"
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 100
+  commit-message:
+    prefix: "build(deps)"
