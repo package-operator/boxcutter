@@ -478,12 +478,12 @@ func (e *ObjectEngine) apply(
 		return err
 	}
 
-	o := []client.ApplyOption{
-		client.FieldOwner(e.fieldOwner),
-	}
+	o := make([]client.ApplyOption, 0, len(opts)+1)
+	o = append(o, client.FieldOwner(e.fieldOwner))
 	o = append(o, opts...)
 
 	var ac runtime.ApplyConfiguration
+
 	switch v := obj.(type) {
 	case runtime.ApplyConfiguration:
 		ac = v

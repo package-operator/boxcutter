@@ -34,7 +34,6 @@ func (v *RevisionValidator) Validate(_ context.Context, rev types.Revision) erro
 func staticValidateMultiplePhases(phases ...types.Phase) []PhaseValidationError {
 	dups := checkForObjectDuplicates(phases...)
 
-	//nolint:prealloc
 	var phaseErrors []PhaseValidationError
 
 	for _, phase := range phases {

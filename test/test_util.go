@@ -29,7 +29,6 @@ func cleanupOnSuccess(t *testing.T, obj client.Object) {
 	t.Cleanup(func() {
 		if !t.Failed() {
 			// Make sure objects are completely gone before closing the test.
-			//nolint:usetesting
 			ctx := context.Background()
 			_ = Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground))
 			_ = Waiter.WaitToBeGone(ctx, obj, func(client.Object) (bool, error) { return false, nil })

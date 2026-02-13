@@ -427,10 +427,12 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 				if obj.GetObjectKind().GroupVersionKind().Kind != "ConfigMap" || !ok {
 					return probing.TrueResult()
 				}
+
 				f, ok, _ := unstructured.NestedString(u.Object, "data", "continue")
 				if !ok {
 					return probing.FalseResult(".data.continue not set")
 				}
+
 				if f != "yes" {
 					return probing.FalseResult(`.data.continue not set to "yes"`)
 				}
