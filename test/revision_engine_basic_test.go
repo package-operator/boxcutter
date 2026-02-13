@@ -84,7 +84,6 @@ func TestRevisionEngine(t *testing.T) {
 	err := Client.Create(ctx, revOwner)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		//nolint:usetesting
 		require.NoError(t, Client.Delete(context.Background(), revOwner))
 	})
 

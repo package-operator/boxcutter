@@ -225,6 +225,7 @@ func WithProbe(t string, probe Prober) ObjectReconcileOption {
 			if opts.Probes == nil {
 				opts.Probes = map[string]Prober{}
 			}
+
 			opts.Probes[t] = probe
 		},
 	}

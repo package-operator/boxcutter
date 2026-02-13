@@ -87,23 +87,26 @@ type phaseTeardownResult struct {
 }
 
 func (r *phaseTeardownResult) String() string {
-	out := fmt.Sprintf("Phase %q\n", r.name)
+	var out strings.Builder
+	fmt.Fprintf(&out, "Phase %q\n", r.name)
 
 	if len(r.gone) > 0 {
-		out += "Gone Objects:\n"
+		fmt.Fprintln(&out, "Gone Objects:")
+
 		for _, gone := range r.gone {
-			out += "- " + gone.String() + "\n"
+			fmt.Fprintf(&out, "- %s\n", gone.String())
 		}
 	}
 
 	if len(r.waiting) > 0 {
-		out += "Waiting Objects:\n"
+		fmt.Fprintln(&out, "Waiting Objects:")
+
 		for _, waiting := range r.waiting {
-			out += "- " + waiting.String() + "\n"
+			fmt.Fprintf(&out, "- %s\n", waiting.String())
 		}
 	}
 
-	return out
+	return out.String()
 }
 
 func (r *phaseTeardownResult) GetName() string {
@@ -306,22 +309,25 @@ func (r *phaseResult) IsComplete() bool {
 }
 
 func (r *phaseResult) String() string {
-	out := fmt.Sprintf(
+	var out strings.Builder
+	fmt.Fprintf(&out,
 		"Phase %q\nComplete: %t\nIn Transition: %t\n",
 		r.name, r.IsComplete(), r.InTransition(),
 	)
 
 	if err := r.GetValidationError(); err != nil {
-		out += "Validation Errors:\n"
+		fmt.Fprintln(&out, "Validation Errors:")
+
 		for _, err := range err.Unwrap() {
-			out += "- " + err.Error() + "\n"
+			fmt.Fprintf(&out, "- %s\n", err.Error())
 		}
 	}
 
-	out += "Objects:\n"
+	fmt.Fprintln(&out, "Objects:")
+
 	for _, ores := range r.objects {
-		out += "- " + strings.ReplaceAll(strings.TrimSpace(ores.String()), "\n", "\n  ") + "\n"
+		fmt.Fprintf(&out, "- %s\n", strings.ReplaceAll(strings.TrimSpace(ores.String()), "\n", "\n  "))
 	}
 
-	return out
+	return out.String()
 }

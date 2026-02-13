@@ -424,6 +424,7 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -524,6 +525,7 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -622,6 +624,7 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -715,6 +718,7 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -806,6 +810,7 @@ func TestObjectEngine(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
@@ -852,7 +857,6 @@ func TestObjectEngine(t *testing.T) {
 
 			test.mockSetup(cache, writer, divergeDetector)
 
-			//nolint:usetesting
 			ctx := context.Background()
 			res, err := oe.Reconcile(
 				ctx, owner, 1, test.desiredObject,
@@ -981,7 +985,6 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 				},
 			}, nil)
 
-		//nolint:usetesting
 		ctx := context.Background()
 		res, err := oe.Reconcile(ctx, owner, 1, desiredObject)
 
