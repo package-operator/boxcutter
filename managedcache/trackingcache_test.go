@@ -646,6 +646,9 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	}, secretObj)
 	require.NoError(t, err)
 
+	cancel()
+	doneWG.Wait()
+
 	// Expect a new Secret informer with two objects to be present
 	objectsPerInformer, err = itc.GetObjectsPerInformer(t.Context())
 	require.NoError(t, err)
@@ -660,9 +663,6 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 type reflectorWatchErrorHandlerMock struct {
