@@ -35,21 +35,20 @@ func TestRevisionEngine_Teardown(t *testing.T) {
 		},
 	}
 
-	rev := types.Revision{
-		Owner:    owner,
-		Revision: 3,
-		Phases: []types.Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
+	rev := types.NewRevision(
+		"test", 3,
+		[]types.Phase{
+			types.NewPhase("phase-1", nil),
+			types.NewPhase("phase-2", nil),
+			types.NewPhase("phase-3", nil),
 		},
-	}
+	)
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{}, nil)
 
-	res, err := re.Teardown(t.Context(), rev)
+	res, err := re.Teardown(t.Context(), rev, types.WithOwner(owner, nil))
 	require.NoError(t, err)
 
 	assert.True(t, res.IsComplete())
@@ -81,28 +80,27 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 		},
 	}
 
-	rev := types.Revision{
-		Owner:    owner,
-		Revision: 3,
-		Phases: []types.Phase{
-			{Name: "phase-1"},
-			{Name: "phase-2"},
-			{Name: "phase-3"},
-			{Name: "phase-4"},
+	rev := types.NewRevision(
+		"test", 3,
+		[]types.Phase{
+			types.NewPhase("phase-1", nil),
+			types.NewPhase("phase-2", nil),
+			types.NewPhase("phase-3", nil),
+			types.NewPhase("phase-4", nil),
 		},
-	}
+	)
 
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(&phaseTeardownResult{}, nil)
 	pe.
-		On("Teardown", mock.Anything, owner, mock.Anything, mock.Anything, mock.Anything).
+		On("Teardown", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&phaseTeardownResult{waiting: []types.ObjectRef{
 			{},
 		}}, nil)
 
-	res, err := re.Teardown(t.Context(), rev)
+	res, err := re.Teardown(t.Context(), rev, types.WithOwner(owner, nil))
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete())
@@ -121,24 +119,22 @@ type phaseEngineMock struct {
 
 func (m *phaseEngineMock) Reconcile(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseReconcileOption,
 ) (PhaseResult, error) {
-	args := m.Called(ctx, owner, revision, phase, opts)
+	args := m.Called(ctx, revision, phase, opts)
 
 	return args.Get(0).(PhaseResult), args.Error(1)
 }
 
 func (m *phaseEngineMock) Teardown(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	phase types.Phase,
 	opts ...types.PhaseTeardownOption,
 ) (PhaseTeardownResult, error) {
-	args := m.Called(ctx, owner, revision, phase, opts)
+	args := m.Called(ctx, revision, phase, opts)
 
 	return args.Get(0).(PhaseTeardownResult), args.Error(1)
 }

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kube-openapi/pkg/spec3"
 
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
@@ -34,7 +35,6 @@ func TestComparator_Unstructured(t *testing.T) {
 	}
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -179,6 +179,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		name    string
 		desired *unstructured.Unstructured
 		actual  *unstructured.Unstructured
+		opts    []bctypes.ComparatorOption
 
 		expectedReport string
 	}{
@@ -186,15 +187,43 @@ func TestComparator_Unstructured(t *testing.T) {
 			name:    "Hans updated .data.test",
 			desired: desiredNewFieldOwner,
 			actual:  actualNewFieldOwner,
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
 			expectedReport: `Conflicts:
 - "Hans"
   .data.test
 `,
 		},
 		{
-			name:           "Pod Compare",
-			desired:        pod.DeepCopy(),
-			actual:         pod.DeepCopy(),
+			name:    "Hans updated .data.test - no owner",
+			desired: desiredNewFieldOwner,
+			actual:  actualNewFieldOwner,
+
+			expectedReport: `Conflicts:
+- "Hans"
+  .data.test
+Comparison:
+- Added:
+  .metadata.ownerReferences[uid="12345-678"]
+`,
+		},
+		{
+			name:    "Pod Compare",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
+			expectedReport: ``,
+		},
+		{
+			name:    "Pod Compare - no owner",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+
 			expectedReport: ``,
 		},
 	}
@@ -202,14 +231,10 @@ func TestComparator_Unstructured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, test.opts...)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedReport, res.String())
-
-			if res.Comparison != nil {
-				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
-			}
 		})
 	}
 
@@ -259,7 +284,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -283,7 +308,6 @@ func TestComparator_Structured(t *testing.T) {
 	}
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -491,7 +515,7 @@ func TestComparator_Structured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, bctypes.WithOwner(owner, n))
 			require.NoError(t, err)
 
 			if res.Comparison != nil {
@@ -546,7 +570,7 @@ func TestComparator_Structured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)

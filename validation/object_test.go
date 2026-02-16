@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"pkg.package-operator.run/boxcutter/machinery/types"
 )
 
 type mockRestMapper struct {
@@ -127,6 +129,7 @@ func TestObjectValidator_Validate(t *testing.T) {
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"namespace": "default",
+						"uid":       "234",
 					},
 				},
 			},
@@ -153,6 +156,7 @@ func TestObjectValidator_Validate(t *testing.T) {
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"namespace": "default",
+						"uid":       "234",
 					},
 				},
 			},
@@ -181,6 +185,7 @@ func TestObjectValidator_Validate(t *testing.T) {
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"namespace": "default",
+						"uid":       "234",
 					},
 				},
 			},
@@ -208,6 +213,7 @@ func TestObjectValidator_Validate(t *testing.T) {
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"namespace": "default",
+						"uid":       "234",
 					},
 				},
 			},
@@ -238,7 +244,7 @@ func TestObjectValidator_Validate(t *testing.T) {
 				allowNamespaceEscalation: test.allowNamespaceEscalation,
 			}
 
-			err := validator.Validate(t.Context(), test.owner, test.obj)
+			err := validator.Validate(t.Context(), test.obj, types.WithOwner(test.owner, nil))
 
 			if test.expectError {
 				require.Error(t, err)
