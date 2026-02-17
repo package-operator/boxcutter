@@ -207,7 +207,7 @@ func (r *revision) GetReconcileOptions() []RevisionReconcileOption {
 	return r.ReconcileOptions
 }
 
-// GetTeardownOptions returns options for tearding down this revision.
+// GetTeardownOptions returns options for tearing down this revision.
 func (r *revision) GetTeardownOptions() []RevisionTeardownOption {
 	return r.TeardownOptions
 }
