@@ -1403,6 +1403,57 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	})
 }
 
+func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
+	t.Parallel()
+
+	engine := NewObjectEngine(
+		scheme.Scheme,
+		testutil.NewClient(),
+		testutil.NewClient(),
+		&comparatorMock{},
+		"test-owner",
+		"test-prefix",
+	)
+
+	tests := []struct {
+		name   string
+		labels map[string]string
+	}{
+		{
+			name:   "no labels",
+			labels: nil,
+		},
+		{
+			name:   "empty labels",
+			labels: map[string]string{},
+		},
+		{
+			name: "other labels only",
+			labels: map[string]string{
+				"app": "myapp",
+				"env": "prod",
+			},
+		},
+		{
+			name: "contains but doesn't start with prefix",
+			labels: map[string]string{
+				"my-test-prefix-managed": "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &unstructured.Unstructured{}
+			obj.SetLabels(tt.labels)
+
+			assert.False(t, engine.isBoxcutterManaged(obj))
+		})
+	}
+}
+
 type cacheMock struct {
 	testutil.CtrlClient
 }
