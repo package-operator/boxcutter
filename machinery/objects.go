@@ -139,10 +139,15 @@ func (e *ObjectEngine) Teardown(
 		return false, fmt.Errorf("getting object revision: %w", err)
 	}
 
-	var ctrlSit ctrlSituation
-	if options.Owner != nil {
-		ctrlSit, _ = e.detectOwner(options.Owner, options.OwnerStrategy, actualObject, nil)
-		if actualRevision != revision || ctrlSit != ctrlSituationIsController {
+	// Object is not owned by this revision
+	if actualRevision != revision {
+		if options.Owner == nil {
+			// No Owner to remove from the object, return.
+			return true, nil
+		}
+
+		ctrlSit, _ := e.detectOwner(options.Owner, options.OwnerStrategy, actualObject, nil)
+		if ctrlSit != ctrlSituationIsController {
 			// Remove us from owners list:
 			patch := actualObject.DeepCopyObject().(Object)
 			options.OwnerStrategy.RemoveOwner(options.Owner, patch)
@@ -260,21 +265,22 @@ func (e *ObjectEngine) Reconcile(
 	)
 }
 
-func (e *ObjectEngine) objectUpdateHandling(
-	ctx context.Context,
-	revision int64,
+func (e *ObjectEngine) checkSituation(
 	desiredObject Object,
 	actualObject Object,
 	options types.ObjectReconcileOptions,
-) (ObjectResult, error) {
-	var (
-		ctrlSit     ctrlSituation
-		compareRes  CompareResult
-		actualOwner *metav1.OwnerReference
-		err         error
-	)
+) (
+	ctrlSit ctrlSituation,
+	compareRes CompareResult,
+	actualOwner *metav1.OwnerReference,
+	err error,
+) {
 	if options.Owner == nil {
-		ctrlSit = ctrlSituationIsController
+		if e.isBoxcutterManaged(actualObject) {
+			ctrlSit = ctrlSituationIsController
+		} else {
+			ctrlSit = ctrlSituationUnknownController
+		}
 
 		// An object already exists on the cluster.
 		// Before doing anything else, we have to figure out
@@ -283,19 +289,53 @@ func (e *ObjectEngine) objectUpdateHandling(
 			desiredObject, actualObject,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("diverge check: %w", err)
-		}
-	} else {
-		ctrlSit, actualOwner = e.detectOwner(
-			options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
+			err = fmt.Errorf("diverge check: %w", err)
 
-		compareRes, err = e.comparator.Compare(
-			desiredObject, actualObject,
-			types.WithOwner(options.Owner, options.OwnerStrategy),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("diverge check: %w", err)
+			return ctrlSit,
+				compareRes,
+				actualOwner,
+				err
 		}
+
+		return ctrlSit,
+			compareRes,
+			actualOwner,
+			err
+	}
+
+	ctrlSit, actualOwner = e.detectOwner(
+		options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
+
+	compareRes, err = e.comparator.Compare(
+		desiredObject, actualObject,
+		types.WithOwner(options.Owner, options.OwnerStrategy),
+	)
+	if err != nil {
+		err = fmt.Errorf("diverge check: %w", err)
+
+		return ctrlSit,
+			compareRes,
+			actualOwner,
+			err
+	}
+
+	return ctrlSit,
+		compareRes,
+		actualOwner,
+		err
+}
+
+func (e *ObjectEngine) objectUpdateHandling(
+	ctx context.Context,
+	revision int64,
+	desiredObject Object,
+	actualObject Object,
+	options types.ObjectReconcileOptions,
+) (ObjectResult, error) {
+	ctrlSit, compareRes, actualOwner, err := e.checkSituation(
+		desiredObject, actualObject, options)
+	if err != nil {
+		return nil, err
 	}
 
 	// Ensure revision linearity.
@@ -425,14 +465,16 @@ func (e *ObjectEngine) objectUpdateHandling(
 	// TODO:
 	// ObjectResult ModifiedFields does not contain ownerReference changes
 	// introduced here, this may lead to Updated Actions without modifications.
-	e.setObjectRevision(desiredObject, revision)
-	options.OwnerStrategy.CopyOwnerReferences(actualObject, desiredObject)
-	options.OwnerStrategy.ReleaseController(desiredObject)
+	if options.Owner != nil {
+		e.setObjectRevision(desiredObject, revision)
+		options.OwnerStrategy.CopyOwnerReferences(actualObject, desiredObject)
+		options.OwnerStrategy.ReleaseController(desiredObject)
 
-	if err := options.OwnerStrategy.SetControllerReference(
-		options.Owner, desiredObject,
-	); err != nil {
-		return nil, fmt.Errorf("set controller reference: %w", err)
+		if err := options.OwnerStrategy.SetControllerReference(
+			options.Owner, desiredObject,
+		); err != nil {
+			return nil, fmt.Errorf("set controller reference: %w", err)
+		}
 	}
 
 	// Write changes.

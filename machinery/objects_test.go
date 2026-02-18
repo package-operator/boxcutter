@@ -1237,7 +1237,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 									"apiVersion":         "v1",
 									"kind":               "ConfigMap",
 									"controller":         true,
-									"name":               "owner",
+									"name":               "other-owner",
 									"uid":                "12345-678",
 									"blockOwnerDeletion": true,
 								},
@@ -1276,7 +1276,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 							"name":      "testi",
 							"namespace": "test",
 							"annotations": map[string]interface{}{
-								"testtest.xxx/revision": "1",
+								"testtest.xxx/revision": "2",
 							},
 						},
 					},
