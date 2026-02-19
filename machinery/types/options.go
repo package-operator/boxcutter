@@ -1,6 +1,7 @@
 package types
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,6 +20,20 @@ func (rropts RevisionReconcileOptions) ForPhase(phaseName string) []PhaseReconci
 	opts = append(opts, rropts.PhaseOptions[phaseName]...)
 
 	return opts
+}
+
+func (rropts RevisionReconcileOptions) GetOwner() client.Object {
+	var phaseOptions PhaseReconcileOptions
+	for _, opt := range rropts.DefaultPhaseOptions {
+		opt.ApplyToPhaseReconcileOptions(&phaseOptions)
+	}
+
+	var objectOptions ObjectReconcileOptions
+	for _, opt := range phaseOptions.DefaultObjectOptions {
+		opt.ApplyToObjectReconcileOptions(&objectOptions)
+	}
+
+	return objectOptions.Owner
 }
 
 // RevisionReconcileOption is the common interface for revision reconciliation options.
@@ -102,12 +117,18 @@ type PhaseTeardownOption interface {
 type ObjectReconcileOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
+	Owner               client.Object
+	OwnerStrategy       ownerStrategy
 	Paused              bool
 	Probes              map[string]Prober
 }
 
 // Default sets empty Option fields to their default value.
 func (opts *ObjectReconcileOptions) Default() {
+	if opts.Owner != nil && opts.OwnerStrategy == nil {
+		panic("Owner without ownerStrategy set")
+	}
+
 	if len(opts.CollisionProtection) == 0 {
 		opts.CollisionProtection = CollisionProtectionPrevent
 	}
@@ -131,6 +152,8 @@ var (
 type ObjectTeardownOptions struct {
 	Orphan         bool
 	TeardownWriter client.Writer
+	Owner          client.Object
+	OwnerStrategy  ownerStrategy
 }
 
 // Default sets empty Option fields to their default value.
@@ -347,6 +370,66 @@ func (p *withPhaseTeardownOptions) ApplyToRevisionTeardownOptions(opts *Revision
 	}
 
 	opts.PhaseOptions[p.phaseName] = p.opts
+}
+
+type ownerStrategy interface {
+	SetControllerReference(owner, obj metav1.Object) error
+	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
+	IsController(owner, obj metav1.Object) bool
+	CopyOwnerReferences(objA, objB metav1.Object)
+	ReleaseController(obj metav1.Object)
+	RemoveOwner(owner, obj metav1.Object)
+}
+
+// WithOwner sets an owning object and the strategy to use with it.
+// Ensures controller-refs are set to track the owner and
+// enables handover between owners.
+func WithOwner(obj client.Object, start ownerStrategy) interface {
+	ComparatorOption
+	ObjectReconcileOption
+	ObjectTeardownOption
+} {
+	if len(obj.GetUID()) == 0 {
+		panic("owner must be persisted to cluster, empty UID")
+	}
+
+	return &combinedOpts{
+		fn: func(opts *ComparatorOptions) {
+			opts.Owner = obj
+			opts.OwnerStrategy = start
+		},
+		optionFn: optionFn{
+			fn: func(opts *ObjectReconcileOptions) {
+				opts.Owner = obj
+				opts.OwnerStrategy = start
+			},
+		},
+		teardownOptionFn: teardownOptionFn{
+			fn: func(opts *ObjectTeardownOptions) {
+				opts.Owner = obj
+				opts.OwnerStrategy = start
+			},
+		},
+	}
+}
+
+type combinedOpts struct {
+	optionFn
+	teardownOptionFn
+	fn func(opts *ComparatorOptions)
+}
+
+func (copt *combinedOpts) ApplyToComparatorOptions(opts *ComparatorOptions) {
+	copt.fn(opts)
+}
+
+type ComparatorOptions struct {
+	Owner         client.Object
+	OwnerStrategy ownerStrategy
+}
+
+type ComparatorOption interface {
+	ApplyToComparatorOptions(opts *ComparatorOptions)
 }
 
 type optionFn struct {

@@ -39,10 +39,10 @@ func staticValidateMultiplePhases(phases ...types.Phase) []PhaseValidationError 
 	for _, phase := range phases {
 		var objectErrors []ObjectValidationError
 
-		for _, obj := range phase.Objects {
+		for _, obj := range phase.GetObjects() {
 			oe := NewObjectValidationError(
-				types.ToObjectRef(&obj),
-				validateObjectMetadata(&obj)...,
+				types.ToObjectRef(obj),
+				validateObjectMetadata(obj)...,
 			)
 			if oe == nil {
 				continue

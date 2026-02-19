@@ -47,12 +47,12 @@ func mustGVKForObject(obj client.Object) schema.GroupVersionKind {
 
 // Converts the given client.Object to an unstructured object.
 // Panics if this fails.
-func toUns(obj client.Object) unstructured.Unstructured {
+func toUns(obj client.Object) *unstructured.Unstructured {
 	must(setTypeMeta(obj, Scheme))
 	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	must(err)
 
-	return unstructured.Unstructured{
+	return &unstructured.Unstructured{
 		Object: raw,
 	}
 }

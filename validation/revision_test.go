@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery/types"
 )
@@ -29,14 +30,13 @@ func TestRevisionValidator_Validate(t *testing.T) {
 	}{
 		{
 			name: "valid revision",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
-					{
-						Name: "phase1",
-						Objects: []unstructured.Unstructured{
-							{
+			revision: types.NewRevision(
+				"test-revision", 1,
+				[]types.Phase{
+					types.NewPhase(
+						"phase1",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
@@ -47,11 +47,11 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
-					{
-						Name: "phase2",
-						Objects: []unstructured.Unstructured{
-							{
+					),
+					types.NewPhase(
+						"phase2",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
@@ -62,21 +62,20 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
+					),
 				},
-			},
+			),
 			expectError: false,
 		},
 		{
 			name: "revision with invalid phase name",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
-					{
-						Name: "Invalid_Phase_Name",
-						Objects: []unstructured.Unstructured{
-							{
+			revision: types.NewRevision(
+				"test-revision", 1,
+				[]types.Phase{
+					types.NewPhase(
+						"Invalid_Phase_Name",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
@@ -87,22 +86,21 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
+					),
 				},
-			},
+			),
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
 			name: "revision with metadata validation errors",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
-					{
-						Name: "phase1",
-						Objects: []unstructured.Unstructured{
-							{
+			revision: types.NewRevision(
+				"test-revision", 1,
+				[]types.Phase{
+					types.NewPhase(
+						"phase1",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"kind": "ConfigMap",
 									"metadata": map[string]interface{}{
@@ -112,22 +110,21 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
+					),
 				},
-			},
+			),
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
 			name: "revision with duplicate objects across phases",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases: []types.Phase{
-					{
-						Name: "phase1",
-						Objects: []unstructured.Unstructured{
-							{
+			revision: types.NewRevision(
+				"test-revision", 1,
+				[]types.Phase{
+					types.NewPhase(
+						"phase1",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
@@ -138,11 +135,11 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
-					{
-						Name: "phase2",
-						Objects: []unstructured.Unstructured{
-							{
+					),
+					types.NewPhase(
+						"phase2",
+						[]client.Object{
+							&unstructured.Unstructured{
 								Object: map[string]interface{}{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
@@ -153,20 +150,16 @@ func TestRevisionValidator_Validate(t *testing.T) {
 								},
 							},
 						},
-					},
+					),
 				},
-			},
+			),
 			// Duplicate detection now works properly
 			expectError:                 true,
 			expectRevisionValidationErr: true,
 		},
 		{
-			name: "empty revision",
-			revision: types.Revision{
-				Name:     "test-revision",
-				Revision: 1,
-				Phases:   []types.Phase{},
-			},
+			name:        "empty revision",
+			revision:    types.NewRevision("test-revision", 1, []types.Phase{}),
 			expectError: false,
 		},
 	}
@@ -205,10 +198,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 		{
 			name: "valid phases",
 			phases: []types.Phase{
-				{
-					Name: "phase1",
-					Objects: []unstructured.Unstructured{
-						{
+				types.NewPhase(
+					"phase1",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -219,11 +212,11 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
-				{
-					Name: "phase2",
-					Objects: []unstructured.Unstructured{
-						{
+				),
+				types.NewPhase(
+					"phase2",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -234,17 +227,17 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
+				),
 			},
 			expectedPhaseErrorCount: 0,
 		},
 		{
 			name: "phase with invalid name",
 			phases: []types.Phase{
-				{
-					Name: "Invalid_Phase_Name",
-					Objects: []unstructured.Unstructured{
-						{
+				types.NewPhase(
+					"Invalid_Phase_Name",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -255,17 +248,17 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
+				),
 			},
 			expectedPhaseErrorCount: 1,
 		},
 		{
 			name: "phase with metadata validation errors",
 			phases: []types.Phase{
-				{
-					Name: "valid-phase",
-					Objects: []unstructured.Unstructured{
-						{
+				types.NewPhase(
+					"valid-phase",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"kind": "ConfigMap",
 								"metadata": map[string]interface{}{
@@ -275,17 +268,17 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
+				),
 			},
 			expectedPhaseErrorCount: 1,
 		},
 		{
 			name: "phases with duplicate objects",
 			phases: []types.Phase{
-				{
-					Name: "phase1",
-					Objects: []unstructured.Unstructured{
-						{
+				types.NewPhase(
+					"phase1",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -296,11 +289,11 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
-				{
-					Name: "phase2",
-					Objects: []unstructured.Unstructured{
-						{
+				),
+				types.NewPhase(
+					"phase2",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -311,17 +304,17 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
+				),
 			},
 			expectedPhaseErrorCount: 2,
 		},
 		{
 			name: "multiple issues",
 			phases: []types.Phase{
-				{
-					Name: "Invalid_Phase_Name",
-					Objects: []unstructured.Unstructured{
-						{
+				types.NewPhase(
+					"Invalid_Phase_Name",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"kind": "ConfigMap",
 								"metadata": map[string]interface{}{
@@ -331,11 +324,11 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
-				{
-					Name: "phase2",
-					Objects: []unstructured.Unstructured{
-						{
+				),
+				types.NewPhase(
+					"phase2",
+					[]client.Object{
+						&unstructured.Unstructured{
 							Object: map[string]interface{}{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
@@ -347,7 +340,7 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 							},
 						},
 					},
-				},
+				),
 			},
 			expectedPhaseErrorCount: 2,
 		},
@@ -372,7 +365,7 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 func TestStaticValidateMultiplePhases_DuplicateHandling(t *testing.T) {
 	t.Parallel()
 
-	obj1 := unstructured.Unstructured{
+	obj1 := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
@@ -384,14 +377,8 @@ func TestStaticValidateMultiplePhases_DuplicateHandling(t *testing.T) {
 	}
 
 	phases := []types.Phase{
-		{
-			Name:    "phase1",
-			Objects: []unstructured.Unstructured{obj1},
-		},
-		{
-			Name:    "phase2",
-			Objects: []unstructured.Unstructured{obj1},
-		},
+		types.NewPhase("phase1", []client.Object{obj1}),
+		types.NewPhase("phase2", []client.Object{obj1}),
 	}
 
 	phaseErrors := staticValidateMultiplePhases(phases...)
@@ -410,10 +397,10 @@ func TestStaticValidateMultiplePhases_EmptyPhases(t *testing.T) {
 func TestStaticValidateMultiplePhases_PhaseWithoutErrors(t *testing.T) {
 	t.Parallel()
 
-	validPhase := types.Phase{
-		Name: "valid-phase",
-		Objects: []unstructured.Unstructured{
-			{
+	validPhase := types.NewPhase(
+		"valid-phase",
+		[]client.Object{
+			&unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
@@ -424,7 +411,7 @@ func TestStaticValidateMultiplePhases_PhaseWithoutErrors(t *testing.T) {
 				},
 			},
 		},
-	}
+	)
 
 	phaseErrors := staticValidateMultiplePhases(validPhase)
 

@@ -19,7 +19,7 @@ type mockObjectValidator struct {
 	mock.Mock
 }
 
-func (m *mockObjectValidator) Validate(ctx context.Context, owner client.Object, obj *unstructured.Unstructured) error {
+func (m *mockObjectValidator) Validate(ctx context.Context, owner client.Object, obj client.Object) error {
 	args := m.Called(ctx, owner, obj)
 
 	return args.Error(0)
@@ -38,9 +38,7 @@ func (v *testablePhaseValidator) Validate(ctx context.Context, owner client.Obje
 		errs         []error
 	)
 
-	for _, o := range phase.GetObjects() {
-		obj := &o
-
+	for _, obj := range phase.GetObjects() {
 		err := v.mockObjValidator.Validate(ctx, owner, obj)
 		if err == nil {
 			continue
@@ -106,10 +104,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 	}{
 		{
 			name: "valid phase",
-			phase: types.Phase{
-				Name: "valid-phase",
-				Objects: []unstructured.Unstructured{
-					{
+			phase: types.NewPhase(
+				"valid-phase",
+				[]client.Object{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -120,7 +118,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			owner: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -135,10 +133,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid phase name",
-			phase: types.Phase{
-				Name: "Invalid_Phase_Name",
-				Objects: []unstructured.Unstructured{
-					{
+			phase: types.NewPhase(
+				"Invalid_Phase_Name",
+				[]client.Object{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -149,7 +147,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			owner: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -165,10 +163,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "object validation error from mock",
-			phase: types.Phase{
-				Name: "valid-phase",
-				Objects: []unstructured.Unstructured{
-					{
+			phase: types.NewPhase(
+				"valid-phase",
+				[]client.Object{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -179,7 +177,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			owner: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -200,10 +198,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "unknown error during object validation",
-			phase: types.Phase{
-				Name: "valid-phase",
-				Objects: []unstructured.Unstructured{
-					{
+			phase: types.NewPhase(
+				"valid-phase",
+				[]client.Object{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -214,7 +212,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			owner: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -231,10 +229,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		},
 		{
 			name: "duplicate objects in same phase",
-			phase: types.Phase{
-				Name: "valid-phase",
-				Objects: []unstructured.Unstructured{
-					{
+			phase: types.NewPhase(
+				"valid-phase",
+				[]client.Object{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -244,7 +242,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 							},
 						},
 					},
-					{
+					&unstructured.Unstructured{
 						Object: map[string]interface{}{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
@@ -255,7 +253,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 						},
 					},
 				},
-			},
+			),
 			owner: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -288,7 +286,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 				realValidator := NewClusterPhaseValidator(restMapper, writer)
-				err = realValidator.Validate(t.Context(), test.owner, test.phase)
+				err = realValidator.Validate(t.Context(), test.phase, types.WithOwner(test.owner, nil))
 			} else {
 				objValidator = &mockObjectValidator{}
 				test.mockSetup(objValidator)
@@ -340,38 +338,28 @@ func TestValidatePhaseName(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "valid phase name",
-			phase: types.Phase{
-				Name: "valid-phase-name",
-			},
+			name:        "valid phase name",
+			phase:       types.NewPhase("valid-phase-name", nil),
 			expectError: false,
 		},
 		{
-			name: "invalid phase name with uppercase",
-			phase: types.Phase{
-				Name: "Invalid-Phase-Name",
-			},
+			name:        "invalid phase name with uppercase",
+			phase:       types.NewPhase("Invalid-Phase-Name", nil),
 			expectError: true,
 		},
 		{
-			name: "invalid phase name with underscores",
-			phase: types.Phase{
-				Name: "invalid_phase_name",
-			},
+			name:        "invalid phase name with underscores",
+			phase:       types.NewPhase("invalid_phase_name", nil),
 			expectError: true,
 		},
 		{
-			name: "invalid phase name too long",
-			phase: types.Phase{
-				Name: "this-is-a-very-long-phase-name-that-exceeds-the-dns1035-label-length-limit-of-63-characters",
-			},
+			name:        "invalid phase name too long",
+			phase:       types.NewPhase("this-is-a-very-long-phase-name-that-exceeds-the-dns1035-label-length-limit-of-63-characters", nil),
 			expectError: true,
 		},
 		{
-			name: "empty phase name",
-			phase: types.Phase{
-				Name: "",
-			},
+			name:        "empty phase name",
+			phase:       types.NewPhase("", nil),
 			expectError: true,
 		},
 	}
@@ -483,52 +471,31 @@ func TestCheckForObjectDuplicates(t *testing.T) {
 		{
 			name: "no duplicates",
 			phases: []types.Phase{
-				{
-					Name:    "phase1",
-					Objects: []unstructured.Unstructured{obj1},
-				},
-				{
-					Name:    "phase2",
-					Objects: []unstructured.Unstructured{obj2},
-				},
+				types.NewPhase("phase1", []client.Object{&obj1}),
+				types.NewPhase("phase2", []client.Object{&obj2}),
 			},
 			expectedConflicts: 0,
 		},
 		{
 			name: "duplicate across phases",
 			phases: []types.Phase{
-				{
-					Name:    "phase1",
-					Objects: []unstructured.Unstructured{obj1},
-				},
-				{
-					Name:    "phase2",
-					Objects: []unstructured.Unstructured{obj1},
-				},
+				types.NewPhase("phase1", []client.Object{&obj1}),
+				types.NewPhase("phase2", []client.Object{&obj1}),
 			},
 			expectedConflicts: 1,
 		},
 		{
 			name: "multiple duplicates",
 			phases: []types.Phase{
-				{
-					Name:    "phase1",
-					Objects: []unstructured.Unstructured{obj1, obj2},
-				},
-				{
-					Name:    "phase2",
-					Objects: []unstructured.Unstructured{obj1, obj2},
-				},
+				types.NewPhase("phase1", []client.Object{&obj1, &obj2}),
+				types.NewPhase("phase2", []client.Object{&obj1, &obj2}),
 			},
 			expectedConflicts: 2,
 		},
 		{
 			name: "duplicate in same phase",
 			phases: []types.Phase{
-				{
-					Name:    "phase1",
-					Objects: []unstructured.Unstructured{obj1, obj1},
-				},
+				types.NewPhase("phase1", []client.Object{&obj1, &obj1}),
 			},
 			expectedConflicts: 1,
 		},

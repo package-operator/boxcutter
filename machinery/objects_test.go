@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,6 +33,8 @@ const (
 //nolint:maintidx,dupl
 func TestObjectEngine(t *testing.T) {
 	t.Parallel()
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,6 +81,7 @@ func TestObjectEngine(t *testing.T) {
 				},
 			},
 			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
 				types.WithCollisionProtection(types.CollisionProtectionIfNoController),
 			},
 
@@ -109,7 +113,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -158,6 +162,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -175,7 +182,7 @@ func TestObjectEngine(t *testing.T) {
 					).
 					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -224,7 +231,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectReconcileOption{},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -257,7 +266,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -293,7 +302,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectReconcileOption{},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -336,7 +347,7 @@ func TestObjectEngine(t *testing.T) {
 					}).
 					Return(nil)
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -382,7 +393,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectReconcileOption{},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -428,7 +441,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{
 						Comparison: &typed.Comparison{
 							Added:    &fieldpath.Set{},
@@ -483,7 +496,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectReconcileOption{},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -529,7 +544,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{
 						ConflictingMangers: []CompareResultManagedFields{
 							{Manager: "xxx"},
@@ -582,7 +597,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
-			opts: []types.ObjectReconcileOption{},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -628,7 +645,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -676,6 +693,7 @@ func TestObjectEngine(t *testing.T) {
 			},
 			opts: []types.ObjectReconcileOption{
 				types.WithPreviousOwners{oldOwner},
+				types.WithOwner(owner, ownerStrat),
 			},
 
 			mockSetup: func(
@@ -722,7 +740,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -779,6 +797,9 @@ func TestObjectEngine(t *testing.T) {
 					},
 				},
 			},
+			opts: []types.ObjectReconcileOption{
+				types.WithOwner(owner, ownerStrat),
+			},
 
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -814,7 +835,7 @@ func TestObjectEngine(t *testing.T) {
 				fs := &fieldpath.Set{}
 				fs.Insert(fieldpath.MakePathOrDie("spec", "banana"))
 				ddm.
-					On("Compare", owner, mock.Anything, mock.Anything).
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 
 				writer.
@@ -844,13 +865,12 @@ func TestObjectEngine(t *testing.T) {
 
 			cache := &cacheMock{}
 			writer := testutil.NewClient()
-			ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
 			divergeDetector := &comparatorMock{}
 
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, writer,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
@@ -859,7 +879,7 @@ func TestObjectEngine(t *testing.T) {
 
 			ctx := context.Background()
 			res, err := oe.Reconcile(
-				ctx, owner, 1, test.desiredObject,
+				ctx, 1, test.desiredObject,
 				test.opts...,
 			)
 			require.NoError(t, err)
@@ -892,14 +912,14 @@ func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Reconcile(t.Context(), owner, 0, desired)
+			_, _ = oe.Reconcile(t.Context(), 0, desired)
 		})
 	})
 
 	t.Run("missing owner.UID", func(t *testing.T) {
 		t.Parallel()
-		assert.PanicsWithValue(t, "owner must be persistet to cluster, empty UID", func() {
-			_, _ = oe.Reconcile(t.Context(), owner, 1, desired)
+		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
+			_, _ = oe.Reconcile(t.Context(), 1, desired, types.WithOwner(owner, nil))
 		})
 	})
 }
@@ -926,7 +946,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 		oe := NewObjectEngine(
 			scheme.Scheme,
 			cache, writer,
-			ownerStrategy, divergeDetector,
+			divergeDetector,
 			testFieldOwner,
 			testSystemPrefix,
 		)
@@ -976,7 +996,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 		fs := &fieldpath.Set{}
 		fs.Insert(fieldpath.MakePathOrDie("data", "key"))
 		divergeDetector.
-			On("Compare", owner, mock.Anything, mock.Anything).
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
 			Return(CompareResult{
 				Comparison: &typed.Comparison{
 					Added:    &fieldpath.Set{},
@@ -986,7 +1006,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 			}, nil)
 
 		ctx := context.Background()
-		res, err := oe.Reconcile(ctx, owner, 1, desiredObject)
+		res, err := oe.Reconcile(ctx, 1, desiredObject, types.WithOwner(owner, ownerStrategy))
 
 		// Should return UnsupportedApplyConfigurationError
 		require.Error(t, err)
@@ -1093,12 +1113,14 @@ func TestObjectEngine_TeardownWithTeardownWriter(t *testing.T) {
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, engineWriter,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
 
-			result, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithTeardownWriter(teardownWriter))
+			result, err := oe.Teardown(
+				t.Context(), 1, obj, types.WithOwner(owner, ownerStrategy),
+				types.WithTeardownWriter(teardownWriter))
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
 			} else {
@@ -1216,7 +1238,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 									"apiVersion":         "v1",
 									"kind":               "ConfigMap",
 									"controller":         true,
-									"name":               "owner",
+									"name":               "other-owner",
 									"uid":                "12345-678",
 									"blockOwnerDeletion": true,
 								},
@@ -1255,7 +1277,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 							"name":      "testi",
 							"namespace": "test",
 							"annotations": map[string]interface{}{
-								"testtest.xxx/revision": "1",
+								"testtest.xxx/revision": "2",
 							},
 						},
 					},
@@ -1299,12 +1321,12 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			oe := NewObjectEngine(
 				scheme.Scheme,
 				cache, writer,
-				ownerStrategy, divergeDetector,
+				divergeDetector,
 				testFieldOwner,
 				testSystemPrefix,
 			)
 
-			deleted, err := oe.Teardown(t.Context(), owner, 1, obj)
+			deleted, err := oe.Teardown(t.Context(), 1, obj, types.WithOwner(owner, ownerStrategy))
 			if test.expectedError != nil {
 				assert.EqualError(t, err, test.expectedError.Error())
 			} else {
@@ -1350,11 +1372,11 @@ func TestObjectEngine_Teardown_Orphan(t *testing.T) {
 	oe := NewObjectEngine(
 		scheme.Scheme,
 		cache, writer,
-		ownerStrategy, divergeDetector,
+		divergeDetector,
 		testFieldOwner,
 		testSystemPrefix,
 	)
-	deleted, err := oe.Teardown(t.Context(), owner, 1, obj, types.WithOrphan())
+	deleted, err := oe.Teardown(t.Context(), 1, obj, types.WithOrphan(), types.WithOwner(owner, ownerStrategy))
 	require.NoError(t, err)
 
 	assert.True(t, deleted)
@@ -1370,16 +1392,980 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	t.Run("missing revision", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner revision must be set and start at 1", func() {
-			_, _ = oe.Teardown(t.Context(), owner, 0, desired)
+			_, _ = oe.Teardown(t.Context(), 0, desired)
 		})
 	})
 
 	t.Run("missing owner.UID", func(t *testing.T) {
 		t.Parallel()
 		assert.PanicsWithValue(t, "owner must be persisted to cluster, empty UID", func() {
-			_, _ = oe.Teardown(t.Context(), owner, 1, desired)
+			_, _ = oe.Teardown(t.Context(), 1, desired, types.WithOwner(owner, nil))
 		})
 	})
+}
+
+func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
+	t.Parallel()
+
+	engine := NewObjectEngine(
+		scheme.Scheme,
+		testutil.NewClient(),
+		testutil.NewClient(),
+		&comparatorMock{},
+		"test-owner",
+		"test-prefix",
+	)
+
+	tests := []struct {
+		name   string
+		labels map[string]string
+	}{
+		{
+			name:   "no labels",
+			labels: nil,
+		},
+		{
+			name:   "empty labels",
+			labels: map[string]string{},
+		},
+		{
+			name: "other labels only",
+			labels: map[string]string{
+				"app": "myapp",
+				"env": "prod",
+			},
+		},
+		{
+			name: "contains but doesn't start with prefix",
+			labels: map[string]string{
+				"my-test-prefix-managed": "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			obj := &unstructured.Unstructured{}
+			obj.SetLabels(tt.labels)
+
+			assert.False(t, engine.isBoxcutterManaged(obj))
+		})
+	}
+}
+
+func TestObjectEngine_Reconcile_NoOwner(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reconcile without owner - boxcutter managed", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+					"labels": map[string]interface{}{
+						"boxcutter-managed": "True",
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+
+		writer.
+			On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject)
+		require.NoError(t, err)
+		assert.Equal(t, ActionIdle, res.Action())
+	})
+
+	t.Run("reconcile without owner - not boxcutter managed", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+
+		writer.
+			On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject)
+		require.NoError(t, err)
+		assert.Equal(t, ActionCollision, res.Action())
+	})
+
+	t.Run("reconcile without owner - comparison error", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, errors.New("comparison failed"))
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "diverge check")
+		assert.Nil(t, res)
+	})
+}
+
+func TestObjectEngine_Reconcile_Paused_CreateSkipped(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	t.Run("paused - create skipped", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithPaused{})
+		require.NoError(t, err)
+		assert.Equal(t, ActionCreated, res.Action())
+
+		writer.AssertNotCalled(t, "Create")
+	})
+}
+
+func TestObjectEngine_Reconcile_Paused_ApplySkipped(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	t.Run("paused - apply skipped", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+					"annotations": map[string]interface{}{
+						testSystemPrefix + "/revision": "1",
+					},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{
+							"apiVersion":         "v1",
+							"kind":               "ConfigMap",
+							"controller":         true,
+							"name":               "owner",
+							"uid":                "12345-678",
+							"blockOwnerDeletion": true,
+						},
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		fs := &fieldpath.Set{}
+		fs.Insert(fieldpath.MakePathOrDie("spec", "data"))
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{
+				Comparison: &typed.Comparison{
+					Added:    &fieldpath.Set{},
+					Removed:  &fieldpath.Set{},
+					Modified: fs,
+				},
+			}, nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithPaused{})
+		require.NoError(t, err)
+		assert.Equal(t, ActionUpdated, res.Action())
+
+		writer.AssertNotCalled(t, "Apply")
+	})
+}
+
+func TestObjectEngine_Reconcile_Paused_RecoveredReturnsActual(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	t.Run("paused - recovered returns actual object", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test-secret",
+					"namespace":       "test",
+					"resourceVersion": "999",
+					"annotations": map[string]interface{}{
+						testSystemPrefix + "/revision": "1",
+					},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{
+							"apiVersion":         "v1",
+							"kind":               "ConfigMap",
+							"controller":         true,
+							"name":               "owner",
+							"uid":                "12345-678",
+							"blockOwnerDeletion": true,
+						},
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{
+				ConflictingMangers: []CompareResultManagedFields{
+					{Manager: "some-other-manager"},
+				},
+			}, nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithPaused{})
+		require.NoError(t, err)
+		assert.Equal(t, ActionRecovered, res.Action())
+
+		result := res.(ObjectResultRecovered)
+		assert.Equal(t, "999", result.Object().GetResourceVersion())
+
+		writer.AssertNotCalled(t, "Apply")
+	})
+}
+
+func TestObjectEngine_Reconcile_Paused_TakeoverReturnsActual(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	t.Run("paused - takeover from previous owner returns actual object", func(t *testing.T) {
+		t.Parallel()
+
+		oldOwner := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				UID:       "6789",
+				Name:      "old-owner",
+				Namespace: "test",
+			},
+		}
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test-secret",
+					"namespace":       "test",
+					"resourceVersion": "888",
+					"annotations": map[string]interface{}{
+						testSystemPrefix + "/revision": "1",
+					},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{
+							"apiVersion":         "v1",
+							"kind":               "ConfigMap",
+							"controller":         true,
+							"name":               "old-owner",
+							"uid":                "6789",
+							"blockOwnerDeletion": true,
+						},
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithPreviousOwners{oldOwner},
+			types.WithPaused{})
+		require.NoError(t, err)
+		assert.Equal(t, ActionUpdated, res.Action())
+
+		result := res.(ObjectResultUpdated)
+		assert.Equal(t, "888", result.Object().GetResourceVersion())
+
+		writer.AssertNotCalled(t, "Apply")
+	})
+}
+
+func TestObjectEngine_Reconcile_CollisionProtectionNone(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	t.Run("unknown controller with CollisionProtectionNone", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+					"annotations": map[string]interface{}{
+						testSystemPrefix + "/revision": "1",
+					},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{
+							"apiVersion":         "v1",
+							"kind":               "Node",
+							"controller":         true,
+							"name":               "node1",
+							"uid":                "xxxx",
+							"blockOwnerDeletion": true,
+						},
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+
+		writer.
+			On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithCollisionProtection(types.CollisionProtectionNone))
+		require.NoError(t, err)
+		assert.Equal(t, ActionUpdated, res.Action())
+	})
+
+	t.Run("no controller with CollisionProtectionNone and boxcutter managed", func(t *testing.T) {
+		t.Parallel()
+
+		cache := &cacheMock{}
+		writer := testutil.NewClient()
+		divergeDetector := &comparatorMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			divergeDetector,
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		desiredObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+				},
+			},
+		}
+
+		actualObject := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "test-secret",
+					"namespace": "test",
+					"labels": map[string]interface{}{
+						"boxcutter-managed": "True",
+					},
+				},
+			},
+		}
+
+		cache.
+			On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+
+		divergeDetector.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+
+		res, err := oe.Reconcile(context.Background(), 1, desiredObject,
+			types.WithOwner(owner, ownerStrat),
+			types.WithCollisionProtection(types.CollisionProtectionNone))
+		require.NoError(t, err)
+		assert.Equal(t, ActionCollision, res.Action())
+	})
+}
+
+func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
+	t.Parallel()
+
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		testutil.NewClient(),
+		testutil.NewClient(),
+		&comparatorMock{},
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "test",
+				"annotations": map[string]interface{}{
+					testSystemPrefix + "/revision": "not-a-number",
+				},
+			},
+		},
+	}
+
+	_, err := oe.getObjectRevision(obj)
+	require.Error(t, err)
+}
+
+func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
+	t.Parallel()
+
+	writer := testutil.NewClient()
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		testutil.NewClient(),
+		writer,
+		&comparatorMock{},
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "test",
+			},
+		},
+	}
+
+	err := oe.migrateFieldManagersToSSA(context.Background(), obj)
+	require.NoError(t, err)
+
+	writer.AssertNotCalled(t, "Patch")
+}
+
+func TestObjectEngine_Teardown_NoMatchError(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "custom.io/v1",
+			"kind":       "CustomResource",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "test",
+			},
+		},
+	}
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+	divergeDetector := &comparatorMock{}
+
+	noMatchErr := &meta.NoResourceMatchError{
+		PartialResource: schema.GroupVersionResource{
+			Group:    "custom.io",
+			Version:  "v1",
+			Resource: "customresources",
+		},
+	}
+
+	cache.
+		On("Get", mock.Anything, client.ObjectKeyFromObject(obj), mock.Anything, mock.Anything).
+		Return(noMatchErr)
+
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	deleted, err := oe.Teardown(context.Background(), 1, obj, types.WithOwner(owner, ownerStrategy))
+	require.NoError(t, err)
+	assert.True(t, deleted)
+}
+
+func TestObjectEngine_Teardown_OrphanFinalizer(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+			Finalizers: []string{
+				"orphan",
+			},
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "test",
+				"labels": map[string]interface{}{
+					"boxcutter-managed": "True",
+				},
+			},
+		},
+	}
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+	divergeDetector := &comparatorMock{}
+
+	writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	deleted, err := oe.Teardown(context.Background(), 1, obj, types.WithOwner(owner, ownerStrategy))
+	require.NoError(t, err)
+	assert.True(t, deleted)
+}
+
+func TestObjectEngine_Teardown_GetError(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test",
+				"namespace": "test",
+			},
+		},
+	}
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	ownerStrategy := ownerhandling.NewNative(scheme.Scheme)
+	divergeDetector := &comparatorMock{}
+
+	cache.
+		On("Get", mock.Anything, client.ObjectKeyFromObject(obj), mock.Anything, mock.Anything).
+		Return(errors.New("cache error"))
+
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	deleted, err := oe.Teardown(context.Background(), 1, obj, types.WithOwner(owner, ownerStrategy))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting object before deletion")
+	assert.False(t, deleted)
+}
+
+func TestObjectEngine_Reconcile_GetError(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	ownerStrat := ownerhandling.NewNative(scheme.Scheme)
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	divergeDetector := &comparatorMock{}
+
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+	)
+
+	desiredObject := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test-secret",
+				"namespace": "test",
+			},
+		},
+	}
+
+	cache.
+		On("Get", mock.Anything, client.ObjectKeyFromObject(desiredObject), mock.Anything, mock.Anything).
+		Return(errors.New("cache error"))
+
+	res, err := oe.Reconcile(context.Background(), 1, desiredObject, types.WithOwner(owner, ownerStrat))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting object")
+	assert.Nil(t, res)
 }
 
 type cacheMock struct {
@@ -1391,10 +2377,10 @@ type comparatorMock struct {
 }
 
 func (m *comparatorMock) Compare(
-	owner client.Object,
 	desiredObject, actualObject Object,
+	opts ...types.ComparatorOption,
 ) (CompareResult, error) {
-	args := m.Called(owner, desiredObject, actualObject)
+	args := m.Called(desiredObject, actualObject, opts)
 
 	return args.Get(0).(CompareResult), args.Error(1)
 }

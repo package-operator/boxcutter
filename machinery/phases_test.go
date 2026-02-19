@@ -51,15 +51,15 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
-	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
+	oe.On("Reconcile", mock.Anything, revision, obj, mock.Anything).
 		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj,
+	_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{
+			obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 }
 
@@ -97,12 +97,12 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj,
+	_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{
+			obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 	oe.AssertNotCalled(
 		t, "Reconcile", mock.Anything, mock.Anything,
@@ -138,15 +138,14 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 
 	var revision int64 = 1
 
-	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything, mock.Anything).
+	oe.On("Teardown", mock.Anything, revision, obj, mock.Anything, mock.Anything).
 		Return(true, nil)
 
-	deleted, err := pe.Teardown(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj, *obj,
+	deleted, err := pe.Teardown(t.Context(), revision, types.NewPhase(
+		"test", []client.Object{
+			obj, obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 	assert.True(t, deleted.IsComplete())
 	assert.Empty(t, deleted.Waiting())
@@ -159,24 +158,22 @@ type objectEngineMock struct {
 
 func (m *objectEngineMock) Reconcile(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectReconcileOption,
 ) (ObjectResult, error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, revision, desiredObject, opts)
 
 	return args.Get(0).(ObjectResult), args.Error(1)
 }
 
 func (m *objectEngineMock) Teardown(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectTeardownOption,
 ) (objectDeleted bool, err error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, revision, desiredObject, opts)
 
 	return args.Bool(0), args.Error(1)
 }
@@ -187,10 +184,10 @@ type phaseValidatorMock struct {
 
 func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
-	owner client.Object,
 	phase types.Phase,
+	opts ...types.PhaseReconcileOption,
 ) error {
-	args := m.Called(ctx, owner, phase)
+	args := m.Called(ctx, phase, opts)
 
 	return args.Error(0)
 }

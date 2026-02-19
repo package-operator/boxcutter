@@ -399,3 +399,42 @@ func Test_isComplete(t *testing.T) {
 		})
 	}
 }
+
+func TestObjectResultCollision_Success(t *testing.T) {
+	t.Parallel()
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+		Name:       "conflicting-owner",
+		UID:        "uid-123",
+	}
+
+	collision := newObjectResultConflict(
+		resultExampleObj,
+		CompareResult{},
+		ownerRef,
+		types.ObjectReconcileOptions{},
+	)
+
+	// Cast to access Success() method
+	collisionResult, ok := collision.(ObjectResultCollision)
+	assert.True(t, ok)
+
+	// Collisions always report as not successful
+	assert.False(t, collisionResult.Success())
+}
+
+func TestNewNormalObjectResult_PanicOnCreated(t *testing.T) {
+	t.Parallel()
+
+	// newNormalObjectResult should panic when ActionCreated is passed
+	assert.Panics(t, func() {
+		newNormalObjectResult(
+			ActionCreated,
+			resultExampleObj,
+			CompareResult{},
+			types.ObjectReconcileOptions{},
+		)
+	})
+}
