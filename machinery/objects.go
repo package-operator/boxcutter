@@ -465,8 +465,9 @@ func (e *ObjectEngine) objectUpdateHandling(
 	// TODO:
 	// ObjectResult ModifiedFields does not contain ownerReference changes
 	// introduced here, this may lead to Updated Actions without modifications.
+	e.setObjectRevision(desiredObject, revision)
+
 	if options.Owner != nil {
-		e.setObjectRevision(desiredObject, revision)
 		options.OwnerStrategy.CopyOwnerReferences(actualObject, desiredObject)
 		options.OwnerStrategy.ReleaseController(desiredObject)
 
