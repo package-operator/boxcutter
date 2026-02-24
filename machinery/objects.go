@@ -274,41 +274,25 @@ func (e *ObjectEngine) checkSituation(
 	actualOwner *metav1.OwnerReference,
 	err error,
 ) {
-	if options.Owner == nil {
+	var compareOpts []types.ComparatorOption
+
+	if options.Owner != nil {
+		ctrlSit, actualOwner = e.detectOwner(
+			options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
+
+		compareOpts = append(compareOpts, types.WithOwner(options.Owner, options.OwnerStrategy))
+	} else {
 		if e.isBoxcutterManaged(actualObject) {
 			ctrlSit = ctrlSituationIsController
 		} else {
-			ctrlSit = ctrlSituationUnknownController
+			ctrlSit = ctrlSituationNoController
 		}
-
-		// An object already exists on the cluster.
-		// Before doing anything else, we have to figure out
-		// who owns and controls the object.
-		compareRes, err = e.comparator.Compare(
-			desiredObject, actualObject,
-		)
-		if err != nil {
-			err = fmt.Errorf("diverge check: %w", err)
-
-			return ctrlSit,
-				compareRes,
-				actualOwner,
-				err
-		}
-
-		return ctrlSit,
-			compareRes,
-			actualOwner,
-			err
 	}
 
-	ctrlSit, actualOwner = e.detectOwner(
-		options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
-
-	compareRes, err = e.comparator.Compare(
-		desiredObject, actualObject,
-		types.WithOwner(options.Owner, options.OwnerStrategy),
-	)
+	// An object already exists on the cluster.
+	// Before doing anything else, we have to figure out
+	// who owns and controls the object.
+	compareRes, err = e.comparator.Compare(desiredObject, actualObject, compareOpts...)
 	if err != nil {
 		err = fmt.Errorf("diverge check: %w", err)
 
