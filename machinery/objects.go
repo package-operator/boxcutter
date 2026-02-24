@@ -98,18 +98,17 @@ func (e *ObjectEngine) Teardown(
 		panic("owner revision must be set and start at 1")
 	}
 
-	if options.Owner != nil {
-		// Shortcut when Owner is orphaning its dependents.
-		// If we don't check this, we might be too quick and start deleting
-		// dependents that should be kept on the cluster!
-		if controllerutil.ContainsFinalizer(options.Owner, "orphan") || options.Orphan {
-			err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
-			if err != nil {
-				return false, err
-			}
-
-			return true, nil
+	// The "orphan" finalizer on the owner object indicates that the Owner
+	// is being deleted and orphaning its dependents. This finalizer is
+	// managed by KCM's gc controller. If we observe it, we are racing with
+	// the gc controller, and should not delete dependent objects.
+	if options.Orphan || (options.Owner != nil && controllerutil.ContainsFinalizer(options.Owner, "orphan")) {
+		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
+		if err != nil {
+			return false, err
 		}
+
+		return true, nil
 	}
 
 	// Lookup actual object state on cluster.
@@ -275,41 +274,25 @@ func (e *ObjectEngine) checkSituation(
 	actualOwner *metav1.OwnerReference,
 	err error,
 ) {
-	if options.Owner == nil {
+	var compareOpts []types.ComparatorOption
+
+	if options.Owner != nil {
+		ctrlSit, actualOwner = e.detectOwner(
+			options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
+
+		compareOpts = append(compareOpts, types.WithOwner(options.Owner, options.OwnerStrategy))
+	} else {
 		if e.isBoxcutterManaged(actualObject) {
 			ctrlSit = ctrlSituationIsController
 		} else {
-			ctrlSit = ctrlSituationUnknownController
+			ctrlSit = ctrlSituationNoController
 		}
-
-		// An object already exists on the cluster.
-		// Before doing anything else, we have to figure out
-		// who owns and controls the object.
-		compareRes, err = e.comparator.Compare(
-			desiredObject, actualObject,
-		)
-		if err != nil {
-			err = fmt.Errorf("diverge check: %w", err)
-
-			return ctrlSit,
-				compareRes,
-				actualOwner,
-				err
-		}
-
-		return ctrlSit,
-			compareRes,
-			actualOwner,
-			err
 	}
 
-	ctrlSit, actualOwner = e.detectOwner(
-		options.Owner, options.OwnerStrategy, actualObject, options.PreviousOwners)
-
-	compareRes, err = e.comparator.Compare(
-		desiredObject, actualObject,
-		types.WithOwner(options.Owner, options.OwnerStrategy),
-	)
+	// An object already exists on the cluster.
+	// Before doing anything else, we have to figure out
+	// who owns and controls the object.
+	compareRes, err = e.comparator.Compare(desiredObject, actualObject, compareOpts...)
 	if err != nil {
 		err = fmt.Errorf("diverge check: %w", err)
 
