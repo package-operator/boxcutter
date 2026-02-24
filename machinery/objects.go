@@ -98,18 +98,17 @@ func (e *ObjectEngine) Teardown(
 		panic("owner revision must be set and start at 1")
 	}
 
-	if options.Owner != nil {
-		// Shortcut when Owner is orphaning its dependents.
-		// If we don't check this, we might be too quick and start deleting
-		// dependents that should be kept on the cluster!
-		if controllerutil.ContainsFinalizer(options.Owner, "orphan") || options.Orphan {
-			err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
-			if err != nil {
-				return false, err
-			}
-
-			return true, nil
+	// The "orphan" finalizer on the owner object indicates that the Owner
+	// is being deleted and orphaning its dependents. This finalizer is
+	// managed by KCM's gc controller. If we observe it, we are racing with
+	// the gc controller, and should not delete dependent objects.
+	if options.Orphan || (options.Owner != nil && controllerutil.ContainsFinalizer(options.Owner, "orphan")) {
+		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
+		if err != nil {
+			return false, err
 		}
+
+		return true, nil
 	}
 
 	// Lookup actual object state on cluster.
