@@ -103,7 +103,7 @@ func (e *ObjectEngine) Teardown(
 	// managed by KCM's gc controller. If we observe it, we are racing with
 	// the gc controller, and should not delete dependent objects.
 	if options.Orphan || (options.Owner != nil && controllerutil.ContainsFinalizer(options.Owner, "orphan")) {
-		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject.(*unstructured.Unstructured))
+		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject)
 		if err != nil {
 			return false, err
 		}
@@ -638,9 +638,9 @@ func (e *ObjectEngine) revisionAnnotation() string {
 }
 
 func removeBoxcutterManagedLabel(
-	ctx context.Context, w client.Writer, obj *unstructured.Unstructured,
+	ctx context.Context, w client.Writer, obj Object,
 ) error {
-	updated := obj.DeepCopy()
+	updated := obj.DeepCopyObject().(Object)
 
 	labels := updated.GetLabels()
 

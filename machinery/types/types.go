@@ -39,7 +39,7 @@ type Phase interface {
 	GetObjects() []client.Object
 	// GetReconcileOptions returns options for reconciling this phase.
 	GetReconcileOptions() []PhaseReconcileOption
-	// GetTeardownOptions returns options for tearding down this phase.
+	// GetTeardownOptions returns options for tearing down this phase.
 	GetTeardownOptions() []PhaseTeardownOption
 }
 
@@ -100,7 +100,7 @@ func (p *phase) GetReconcileOptions() []PhaseReconcileOption {
 	return p.ReconcileOptions
 }
 
-// GetTeardownOptions returns options for tearding down this phase.
+// GetTeardownOptions returns options for tearing down this phase.
 func (p *phase) GetTeardownOptions() []PhaseTeardownOption {
 	return p.TeardownOptions
 }
@@ -129,7 +129,7 @@ type Revision interface {
 	GetPhases() []Phase
 	// GetReconcileOptions returns options for reconciling this revision.
 	GetReconcileOptions() []RevisionReconcileOption
-	// GetTeardownOptions returns options for tearding down this revision.
+	// GetTeardownOptions returns options for tearing down this revision.
 	GetTeardownOptions() []RevisionTeardownOption
 }
 
