@@ -157,7 +157,11 @@ type ObjectTeardownOptions struct {
 }
 
 // Default sets empty Option fields to their default value.
-func (opts *ObjectTeardownOptions) Default() {}
+func (opts *ObjectTeardownOptions) Default() {
+	if opts.Owner != nil && opts.OwnerStrategy == nil {
+		panic("Owner without ownerStrategy set")
+	}
+}
 
 // ObjectTeardownOption is the common interface for object teardown options.
 type ObjectTeardownOption interface {
