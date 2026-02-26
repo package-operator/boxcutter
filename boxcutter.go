@@ -3,7 +3,6 @@ package boxcutter
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -116,14 +115,7 @@ const ProgressProbeType = types.ProgressProbeType
 type RevisionEngine = machinery.RevisionEngine
 
 // OwnerStrategy interface needed for RevisionEngine.
-type OwnerStrategy interface {
-	SetControllerReference(owner, obj metav1.Object) error
-	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
-	IsController(owner, obj metav1.Object) bool
-	CopyOwnerReferences(objA, objB metav1.Object)
-	ReleaseController(obj metav1.Object)
-	RemoveOwner(owner, obj metav1.Object)
-}
+type OwnerStrategy = types.OwnerStrategy
 
 // RevisionEngineOptions holds all configuration options for the RevisionEngine.
 type RevisionEngineOptions struct {

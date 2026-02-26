@@ -63,7 +63,7 @@ func NewPhase(name string, objects []client.Object) PhaseBuilder {
 // NewPhaseWithOwner creates a new PhaseBuilder with the given name, objects and owner.
 func NewPhaseWithOwner(
 	name string, objects []client.Object,
-	owner client.Object, ownerStrat ownerStrategy,
+	owner client.Object, ownerStrat OwnerStrategy,
 ) PhaseBuilder {
 	oo := WithOwner(owner, ownerStrat)
 	p := &phase{
@@ -162,7 +162,7 @@ func NewRevisionWithOwner(
 	name string,
 	revNumber int64,
 	phases []Phase,
-	owner client.Object, ownerStrat ownerStrategy,
+	owner client.Object, ownerStrat OwnerStrategy,
 ) RevisionBuilder {
 	oo := WithOwner(owner, ownerStrat)
 	r := &revision{

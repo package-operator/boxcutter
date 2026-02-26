@@ -118,7 +118,7 @@ type ObjectReconcileOptions struct {
 	CollisionProtection CollisionProtection
 	PreviousOwners      []client.Object
 	Owner               client.Object
-	OwnerStrategy       ownerStrategy
+	OwnerStrategy       OwnerStrategy
 	Paused              bool
 	Probes              map[string]Prober
 }
@@ -153,7 +153,7 @@ type ObjectTeardownOptions struct {
 	Orphan         bool
 	TeardownWriter client.Writer
 	Owner          client.Object
-	OwnerStrategy  ownerStrategy
+	OwnerStrategy  OwnerStrategy
 }
 
 // Default sets empty Option fields to their default value.
@@ -372,7 +372,8 @@ func (p *withPhaseTeardownOptions) ApplyToRevisionTeardownOptions(opts *Revision
 	opts.PhaseOptions[p.phaseName] = p.opts
 }
 
-type ownerStrategy interface {
+// OwnerStrategy interface needed for RevisionEngine.
+type OwnerStrategy interface {
 	SetControllerReference(owner, obj metav1.Object) error
 	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
 	IsController(owner, obj metav1.Object) bool
@@ -384,7 +385,7 @@ type ownerStrategy interface {
 // WithOwner sets an owning object and the strategy to use with it.
 // Ensures controller-refs are set to track the owner and
 // enables handover between owners.
-func WithOwner(obj client.Object, start ownerStrategy) interface {
+func WithOwner(obj client.Object, start OwnerStrategy) interface {
 	ComparatorOption
 	ObjectReconcileOption
 	ObjectTeardownOption
@@ -425,7 +426,7 @@ func (copt *combinedOpts) ApplyToComparatorOptions(opts *ComparatorOptions) {
 
 type ComparatorOptions struct {
 	Owner         client.Object
-	OwnerStrategy ownerStrategy
+	OwnerStrategy OwnerStrategy
 }
 
 type ComparatorOption interface {
