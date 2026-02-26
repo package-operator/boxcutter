@@ -484,6 +484,9 @@ func (e *ObjectEngine) objectUpdateHandling(
 	), nil
 }
 
+// isBoxcutterManaged is used to detect if we have managed this object at some point.
+// It's only purpose is to prevent boxcutter immediately re-adopting objects when
+// resources get orphaned by the GC.
 func (e *ObjectEngine) isBoxcutterManaged(obj client.Object) bool {
 	labels := obj.GetLabels()
 	annotations := obj.GetAnnotations()
