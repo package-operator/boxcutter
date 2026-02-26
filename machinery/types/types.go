@@ -63,7 +63,7 @@ func NewPhase(name string, objects []client.Object) PhaseBuilder {
 // NewPhaseWithOwner creates a new PhaseBuilder with the given name, objects and owner.
 func NewPhaseWithOwner(
 	name string, objects []client.Object,
-	owner client.Object, ownerStrat ownerStrategy,
+	owner client.Object, ownerStrat OwnerStrategy,
 ) PhaseBuilder {
 	oo := WithOwner(owner, ownerStrat)
 	p := &phase{
@@ -107,14 +107,14 @@ func (p *phase) GetTeardownOptions() []PhaseTeardownOption {
 
 // WithReconcileOptions sets PhaseReconcileOptions on this phase.
 func (p *phase) WithReconcileOptions(opts ...PhaseReconcileOption) PhaseBuilder {
-	p.ReconcileOptions = opts
+	p.ReconcileOptions = append(p.ReconcileOptions, opts...)
 
 	return p
 }
 
 // WithTeardownOptions sets PhaseTeardownOption on this phase.
 func (p *phase) WithTeardownOptions(opts ...PhaseTeardownOption) PhaseBuilder {
-	p.TeardownOptions = opts
+	p.TeardownOptions = append(p.TeardownOptions, opts...)
 
 	return p
 }
@@ -162,7 +162,7 @@ func NewRevisionWithOwner(
 	name string,
 	revNumber int64,
 	phases []Phase,
-	owner client.Object, ownerStrat ownerStrategy,
+	owner client.Object, ownerStrat OwnerStrategy,
 ) RevisionBuilder {
 	oo := WithOwner(owner, ownerStrat)
 	r := &revision{

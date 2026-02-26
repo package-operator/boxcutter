@@ -136,8 +136,10 @@ func (e *PhaseEngine) Teardown(
 	phase types.Phase,
 	opts ...types.PhaseTeardownOption,
 ) (PhaseTeardownResult, error) {
+	opts = append(opts, phase.GetTeardownOptions()...)
+
 	var options types.PhaseTeardownOptions
-	for _, opt := range append(opts, phase.GetTeardownOptions()...) {
+	for _, opt := range opts {
 		opt.ApplyToPhaseTeardownOptions(&options)
 	}
 
@@ -167,8 +169,10 @@ func (e *PhaseEngine) Reconcile(
 	phase types.Phase,
 	opts ...types.PhaseReconcileOption,
 ) (PhaseResult, error) {
+	opts = append(opts, phase.GetReconcileOptions()...)
+
 	var options types.PhaseReconcileOptions
-	for _, opt := range append(opts, phase.GetReconcileOptions()...) {
+	for _, opt := range opts {
 		opt.ApplyToPhaseReconcileOptions(&options)
 	}
 
