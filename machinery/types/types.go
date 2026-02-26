@@ -107,14 +107,14 @@ func (p *phase) GetTeardownOptions() []PhaseTeardownOption {
 
 // WithReconcileOptions sets PhaseReconcileOptions on this phase.
 func (p *phase) WithReconcileOptions(opts ...PhaseReconcileOption) PhaseBuilder {
-	p.ReconcileOptions = opts
+	p.ReconcileOptions = append(p.ReconcileOptions, opts...)
 
 	return p
 }
 
 // WithTeardownOptions sets PhaseTeardownOption on this phase.
 func (p *phase) WithTeardownOptions(opts ...PhaseTeardownOption) PhaseBuilder {
-	p.TeardownOptions = opts
+	p.TeardownOptions = append(p.TeardownOptions, opts...)
 
 	return p
 }

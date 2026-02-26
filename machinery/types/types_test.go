@@ -285,7 +285,14 @@ func TestPhase_WithTeardownOptions(t *testing.T) {
 	result := phase.WithTeardownOptions(opts...)
 
 	assert.Equal(t, phase, result, "should return same phase for chaining")
-	assert.Equal(t, opts, phase.GetTeardownOptions())
+	assert.Empty(t, phase.GetTeardownOptions())
+
+	chainedOpts := []PhaseTeardownOption{
+		WithTeardownWriter(nil),
+	}
+
+	result = phase.WithTeardownOptions(chainedOpts...)
+	assert.Equal(t, chainedOpts, result.GetTeardownOptions())
 }
 
 func TestPhase_GetReconcileOptions(t *testing.T) {
@@ -309,7 +316,7 @@ func TestPhase_GetTeardownOptions(t *testing.T) {
 	phase := NewPhase("test-phase", []client.Object{}).
 		WithTeardownOptions(opts...)
 
-	assert.Equal(t, opts, phase.GetTeardownOptions())
+	assert.Empty(t, phase.GetTeardownOptions())
 }
 
 func TestNewPhaseWithOwner(t *testing.T) {
