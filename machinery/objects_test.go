@@ -124,7 +124,7 @@ func setBoxcutterManagedLabel(obj *unstructured.Unstructured) {
 		labels = map[string]string{}
 	}
 
-	labels["boxcutter-managed"] = "True"
+	labels[managedByLabel] = managedByLabelValue
 	obj.SetLabels(labels)
 }
 
@@ -558,7 +558,7 @@ func TestObjectEngine(t *testing.T) {
 			name:          "Collision, CollisionProtectionNone, boxcutter managed",
 			revision:      1,
 			desiredObject: buildObj("testi", "test"),
-			actualObject:  buildObj("testi", "test", withBoxcutterManagedLabel),
+			actualObject:  buildObj("testi", "test", withBoxcutterManagedLabel, withRevision("1")),
 			modes:         []ownerMode{withNativeOwnerMode},
 			opts: []types.ObjectReconcileOption{
 				types.WithCollisionProtection(types.CollisionProtectionNone),

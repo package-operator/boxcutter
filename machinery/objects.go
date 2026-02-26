@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -76,6 +75,8 @@ type comparator interface {
 }
 
 const (
+	managedByLabel        string = "app.kubernetes.io/managed-by"
+	managedByLabelValue   string = "boxcutter"
 	boxcutterManagedLabel string = "boxcutter-managed"
 )
 
@@ -103,7 +104,7 @@ func (e *ObjectEngine) Teardown(
 	// managed by KCM's gc controller. If we observe it, we are racing with
 	// the gc controller, and should not delete dependent objects.
 	if options.Orphan || (options.Owner != nil && controllerutil.ContainsFinalizer(options.Owner, "orphan")) {
-		err := removeBoxcutterManagedLabel(ctx, e.writer, desiredObject)
+		err := e.removeBoxcutterManagedLabelsAndAnnotations(ctx, e.writer, desiredObject)
 		if err != nil {
 			return false, err
 		}
@@ -193,7 +194,7 @@ func (e *ObjectEngine) Reconcile(
 		labels = map[string]string{}
 	}
 
-	labels[boxcutterManagedLabel] = "True"
+	labels[managedByLabel] = managedByLabelValue
 	desiredObject.SetLabels(labels)
 
 	options.Default()
@@ -484,10 +485,12 @@ func (e *ObjectEngine) objectUpdateHandling(
 }
 
 func (e *ObjectEngine) isBoxcutterManaged(obj client.Object) bool {
-	for k := range obj.GetLabels() {
-		if strings.HasPrefix(k, boxcutterManagedLabel) {
-			return true
-		}
+	labels := obj.GetLabels()
+	annotations := obj.GetAnnotations()
+
+	_, hasRevisionAnnotation := annotations[e.revisionAnnotation()]
+	if labels[managedByLabel] == managedByLabelValue && hasRevisionAnnotation {
+		return true
 	}
 
 	return false
@@ -637,14 +640,20 @@ func (e *ObjectEngine) revisionAnnotation() string {
 	return e.systemPrefix + "/revision"
 }
 
-func removeBoxcutterManagedLabel(
+func (e *ObjectEngine) removeBoxcutterManagedLabelsAndAnnotations(
 	ctx context.Context, w client.Writer, obj Object,
 ) error {
 	updated := obj.DeepCopyObject().(Object)
 
-	labels := updated.GetLabels()
+	annotations := obj.GetAnnotations()
+	delete(annotations, e.revisionAnnotation())
+	obj.SetAnnotations(annotations)
 
-	delete(labels, boxcutterManagedLabel)
+	labels := updated.GetLabels()
+	if l, ok := labels[managedByLabel]; ok && l == managedByLabelValue {
+		delete(labels, managedByLabel)
+	}
+
 	updated.SetLabels(labels)
 
 	if err := w.Patch(ctx, updated, client.MergeFrom(obj)); err != nil {
