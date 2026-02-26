@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery"
-	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
 func TestCollisionProtectionPreventUnowned(t *testing.T) {
@@ -38,19 +38,18 @@ func TestCollisionProtectionPreventUnowned(t *testing.T) {
 	colliding.Data["apple"] = "pie"
 
 	re := newTestRevisionEngine()
-	res, err := re.Reconcile(ctx, types.Revision{
-		Name:     "test-collision-prevention-prevent-unowned-cm",
-		Revision: 1,
-		Owner:    owner,
-		Phases: []types.Phase{
-			{
-				Name: "simple",
-				Objects: []unstructured.Unstructured{
+	res, err := re.Reconcile(ctx, boxcutter.NewRevisionWithOwner(
+		"test-collision-prevention-prevent-unowned-cm", 1,
+		[]boxcutter.Phase{
+			boxcutter.NewPhase(
+				"simple",
+				[]client.Object{
 					toUns(colliding),
 				},
-			},
+			),
 		},
-	})
+		owner, ownerhandling.NewNative(Scheme),
+	))
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
 	assert.True(t, res.InTransition())
@@ -90,19 +89,18 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 	cleanupOnSuccess(t, owner)
 
 	re := newTestRevisionEngine()
-	res, err := re.Reconcile(ctx, types.Revision{
-		Name:     "test-collision-prevention-prevent-owned-cm",
-		Revision: 1,
-		Owner:    owner,
-		Phases: []types.Phase{
-			{
-				Name: "simple",
-				Objects: []unstructured.Unstructured{
+	res, err := re.Reconcile(ctx, boxcutter.NewRevisionWithOwner(
+		"test-collision-prevention-prevent-owned-cm", 1,
+		[]boxcutter.Phase{
+			boxcutter.NewPhase(
+				"simple",
+				[]client.Object{
 					toUns(colliding),
 				},
-			},
+			),
 		},
-	})
+		owner, ownerhandling.NewNative(Scheme),
+	))
 	require.NoError(t, err)
 	assert.False(t, res.IsComplete())
 	assert.True(t, res.InTransition())

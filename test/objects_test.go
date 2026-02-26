@@ -20,9 +20,9 @@ import (
 
 func TestObjectEngine(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
 	)
 
 	ctx := t.Context()
@@ -59,7 +59,7 @@ func TestObjectEngine(t *testing.T) {
 	}
 
 	// Creation
-	res, err := oe.Reconcile(ctx, owner, 1, configMap)
+	res, err := oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Created"
@@ -69,7 +69,7 @@ Action: "Created"
 	assert.False(t, res.IsPaused(), "IsPaused")
 
 	// Idle
-	res, err = oe.Reconcile(ctx, owner, 1, configMap)
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
@@ -88,7 +88,7 @@ Action: "Idle"
 	require.NoError(t, err)
 
 	// Idle with other participant.
-	res, err = oe.Reconcile(ctx, owner, 1, configMap)
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Idle"
@@ -113,7 +113,7 @@ Comparison:
 	}, "data")
 	require.NoError(t, err)
 
-	res, err = oe.Reconcile(ctx, owner, 1, configMap)
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test
 Action: "Updated"
@@ -134,20 +134,20 @@ Comparison:
 	assert.False(t, res.IsPaused(), "IsPaused")
 
 	// Teardown is a two step process at the moment.
-	gone, err := oe.Teardown(ctx, owner, 1, configMap)
+	gone, err := oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.False(t, gone)
 
-	gone, err = oe.Teardown(ctx, owner, 1, configMap)
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.True(t, gone)
 }
 
 func TestObjectEnginePaused(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
 	)
 
 	ctx := t.Context()
@@ -185,7 +185,7 @@ func TestObjectEnginePaused(t *testing.T) {
 	originalConfigMap := configMap.DeepCopy()
 
 	// Creation Paused
-	res, err := oe.Reconcile(ctx, owner, 1, configMap, types.WithPaused{})
+	res, err := oe.Reconcile(ctx, 1, configMap, types.WithPaused{}, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-paused
 Action (PAUSED): "Created"
@@ -199,7 +199,7 @@ Action (PAUSED): "Created"
 	require.True(t, apierrors.IsNotFound(err), "Object should not exist after paused create action")
 
 	// Creation Not Paused
-	res, err = oe.Reconcile(ctx, owner, 1, configMap)
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-paused
 Action: "Created"
@@ -208,7 +208,7 @@ Action: "Created"
 	assert.False(t, res.IsPaused(), "IsPaused")
 
 	// Idle Paused
-	res, err = oe.Reconcile(ctx, owner, 1, configMap, types.WithPaused{})
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithPaused{}, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-paused
 Action (PAUSED): "Idle"
@@ -227,7 +227,7 @@ Action (PAUSED): "Idle"
 	}, "data")
 	require.NoError(t, err)
 
-	res, err = oe.Reconcile(ctx, owner, 1, configMap, types.WithPaused{})
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithPaused{}, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-paused
 Action (PAUSED): "Updated"
@@ -254,20 +254,20 @@ Comparison:
 	assert.Equal(t, originalConfigMap.GetAnnotations()["my-annotation"], cmNotUpdated.GetAnnotations()["my-annotation"])
 
 	// Teardown is a two step process at the moment.
-	gone, err := oe.Teardown(ctx, owner, 1, configMap)
+	gone, err := oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.False(t, gone)
 
-	gone, err = oe.Teardown(ctx, owner, 1, configMap)
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.True(t, gone)
 }
 
 func TestObjectEngineProbing(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
 	)
 
 	ctx := t.Context()
@@ -308,9 +308,10 @@ func TestObjectEngineProbing(t *testing.T) {
 	}
 	// Creation progress probe fails
 	res, err := oe.Reconcile(
-		ctx, owner, 1, configMap,
+		ctx, 1, configMap,
 		types.WithProbe(types.ProgressProbeType, probeFailed),
 		types.WithProbe("other", probeSuccess),
+		types.WithOwner(owner, os),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-probing
@@ -326,9 +327,10 @@ Probes:
 
 	// Idle progress probe unknown
 	res, err = oe.Reconcile(
-		ctx, owner, 1, configMap,
+		ctx, 1, configMap,
 		types.WithProbe(types.ProgressProbeType, probeUnknown),
 		types.WithProbe("other", probeSuccess),
+		types.WithOwner(owner, os),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-probing
@@ -344,9 +346,10 @@ Probes:
 
 	// Idle progress probe success
 	res, err = oe.Reconcile(
-		ctx, owner, 1, configMap,
+		ctx, 1, configMap,
 		types.WithProbe(types.ProgressProbeType, probeSuccess),
 		types.WithProbe("other", probeSuccess),
+		types.WithOwner(owner, os),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, `Object ConfigMap.v1 default/oe-test-probing
@@ -361,11 +364,11 @@ Probes:
 	assert.False(t, res.IsPaused(), "IsPaused")
 
 	// Teardown is a two step process at the moment.
-	gone, err := oe.Teardown(ctx, owner, 1, configMap)
+	gone, err := oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.False(t, gone)
 
-	gone, err = oe.Teardown(ctx, owner, 1, configMap)
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.True(t, gone)
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,8 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/openapi"
 	"k8s.io/kube-openapi/pkg/spec3"
 
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
@@ -29,12 +32,11 @@ func TestComparator_Unstructured(t *testing.T) {
 	oapi := &spec3.OpenAPI{}
 	require.NoError(t, oapi.UnmarshalJSON(testOAPISchema))
 
-	a := &dummyOpenAPIAccessor{
-		openAPI: oapi,
-	}
+	a := &dummyOpenAPIAccessor{}
+	a.On("Get", mock.Anything).Return(oapi, nil)
+
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -179,6 +181,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		name    string
 		desired *unstructured.Unstructured
 		actual  *unstructured.Unstructured
+		opts    []bctypes.ComparatorOption
 
 		expectedReport string
 	}{
@@ -186,15 +189,43 @@ func TestComparator_Unstructured(t *testing.T) {
 			name:    "Hans updated .data.test",
 			desired: desiredNewFieldOwner,
 			actual:  actualNewFieldOwner,
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
 			expectedReport: `Conflicts:
 - "Hans"
   .data.test
 `,
 		},
 		{
-			name:           "Pod Compare",
-			desired:        pod.DeepCopy(),
-			actual:         pod.DeepCopy(),
+			name:    "Hans updated .data.test - no owner",
+			desired: desiredNewFieldOwner,
+			actual:  actualNewFieldOwner,
+
+			expectedReport: `Conflicts:
+- "Hans"
+  .data.test
+Comparison:
+- Added:
+  .metadata.ownerReferences[uid="12345-678"]
+`,
+		},
+		{
+			name:    "Pod Compare",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
+			expectedReport: ``,
+		},
+		{
+			name:    "Pod Compare - no owner",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+
 			expectedReport: ``,
 		},
 	}
@@ -202,14 +233,10 @@ func TestComparator_Unstructured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, test.opts...)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedReport, res.String())
-
-			if res.Comparison != nil {
-				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
-			}
 		})
 	}
 
@@ -259,7 +286,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -278,12 +305,11 @@ func TestComparator_Structured(t *testing.T) {
 	oapi := &spec3.OpenAPI{}
 	require.NoError(t, oapi.UnmarshalJSON(testOAPISchema))
 
-	a := &dummyOpenAPIAccessor{
-		openAPI: oapi,
-	}
+	a := &dummyOpenAPIAccessor{}
+	a.On("Get", mock.Anything).Return(oapi, nil)
+
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -491,7 +517,7 @@ func TestComparator_Structured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, bctypes.WithOwner(owner, n))
 			require.NoError(t, err)
 
 			if res.Comparison != nil {
@@ -546,7 +572,7 @@ func TestComparator_Structured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -555,12 +581,78 @@ func TestComparator_Structured(t *testing.T) {
 	})
 }
 
-type dummyOpenAPIAccessor struct {
-	openAPI *spec3.OpenAPI
+func TestNewComparator(t *testing.T) {
+	t.Parallel()
+
+	// Use a simple mock discovery client
+	oapiClient := &simpleOpenAPIClientMock{}
+	oapiClient.On("Paths").Return(nil, nil)
+	oapiClient.On("GV", mock.Anything).Return(&spec3.OpenAPI{}, nil)
+
+	discoveryClient := &simpleDiscoveryMock{}
+	discoveryClient.On("OpenAPIV3").Return(oapiClient)
+
+	c := NewComparator(discoveryClient, scheme.Scheme, "test-owner")
+
+	assert.NotNil(t, c)
+	assert.Equal(t, "test-owner", c.fieldOwner)
+	assert.NotNil(t, c.openAPIAccessor)
+	assert.Equal(t, scheme.Scheme, c.scheme)
 }
 
-func (a *dummyOpenAPIAccessor) Get(_ schema.GroupVersion) (*spec3.OpenAPI, error) {
-	return a.openAPI, nil
+func TestCompareResult_Modified(t *testing.T) {
+	t.Parallel()
+
+	// Test the nil comparison case which has 0% coverage
+	result := CompareResult{Comparison: nil}
+	modified := result.Modified()
+
+	assert.Nil(t, modified)
+}
+
+type simpleDiscoveryMock struct {
+	mock.Mock
+}
+
+func (m *simpleDiscoveryMock) OpenAPIV3() openapi.Client {
+	args := m.Called()
+
+	return args.Get(0).(openapi.Client)
+}
+
+type simpleOpenAPIClientMock struct {
+	mock.Mock
+}
+
+func (m *simpleOpenAPIClientMock) Paths() (map[string]openapi.GroupVersion, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(map[string]openapi.GroupVersion), args.Error(1)
+}
+
+func (m *simpleOpenAPIClientMock) GV(path string) (*spec3.OpenAPI, error) {
+	args := m.Called(path)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*spec3.OpenAPI), args.Error(1)
+}
+
+type dummyOpenAPIAccessor struct {
+	mock.Mock
+}
+
+func (a *dummyOpenAPIAccessor) Get(gv schema.GroupVersion) (*spec3.OpenAPI, error) {
+	args := a.Called(gv)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*spec3.OpenAPI), args.Error(1)
 }
 
 func Test_openAPICanonicalName(t *testing.T) {

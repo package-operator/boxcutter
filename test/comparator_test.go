@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 
 	"pkg.package-operator.run/boxcutter/machinery"
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
@@ -36,7 +37,7 @@ func sanitizeCompareResult(r *machinery.CompareResult) {
 func TestComparator(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(
-		os, DiscoveryClient, Scheme, fieldOwner)
+		DiscoveryClient, Scheme, fieldOwner)
 
 	ctx := t.Context()
 	owner := &corev1.ConfigMap{
@@ -390,7 +391,7 @@ Comparison:
 				require.NoError(t, err)
 			}
 
-			r, err := comp.Compare(owner, test.desiredObj, test.actualObj)
+			r, err := comp.Compare(test.desiredObj, test.actualObj, bctypes.WithOwner(owner, os))
 			require.NoError(t, err)
 			sanitizeCompareResult(&r)
 

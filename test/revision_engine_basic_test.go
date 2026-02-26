@@ -52,26 +52,10 @@ func TestRevisionEngine(t *testing.T) {
 			},
 		},
 	}
-	rev := boxcutter.Revision{
-		Name:     "rev-1",
-		Owner:    revOwner,
-		Revision: 1,
-		Phases: []boxcutter.Phase{
-			{
-				Name:    "phase-1",
-				Objects: []unstructured.Unstructured{*obj1},
-			},
-			{
-				Name:    "phase-2",
-				Objects: []unstructured.Unstructured{*obj2},
-			},
-		},
-	}
 
-	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
 	)
 	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)
@@ -86,6 +70,22 @@ func TestRevisionEngine(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, Client.Delete(context.Background(), revOwner))
 	})
+
+	os := ownerhandling.NewNative(Scheme)
+	rev := boxcutter.NewRevisionWithOwner(
+		"rev-1", 1,
+		[]boxcutter.Phase{
+			boxcutter.NewPhase(
+				"phase-1",
+				[]client.Object{obj1},
+			),
+			boxcutter.NewPhase(
+				"phase-2",
+				[]client.Object{obj2},
+			),
+		},
+		revOwner, os,
+	)
 
 	// Test execution
 	// --------------
