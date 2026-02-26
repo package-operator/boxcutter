@@ -657,6 +657,8 @@ func (e *ObjectEngine) removeBoxcutterManagedLabelsAndAnnotations(
 		delete(labels, managedByLabel)
 	}
 
+	delete(labels, boxcutterManagedLabel)
+
 	updated.SetLabels(labels)
 
 	if err := w.Patch(ctx, updated, client.MergeFrom(obj)); err != nil {
