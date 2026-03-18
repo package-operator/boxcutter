@@ -152,6 +152,101 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	assert.Len(t, deleted.Gone(), 2)
 }
 
+func TestPhaseEngine_Reconcile_AggregateErrors(t *testing.T) {
+	t.Parallel()
+
+	oe := &objectEngineMock{}
+	pv := &phaseValidatorMock{}
+	pe := NewPhaseEngine(oe, pv)
+
+	obj1 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]any{
+				"name":      "secret1",
+				"namespace": "test",
+			},
+		},
+	}
+	obj2 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "cm1",
+				"namespace": "test",
+			},
+		},
+	}
+
+	var revision int64 = 1
+
+	pv.
+		On("Validate", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	oe.On("Reconcile", mock.Anything, revision, obj1, mock.Anything).
+		Return(ObjectResultCreated{}, errTest)
+	oe.On("Reconcile", mock.Anything, revision, obj2, mock.Anything).
+		Return(ObjectResultCreated{}, errTest)
+
+	_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{obj1, obj2},
+	), types.WithAggregatePhaseReconcileErrors())
+	require.Error(t, err)
+	require.ErrorIs(t, err, errTest)
+	assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+	assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+	oe.AssertNumberOfCalls(t, "Reconcile", 2)
+}
+
+func TestPhaseEngine_Teardown_AggregateErrors(t *testing.T) {
+	t.Parallel()
+
+	oe := &objectEngineMock{}
+	pv := &phaseValidatorMock{}
+	pe := NewPhaseEngine(oe, pv)
+
+	obj1 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "secret1",
+				"namespace": "test",
+			},
+		},
+	}
+	obj2 := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "cm1",
+				"namespace": "test",
+			},
+		},
+	}
+
+	var revision int64 = 1
+
+	oe.On("Teardown", mock.Anything, revision, obj1, mock.Anything).
+		Return(false, errTest)
+	oe.On("Teardown", mock.Anything, revision, obj2, mock.Anything).
+		Return(false, errTest)
+
+	_, err := pe.Teardown(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{obj1, obj2},
+	), types.WithAggregatePhaseTeardownErrors())
+	require.Error(t, err)
+	require.ErrorIs(t, err, errTest)
+	assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+	assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+	oe.AssertNumberOfCalls(t, "Teardown", 2)
+}
+
 type objectEngineMock struct {
 	mock.Mock
 }

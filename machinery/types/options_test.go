@@ -585,6 +585,50 @@ func TestWithOrphan(t *testing.T) {
 	})
 }
 
+func TestWithAggregatePhaseReconcileErrors(t *testing.T) {
+	t.Parallel()
+
+	opt := WithAggregatePhaseReconcileErrors()
+
+	t.Run("applies to phase reconcile options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseReconcileOptions{}
+		opt.ApplyToPhaseReconcileOptions(opts)
+		assert.True(t, opts.AggregateErrors)
+	})
+
+	t.Run("applies to revision reconcile options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionReconcileOptions{}
+		opt.ApplyToRevisionReconcileOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
+func TestWithAggregatePhaseTeardownErrors(t *testing.T) {
+	t.Parallel()
+
+	opt := WithAggregatePhaseTeardownErrors()
+
+	t.Run("applies to phase teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseTeardownOptions{}
+		opt.ApplyToPhaseTeardownOptions(opts)
+		assert.True(t, opts.AggregateErrors)
+	})
+
+	t.Run("applies to revision teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionTeardownOptions{}
+		opt.ApplyToRevisionTeardownOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
 func TestWithTeardownWriter(t *testing.T) {
 	t.Parallel()
 

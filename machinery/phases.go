@@ -145,11 +145,20 @@ func (e *PhaseEngine) Teardown(
 
 	res := &phaseTeardownResult{name: phase.GetName()}
 
+	var errs []error
+
 	for _, obj := range phase.GetObjects() {
 		gone, err := e.objectEngine.Teardown(
 			ctx, revision, obj, options.ForObject(obj)...)
 		if err != nil {
-			return res, fmt.Errorf("teardown object: %w", err)
+			err = fmt.Errorf("teardown %s: %w", types.ToObjectRef(obj), err)
+			if options.AggregateErrors {
+				errs = append(errs, err)
+
+				continue
+			} else {
+				return res, err
+			}
 		}
 
 		if gone {
@@ -159,7 +168,7 @@ func (e *PhaseEngine) Teardown(
 		}
 	}
 
-	return res, nil
+	return res, errors.Join(errs...)
 }
 
 // Reconcile runs actions to bring actual state closer to desired.
@@ -194,17 +203,26 @@ func (e *PhaseEngine) Reconcile(
 	}
 
 	// Reconcile
+	var errs []error
+
 	for _, obj := range phase.GetObjects() {
 		ores, err := e.objectEngine.Reconcile(
 			ctx, revision, obj, options.ForObject(obj)...)
 		if err != nil {
-			return pres, fmt.Errorf("reconciling object: %w", err)
+			err = fmt.Errorf("reconciling %s: %w", types.ToObjectRef(obj), err)
+			if options.AggregateErrors {
+				errs = append(errs, err)
+
+				continue
+			} else {
+				return pres, err
+			}
 		}
 
 		pres.objects = append(pres.objects, ores)
 	}
 
-	return pres, nil
+	return pres, errors.Join(errs...)
 }
 
 // PhaseResult interface to access results of phase reconcile.
