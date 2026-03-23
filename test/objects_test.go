@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -371,4 +372,85 @@ Probes:
 	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
 	require.NoError(t, err)
 	assert.True(t, gone)
+}
+
+// TestObjectEngine_StaleManagedFieldMigration verifies that boxcutter can
+// reconcile a new revision when the actual object has a stale "Update"
+// managed field entry for the same field manager alongside the normal "Apply"
+// entry. This situation can occur when the post-Create CSA migration fails for
+// any reason, but in particular if it races with another controller (e.g. CA
+// bundle injection on a CRD).
+func TestObjectEngine_StaleManagedFieldMigration(t *testing.T) {
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
+	oe := machinery.NewObjectEngine(
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
+	)
+
+	ctx := t.Context()
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "oe-test-migrate",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key": "value",
+			},
+		},
+	}
+	cleanupOnSuccess(t, configMap)
+
+	// Delete any leftover from a previous failed run.
+	require.NoError(t, client.IgnoreNotFound(Client.Delete(ctx, configMap.DeepCopy())))
+
+	// Step 1: Create the object with revision 1.
+	res, err := oe.Reconcile(ctx, 1, configMap)
+	require.NoError(t, err)
+	assert.Equal(t, machinery.ActionCreated, res.Action())
+
+	// Step 2: Inject a stale "Update" managed field entry for our field owner.
+	// This simulates what happens when the post-Create CSA migration fails due
+	// to a concurrent modification.
+	cmPatch := configMap.DeepCopy()
+	err = Client.Patch(ctx, cmPatch,
+		client.RawPatch(machinerytypes.MergePatchType,
+			[]byte(`{"data":{"injected":"stale"}}`)),
+		client.FieldOwner(fieldOwner))
+	require.NoError(t, err)
+
+	// Verify the stale Update entry was created alongside the Apply entry.
+	hasUpdateEntry := false
+
+	for _, mf := range cmPatch.GetManagedFields() {
+		if mf.Manager == fieldOwner && mf.Operation == metav1.ManagedFieldsOperationUpdate {
+			hasUpdateEntry = true
+
+			break
+		}
+	}
+
+	require.True(t, hasUpdateEntry, "expected a stale Update managed field entry for %q after MergePatch", fieldOwner)
+
+	// Step 3: Reconcile with revision 2. The revision annotation changes from
+	// "1" to "2", triggering the ctrlSituationIsController modified path which
+	// does an SSA Apply without ForceOwnership. Without the fix, this fails
+	// with "Apply failed with 1 conflict" because the stale Update entry owns
+	// the revision annotation field.
+	res, err = oe.Reconcile(ctx, 2, configMap)
+	require.NoError(t, err, "reconcile with new revision should succeed after migrating stale Update managed field entry")
+	assert.Equal(t, machinery.ActionUpdated, res.Action())
+
+	// Verify the stale Update managed field entry was migrated away.
+	actual := configMap.DeepCopy()
+	require.NoError(t, Client.Get(ctx, client.ObjectKeyFromObject(configMap), actual))
+
+	for _, mf := range actual.GetManagedFields() {
+		if mf.Manager == fieldOwner {
+			assert.Equal(t, metav1.ManagedFieldsOperationApply, mf.Operation,
+				"expected only Apply entries for field owner %q, found %s", fieldOwner, mf.Operation)
+		}
+	}
 }
