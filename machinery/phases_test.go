@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -150,6 +151,164 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	assert.True(t, deleted.IsComplete())
 	assert.Empty(t, deleted.Waiting())
 	assert.Len(t, deleted.Gone(), 2)
+}
+
+func TestPhaseEngine_AggregateErrors(t *testing.T) {
+	t.Parallel()
+
+	obj1 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]any{
+				"name":      "secret1",
+				"namespace": "test",
+			},
+		},
+	}
+	obj2 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "cm1",
+				"namespace": "test",
+			},
+		},
+	}
+
+	t.Run("Reconcile", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name             string
+			obj1Error        error
+			obj2Error        error
+			expectedCalls    int
+			checkTooManyReqs bool
+			checkObjRefs     bool
+		}{
+			{
+				name:          "aggregates multiple errors",
+				obj1Error:     errTest,
+				obj2Error:     errTest,
+				expectedCalls: 2,
+				checkObjRefs:  true,
+			},
+			{
+				name:             "short-circuits on TooManyRequests",
+				obj1Error:        apierrors.NewTooManyRequests("slow down", 5),
+				obj2Error:        errTest,
+				expectedCalls:    1,
+				checkTooManyReqs: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				oe := &objectEngineMock{}
+				pv := &phaseValidatorMock{}
+				pe := NewPhaseEngine(oe, pv)
+
+				var revision int64 = 1
+
+				pv.
+					On("Validate", mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+				oe.On("Reconcile", mock.Anything, revision, obj1, mock.Anything).
+					Return(ObjectResultCreated{}, tt.obj1Error)
+				oe.On("Reconcile", mock.Anything, revision, obj2, mock.Anything).
+					Return(ObjectResultCreated{}, tt.obj2Error)
+
+				_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+					"test",
+					[]client.Object{obj1, obj2},
+				), types.WithAggregatePhaseReconcileErrors())
+
+				require.Error(t, err)
+
+				if tt.checkTooManyReqs {
+					assert.True(t, apierrors.IsTooManyRequests(err))
+				} else {
+					require.ErrorIs(t, err, errTest)
+
+					if tt.checkObjRefs {
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+					}
+				}
+
+				oe.AssertNumberOfCalls(t, "Reconcile", tt.expectedCalls)
+			})
+		}
+	})
+
+	t.Run("Teardown", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name             string
+			obj1Error        error
+			obj2Error        error
+			expectedCalls    int
+			checkTooManyReqs bool
+			checkObjRefs     bool
+		}{
+			{
+				name:          "aggregates multiple errors",
+				obj1Error:     errTest,
+				obj2Error:     errTest,
+				expectedCalls: 2,
+				checkObjRefs:  true,
+			},
+			{
+				name:             "short-circuits on TooManyRequests",
+				obj1Error:        apierrors.NewTooManyRequests("slow down", 5),
+				obj2Error:        errTest,
+				expectedCalls:    1,
+				checkTooManyReqs: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				oe := &objectEngineMock{}
+				pv := &phaseValidatorMock{}
+				pe := NewPhaseEngine(oe, pv)
+
+				var revision int64 = 1
+
+				oe.On("Teardown", mock.Anything, revision, obj1, mock.Anything).
+					Return(false, tt.obj1Error)
+				oe.On("Teardown", mock.Anything, revision, obj2, mock.Anything).
+					Return(false, tt.obj2Error)
+
+				_, err := pe.Teardown(t.Context(), revision, types.NewPhase(
+					"test",
+					[]client.Object{obj1, obj2},
+				), types.WithAggregatePhaseTeardownErrors())
+
+				require.Error(t, err)
+
+				if tt.checkTooManyReqs {
+					assert.True(t, apierrors.IsTooManyRequests(err))
+				} else {
+					require.ErrorIs(t, err, errTest)
+
+					if tt.checkObjRefs {
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+					}
+				}
+
+				oe.AssertNumberOfCalls(t, "Teardown", tt.expectedCalls)
+			})
+		}
+	})
 }
 
 type objectEngineMock struct {
