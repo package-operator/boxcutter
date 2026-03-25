@@ -634,6 +634,37 @@ func (e *ObjectEngine) migrateFieldManagersToSSA(
 		return nil
 	}
 
+	err = e.writer.Patch(ctx, object, client.RawPatch(
+		machinerytypes.JSONPatchType, patch))
+	if err == nil {
+		return nil
+	}
+	if !errors.IsConflict(err) {
+		return fmt.Errorf("update field managers: %w", err)
+	}
+
+	// The patch includes a resourceVersion replace operation for optimistic
+	// locking. A conflict means the object was modified between when we read
+	// it and when we applied the patch (e.g., apiextensions-apiserver updating
+	// CRD status immediately after creation). Re-read the object to get the
+	// latest managedFields and resourceVersion, recompute, and retry once.
+	reader, ok := e.writer.(client.Reader)
+	if !ok {
+		reader = e.cache
+	}
+	if readErr := reader.Get(ctx, client.ObjectKeyFromObject(object), object); readErr != nil {
+		return fmt.Errorf("update field managers: %w (re-read after conflict: %w)", err, readErr)
+	}
+
+	patch, err = csaupgrade.UpgradeManagedFieldsPatch(
+		object, sets.New(e.fieldOwner), e.fieldOwner)
+	switch {
+	case err != nil:
+		return fmt.Errorf("update field managers after conflict retry: %w", err)
+	case len(patch) == 0:
+		return nil
+	}
+
 	if err := e.writer.Patch(ctx, object, client.RawPatch(
 		machinerytypes.JSONPatchType, patch)); err != nil {
 		return fmt.Errorf("update field managers: %w", err)

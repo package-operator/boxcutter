@@ -1444,6 +1444,219 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 	writer.AssertNotCalled(t, "Patch")
 }
 
+func TestObjectEngine_MigrateFieldManagersToSSA_ConflictRetry(t *testing.T) {
+	t.Parallel()
+
+	csaManagedFields := []metav1.ManagedFieldsEntry{
+		{
+			Manager:    testFieldOwner,
+			Operation:  metav1.ManagedFieldsOperationUpdate,
+			APIVersion: "v1",
+			FieldsType: "FieldsV1",
+			FieldsV1:   &metav1.FieldsV1{Raw: []byte(`{"f:metadata":{"f:labels":{}}}`)},
+		},
+	}
+
+	t.Run("retries on conflict and succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		writer := testutil.NewClient()
+		cache := &cacheMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			&comparatorMock{},
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test",
+					"namespace":       "test",
+					"resourceVersion": "1",
+				},
+			},
+		}
+		obj.SetManagedFields(csaManagedFields)
+
+		conflictErr := apierrors.NewConflict(
+			schema.GroupResource{Resource: "secrets"}, "test",
+			errors.New("the object has been modified"))
+
+		writer.
+			On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(conflictErr).Once()
+		writer.
+			On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(nil).Once()
+
+		// writer implements client.Reader, so it will be used for re-read
+		writer.
+			On("Get", mock.Anything,
+				client.ObjectKey{Name: "test", Namespace: "test"},
+				mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				o := args.Get(2).(*unstructured.Unstructured)
+				o.SetResourceVersion("2")
+				o.SetManagedFields(csaManagedFields)
+			}).
+			Return(nil)
+
+		err := oe.migrateFieldManagersToSSA(t.Context(), obj)
+		require.NoError(t, err)
+		writer.AssertNumberOfCalls(t, "Patch", 2)
+	})
+
+	t.Run("retries on conflict and migration no longer needed", func(t *testing.T) {
+		t.Parallel()
+
+		writer := testutil.NewClient()
+		cache := &cacheMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			&comparatorMock{},
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test",
+					"namespace":       "test",
+					"resourceVersion": "1",
+				},
+			},
+		}
+		obj.SetManagedFields(csaManagedFields)
+
+		conflictErr := apierrors.NewConflict(
+			schema.GroupResource{Resource: "secrets"}, "test",
+			errors.New("the object has been modified"))
+
+		writer.
+			On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(conflictErr).Once()
+
+		// After re-read, managed fields are already SSA — no migration needed
+		ssaManagedFields := []metav1.ManagedFieldsEntry{
+			{
+				Manager:    testFieldOwner,
+				Operation:  metav1.ManagedFieldsOperationApply,
+				APIVersion: "v1",
+				FieldsType: "FieldsV1",
+				FieldsV1:   &metav1.FieldsV1{Raw: []byte(`{"f:metadata":{"f:labels":{}}}`)},
+			},
+		}
+		writer.
+			On("Get", mock.Anything,
+				client.ObjectKey{Name: "test", Namespace: "test"},
+				mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				o := args.Get(2).(*unstructured.Unstructured)
+				o.SetResourceVersion("2")
+				o.SetManagedFields(ssaManagedFields)
+			}).
+			Return(nil)
+
+		err := oe.migrateFieldManagersToSSA(t.Context(), obj)
+		require.NoError(t, err)
+	})
+
+	t.Run("returns original error when re-read fails", func(t *testing.T) {
+		t.Parallel()
+
+		writer := testutil.NewClient()
+		cache := &cacheMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			&comparatorMock{},
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test",
+					"namespace":       "test",
+					"resourceVersion": "1",
+				},
+			},
+		}
+		obj.SetManagedFields(csaManagedFields)
+
+		conflictErr := apierrors.NewConflict(
+			schema.GroupResource{Resource: "secrets"}, "test",
+			errors.New("the object has been modified"))
+
+		writer.
+			On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(conflictErr)
+		writer.
+			On("Get", mock.Anything,
+				client.ObjectKey{Name: "test", Namespace: "test"},
+				mock.Anything, mock.Anything).
+			Return(errors.New("read failure"))
+
+		err := oe.migrateFieldManagersToSSA(t.Context(), obj)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "update field managers")
+		assert.Contains(t, err.Error(), "re-read after conflict")
+	})
+
+	t.Run("does not retry non-conflict errors", func(t *testing.T) {
+		t.Parallel()
+
+		writer := testutil.NewClient()
+		cache := &cacheMock{}
+
+		oe := NewObjectEngine(
+			scheme.Scheme,
+			cache, writer,
+			&comparatorMock{},
+			testFieldOwner,
+			testSystemPrefix,
+		)
+
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":            "test",
+					"namespace":       "test",
+					"resourceVersion": "1",
+				},
+			},
+		}
+		obj.SetManagedFields(csaManagedFields)
+
+		writer.
+			On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(errors.New("some other error"))
+
+		err := oe.migrateFieldManagersToSSA(t.Context(), obj)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "update field managers")
+		assert.Contains(t, err.Error(), "some other error")
+		writer.AssertNotCalled(t, "Get")
+	})
+}
+
 type cacheMock struct {
 	testutil.CtrlClient
 }
