@@ -229,7 +229,7 @@ func TestObjectEngine(t *testing.T) {
 			},
 			expectedAction: ActionCreated,
 		},
-		{ //nolint:dupl
+		{
 			name:           "Idle",
 			revision:       1,
 			desiredObject:  buildObj("testi", "test"),
@@ -326,12 +326,13 @@ func TestObjectEngine(t *testing.T) {
 			},
 			expectedAction: ActionRecovered,
 		},
-		{ //nolint:dupl
+		{
 			name:           "Progressed",
 			revision:       1,
 			desiredObject:  buildObj("testi", "test"),
 			actualObject:   buildObj("testi", "test", withRevision("4"), withManaged),
 			expectedObject: buildObj("testi", "test", withRevision("4"), withManaged),
+			modes:          []ownerMode{withNativeOwnerMode},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
 				ddm *comparatorMock, actualObject *unstructured.Unstructured,
@@ -353,6 +354,95 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 			},
 			expectedAction: ActionProgressed,
+		},
+		{
+			name:          "Progressed - previousOwner higher revision",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "ConfigMap", "old-owner", "6789", true)),
+			expectedObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "ConfigMap", "old-owner", "6789", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			opts: []types.ObjectReconcileOption{
+				types.WithPreviousOwners{&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						UID: "6789", Name: "old-owner", Namespace: "test",
+					},
+				}},
+			},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				ddm *comparatorMock, actualObject *unstructured.Unstructured,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				ddm.
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
+			},
+			expectedAction: ActionProgressed,
+		},
+		{
+			name:          "Collision - unknown controller higher revision",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "Node", "node1", "xxxx", true)),
+			expectedObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "Node", "node1", "xxxx", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				ddm *comparatorMock, actualObject *unstructured.Unstructured,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				ddm.
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
+			},
+			expectedAction: ActionCollision,
+		},
+		{
+			name:           "Collision - no controller higher revision boxcutter managed",
+			revision:       1,
+			desiredObject:  buildObj("testi", "test"),
+			actualObject:   buildObj("testi", "test", withRevision("4"), withBoxcutterManagedLabel),
+			expectedObject: buildObj("testi", "test", withRevision("4"), withBoxcutterManagedLabel),
+			modes:          []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, _ *testutil.CtrlClient,
+				ddm *comparatorMock, actualObject *unstructured.Unstructured,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				ddm.
+					On("Compare", mock.Anything, mock.Anything, mock.Anything).
+					Return(CompareResult{}, nil)
+			},
+			expectedAction: ActionCollision,
 		},
 		{
 			name:           "Updated noController CollisionProtectionIfNoController",
