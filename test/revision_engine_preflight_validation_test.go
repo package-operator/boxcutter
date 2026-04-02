@@ -47,7 +47,7 @@ func TestWithOwnerReference(t *testing.T) {
 				},
 			}
 
-			re := newTestRevisionEngine()
+			re := newTestRevisionEngineBuilder().build(t)
 			res, err := re.Reconcile(ctx, boxcutter.NewRevisionWithOwner(
 				"test-collision-prevention-invalid-set", 1,
 				[]boxcutter.Phase{

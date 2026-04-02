@@ -230,13 +230,14 @@ func (c *Reconciler) handleRevision(
 	}
 
 	re, err := boxcutter.NewRevisionEngine(boxcutter.RevisionEngineOptions{
-		Scheme:          c.scheme,
-		FieldOwner:      fieldOwner,
-		SystemPrefix:    systemPrefix,
-		DiscoveryClient: c.discoveryClient,
-		RestMapper:      c.restMapper,
-		Writer:          accessor,
-		Reader:          accessor,
+		Scheme:           c.scheme,
+		FieldOwner:       fieldOwner,
+		SystemPrefix:     systemPrefix,
+		DiscoveryClient:  c.discoveryClient,
+		RestMapper:       c.restMapper,
+		Writer:           accessor,
+		Reader:           accessor,
+		UnfilteredReader: accessor.UnfilteredReader(),
 	})
 	if err != nil {
 		return res, fmt.Errorf("new revision engine: %w", err)

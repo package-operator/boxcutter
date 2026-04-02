@@ -55,7 +55,7 @@ func TestRevisionEngine(t *testing.T) {
 
 	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix, nil,
 	)
 	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)

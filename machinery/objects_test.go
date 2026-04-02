@@ -868,6 +868,7 @@ func TestObjectEngine(t *testing.T) {
 					divergeDetector,
 					testFieldOwner,
 					testSystemPrefix,
+					nil,
 				)
 
 				desiredObject := tc.desiredObject(&mode)
@@ -953,6 +954,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 			divergeDetector,
 			testFieldOwner,
 			testSystemPrefix,
+			nil,
 		)
 
 		// Use a typed object (not unstructured)
@@ -1368,6 +1370,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					divergeDetector,
 					testFieldOwner,
 					testSystemPrefix,
+					nil,
 				)
 
 				desiredObject := tc.desiredObject(&mode)
@@ -1433,6 +1436,7 @@ func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
 		&comparatorMock{},
 		"test-owner",
 		"test-prefix",
+		nil,
 	)
 
 	tests := []struct {
@@ -1484,6 +1488,7 @@ func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
 		&comparatorMock{},
 		testFieldOwner,
 		testSystemPrefix,
+		nil,
 	)
 
 	obj := &unstructured.Unstructured{
@@ -1515,6 +1520,7 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 		&comparatorMock{},
 		testFieldOwner,
 		testSystemPrefix,
+		nil,
 	)
 
 	obj := &unstructured.Unstructured{
