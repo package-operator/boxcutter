@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-logr/logr v1.4.3
-	github.com/google/cel-go v0.27.0
+	github.com/google/cel-go v0.28.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
 	k8s.io/api v0.35.3
