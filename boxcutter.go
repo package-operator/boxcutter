@@ -137,6 +137,9 @@ type RevisionEngineOptions struct {
 
 	// Optional
 
+	// ManagedBy is the value to use for the app.kubernetes.io/managed-by label.
+	// If unset, defaults to "boxcutter".
+	ManagedBy string
 	// UnfilteredReader is a client.Reader which is not subject to filtering
 	// which may be applied to Reader if it is cached using object selectors.
 	// UnfilteredReader is used rarely in edge cases that do not persist, so it
@@ -163,7 +166,7 @@ func NewPhaseEngine(opts RevisionEngineOptions) (*machinery.PhaseEngine, error) 
 	oe := machinery.NewObjectEngine(
 		opts.Scheme, opts.Reader, opts.Writer,
 		comp, opts.FieldOwner, opts.SystemPrefix,
-		opts.UnfilteredReader,
+		opts.ManagedBy, opts.UnfilteredReader,
 	)
 
 	return machinery.NewPhaseEngine(oe, opts.PhaseValidator), nil
@@ -184,7 +187,7 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 	oe := machinery.NewObjectEngine(
 		opts.Scheme, opts.Reader, opts.Writer,
 		comp, opts.FieldOwner, opts.SystemPrefix,
-		opts.UnfilteredReader,
+		opts.ManagedBy, opts.UnfilteredReader,
 	)
 	pe := machinery.NewPhaseEngine(oe, pval)
 
