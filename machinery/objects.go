@@ -29,6 +29,7 @@ type ObjectEngine struct {
 
 	fieldOwner   string
 	systemPrefix string
+	managedBy    string
 
 	// unfilteredReader is a client.Reader which is not subject to filtering
 	// which may have been applied to cache. unfilteredReader MUST ONLY be used
@@ -48,9 +49,14 @@ func NewObjectEngine(
 
 	fieldOwner string,
 	systemPrefix string,
+	managedBy string,
 
 	unfilteredReader client.Reader, // may be nil
 ) *ObjectEngine {
+	if managedBy == "" {
+		managedBy = managedByLabelDefaultValue
+	}
+
 	return &ObjectEngine{
 		scheme:           scheme,
 		cache:            cache,
@@ -60,6 +66,7 @@ func NewObjectEngine(
 
 		fieldOwner:   fieldOwner,
 		systemPrefix: systemPrefix,
+		managedBy:    managedBy,
 	}
 }
 
@@ -86,9 +93,9 @@ type comparator interface {
 }
 
 const (
-	managedByLabel        string = "app.kubernetes.io/managed-by"
-	managedByLabelValue   string = "boxcutter"
-	boxcutterManagedLabel string = "boxcutter-managed"
+	managedByLabel             string = "app.kubernetes.io/managed-by"
+	managedByLabelDefaultValue string = "boxcutter"
+	boxcutterManagedLabel      string = "boxcutter-managed"
 )
 
 // Teardown ensures the given object is safely removed from the cluster.
@@ -205,7 +212,7 @@ func (e *ObjectEngine) Reconcile(
 		labels = map[string]string{}
 	}
 
-	labels[managedByLabel] = managedByLabelValue
+	labels[managedByLabel] = e.managedBy
 	desiredObject.SetLabels(labels)
 
 	options.Default()
@@ -522,15 +529,10 @@ func (e *ObjectEngine) objectUpdateHandling(
 // It's only purpose is to prevent boxcutter immediately re-adopting objects when
 // resources get orphaned by the GC.
 func (e *ObjectEngine) isBoxcutterManaged(obj client.Object) bool {
-	labels := obj.GetLabels()
 	annotations := obj.GetAnnotations()
-
 	_, hasRevisionAnnotation := annotations[e.revisionAnnotation()]
-	if labels[managedByLabel] == managedByLabelValue && hasRevisionAnnotation {
-		return true
-	}
 
-	return false
+	return hasRevisionAnnotation
 }
 
 func (e *ObjectEngine) create(
@@ -696,10 +698,7 @@ func (e *ObjectEngine) removeBoxcutterManagedLabelsAndAnnotations(
 	obj.SetAnnotations(annotations)
 
 	labels := updated.GetLabels()
-	if l, ok := labels[managedByLabel]; ok && l == managedByLabelValue {
-		delete(labels, managedByLabel)
-	}
-
+	delete(labels, managedByLabel)
 	delete(labels, boxcutterManagedLabel)
 
 	updated.SetLabels(labels)

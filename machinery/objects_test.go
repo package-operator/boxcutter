@@ -124,7 +124,7 @@ func setBoxcutterManagedLabel(obj *unstructured.Unstructured) {
 		labels = map[string]string{}
 	}
 
-	labels[managedByLabel] = managedByLabelValue
+	labels[managedByLabel] = managedByLabelDefaultValue
 	obj.SetLabels(labels)
 }
 
@@ -444,7 +444,7 @@ func TestObjectEngine(t *testing.T) {
 			},
 			expectedAction: ActionCollision,
 		},
-		{
+		{ //nolint:dupl // Similar to CollisionProtectionNone test
 			name:           "Updated noController CollisionProtectionIfNoController",
 			revision:       1,
 			desiredObject:  buildObj("testi", "test"),
@@ -672,11 +672,11 @@ func TestObjectEngine(t *testing.T) {
 			},
 			expectedAction: ActionCollision,
 		},
-		{
+		{ //nolint:dupl // Similar to CollisionProtectionIfNoController test
 			name:           "Updated, CollisionProtectionNone",
 			revision:       1,
 			desiredObject:  buildObj("testi", "test"),
-			actualObject:   buildObj("testi", "test", withRevision("1")),
+			actualObject:   buildObj("testi", "test"),
 			expectedObject: buildObj("testi", "test", withRevision("1"), withManaged),
 			opts: []types.ObjectReconcileOption{
 				types.WithCollisionProtection(types.CollisionProtectionNone),
@@ -868,6 +868,7 @@ func TestObjectEngine(t *testing.T) {
 					divergeDetector,
 					testFieldOwner,
 					testSystemPrefix,
+					"",
 					nil,
 				)
 
@@ -954,6 +955,7 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 			divergeDetector,
 			testFieldOwner,
 			testSystemPrefix,
+			"",
 			nil,
 		)
 
@@ -1370,6 +1372,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					divergeDetector,
 					testFieldOwner,
 					testSystemPrefix,
+					"",
 					nil,
 				)
 
@@ -1426,7 +1429,7 @@ func TestObjectEngine_Teardown_SanityChecks(t *testing.T) {
 	})
 }
 
-func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
+func TestObjectEngine_IsBoxcutterManaged(t *testing.T) {
 	t.Parallel()
 
 	engine := NewObjectEngine(
@@ -1436,20 +1439,25 @@ func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
 		&comparatorMock{},
 		"test-owner",
 		"test-prefix",
+		"",
 		nil,
 	)
 
 	tests := []struct {
-		name   string
-		labels map[string]string
+		name        string
+		labels      map[string]string
+		annotations map[string]string
+		expected    bool
 	}{
 		{
-			name:   "no labels",
-			labels: nil,
+			name:     "no labels or annotations",
+			labels:   nil,
+			expected: false,
 		},
 		{
-			name:   "empty labels",
-			labels: map[string]string{},
+			name:     "empty labels",
+			labels:   map[string]string{},
+			expected: false,
 		},
 		{
 			name: "other labels only",
@@ -1457,12 +1465,42 @@ func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
 				"app": "myapp",
 				"env": "prod",
 			},
+			expected: false,
 		},
 		{
 			name: "contains but doesn't start with prefix",
 			labels: map[string]string{
 				"my-test-prefix-managed": "true",
 			},
+			expected: false,
+		},
+		{
+			name:   "revision annotation only, no labels",
+			labels: nil,
+			annotations: map[string]string{
+				"test-prefix/revision": "1",
+			},
+			expected: true,
+		},
+		{
+			name: "revision annotation with managed-by label",
+			labels: map[string]string{
+				managedByLabel: managedByLabelDefaultValue,
+			},
+			annotations: map[string]string{
+				"test-prefix/revision": "1",
+			},
+			expected: true,
+		},
+		{
+			name: "revision annotation with unrelated labels",
+			labels: map[string]string{
+				"app": "myapp",
+			},
+			annotations: map[string]string{
+				"test-prefix/revision": "3",
+			},
+			expected: true,
 		},
 	}
 
@@ -1472,10 +1510,58 @@ func TestObjectEngine_IsBoxcutterManaged_FalseCase(t *testing.T) {
 
 			obj := &unstructured.Unstructured{}
 			obj.SetLabels(tt.labels)
+			obj.SetAnnotations(tt.annotations)
 
-			assert.False(t, engine.isBoxcutterManaged(obj))
+			assert.Equal(t, tt.expected, engine.isBoxcutterManaged(obj))
 		})
 	}
+}
+
+func TestObjectEngine_CustomManagedByLabel(t *testing.T) {
+	t.Parallel()
+
+	cache := &cacheMock{}
+	writer := testutil.NewClient()
+	divergeDetector := &comparatorMock{}
+
+	engine := NewObjectEngine(
+		scheme.Scheme,
+		cache, writer,
+		divergeDetector,
+		testFieldOwner,
+		testSystemPrefix,
+		"my-custom-operator",
+		nil,
+	)
+
+	desiredObject := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      "test-custom-managed-by",
+				"namespace": "test",
+			},
+		},
+	}
+
+	cache.
+		On("Get", mock.Anything,
+			client.ObjectKey{Name: "test-custom-managed-by", Namespace: "test"},
+			mock.Anything, mock.Anything).
+		Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+	divergeDetector.
+		On("Compare", mock.Anything, mock.Anything, mock.Anything).
+		Return(CompareResult{}, nil)
+	writer.
+		On("Create", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	_, err := engine.Reconcile(t.Context(), 1, desiredObject)
+	require.NoError(t, err)
+
+	// Verify the managed-by label was set to our custom value.
+	assert.Equal(t, "my-custom-operator", desiredObject.GetLabels()[managedByLabel])
 }
 
 func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
@@ -1488,6 +1574,7 @@ func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
 		&comparatorMock{},
 		testFieldOwner,
 		testSystemPrefix,
+		"",
 		nil,
 	)
 
@@ -1520,6 +1607,7 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 		&comparatorMock{},
 		testFieldOwner,
 		testSystemPrefix,
+		"",
 		nil,
 	)
 
