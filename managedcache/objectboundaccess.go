@@ -324,7 +324,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 	}
 
 	// start cache
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // Cancel function is used.
 	a := &accessor{
 		TrackingCache:    ctrlcache,
 		Writer:           client,
