@@ -357,27 +357,22 @@ func (e *ObjectEngine) objectUpdateHandling(
 		return nil, err
 	}
 
-	// Get actual revision to ensure revision linearity
+	// Ensure revision linearity.
 	actualObjectRevision, err := e.getObjectRevision(actualObject)
 	if err != nil {
 		return nil, fmt.Errorf("getting revision of object: %w", err)
 	}
 
+	if actualObjectRevision > revision {
+		// Leave object alone.
+		// It's already owned by a later revision.
+		return newObjectResultProgressed(
+			actualObject, compareRes, options,
+		), nil
+	}
+
 	switch ctrlSit {
 	case ctrlSituationIsController:
-		// Ensure revision linearity.
-		// Only skip reconciliation for a newer revision when we are
-		// already the controller or a previous owner is the controller.
-		// For unknown or absent controllers, collision protection must
-		// be evaluated first.
-		if actualObjectRevision > revision {
-			// Leave object alone.
-			// It's already owned by a later revision.
-			return newObjectResultProgressed(
-				actualObject, compareRes, options,
-			), nil
-		}
-
 		modified := compareRes.Comparison != nil &&
 			(!compareRes.Comparison.Modified.Empty() ||
 				!compareRes.Comparison.Removed.Empty())
@@ -479,13 +474,6 @@ func (e *ObjectEngine) objectUpdateHandling(
 	// This means we want to take control, but
 	// retain older revisions ownerReferences,
 	// so they can still react to events.
-
-	// Ensure revision linearity
-	if actualObjectRevision > revision {
-		return newObjectResultProgressed(
-			actualObject, compareRes, options,
-		), nil
-	}
 
 	// TODO:
 	// ObjectResult ModifiedFields does not contain ownerReference changes
