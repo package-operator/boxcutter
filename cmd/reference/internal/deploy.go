@@ -421,7 +421,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	)
 
 	opts = []boxcutter.RevisionReconcileOption{
-		boxcutter.WithPreviousOwners(previous),
+		boxcutter.WithSiblingOwners(previous),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,
 			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {

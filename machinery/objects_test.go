@@ -204,6 +204,24 @@ func TestObjectEngine(t *testing.T) {
 		afterAssert func(t *testing.T, writer *testutil.CtrlClient)
 	}
 
+	mockSetupCacheGetAndCompare := func(
+		cache *cacheMock, _ *testutil.CtrlClient,
+		ddm *comparatorMock, actualObject *unstructured.Unstructured,
+	) {
+		cache.
+			On("Get", mock.Anything,
+				client.ObjectKeyFromObject(actualObject),
+				mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				obj := args.Get(2).(*unstructured.Unstructured)
+				*obj = *actualObject
+			}).
+			Return(nil)
+		ddm.
+			On("Compare", mock.Anything, mock.Anything, mock.Anything).
+			Return(CompareResult{}, nil)
+	}
+
 	sharedTests := []sharedTestCase{
 		{
 			name:           "Created",
@@ -327,11 +345,11 @@ func TestObjectEngine(t *testing.T) {
 			expectedAction: ActionRecovered,
 		},
 		{
-			name:           "Progressed",
+			name:           "Recovered - isController revision annotation drift",
 			revision:       1,
 			desiredObject:  buildObj("testi", "test"),
 			actualObject:   buildObj("testi", "test", withRevision("4"), withManaged),
-			expectedObject: buildObj("testi", "test", withRevision("4"), withManaged),
+			expectedObject: buildObj("testi", "test", withRevision("1"), withManaged),
 			modes:          []ownerMode{withNativeOwnerMode},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -348,15 +366,19 @@ func TestObjectEngine(t *testing.T) {
 					Return(nil)
 				ddm.
 					On("Compare", mock.Anything, mock.Anything, mock.Anything).
-					Return(CompareResult{}, nil)
+					Return(CompareResult{
+						ConflictingMangers: []CompareResultManagedFields{
+							{Manager: "external-patcher"},
+						},
+					}, nil)
 				writer.
-					On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
-			expectedAction: ActionProgressed,
+			expectedAction: ActionRecovered,
 		},
 		{
-			name:          "Progressed - previousOwner higher revision",
+			name:          "Progressed - sibling owner higher revision",
 			revision:      1,
 			desiredObject: buildObj("testi", "test"),
 			actualObject: buildObj("testi", "test", withRevision("4"),
@@ -365,29 +387,11 @@ func TestObjectEngine(t *testing.T) {
 				withOwnerRef("v1", "ConfigMap", "old-owner", "6789", true)),
 			modes: []ownerMode{withNativeOwnerMode},
 			opts: []types.ObjectReconcileOption{
-				types.WithPreviousOwners{&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						UID: "6789", Name: "old-owner", Namespace: "test",
-					},
-				}},
+				types.WithSiblingOwnerRefs([]metav1.OwnerReference{
+					{UID: "6789"},
+				}),
 			},
-			mockSetup: func(
-				cache *cacheMock, writer *testutil.CtrlClient,
-				ddm *comparatorMock, actualObject *unstructured.Unstructured,
-			) {
-				cache.
-					On("Get", mock.Anything,
-						client.ObjectKeyFromObject(actualObject),
-						mock.Anything, mock.Anything).
-					Run(func(args mock.Arguments) {
-						obj := args.Get(2).(*unstructured.Unstructured)
-						*obj = *actualObject
-					}).
-					Return(nil)
-				ddm.
-					On("Compare", mock.Anything, mock.Anything, mock.Anything).
-					Return(CompareResult{}, nil)
-			},
+			mockSetup:      mockSetupCacheGetAndCompare,
 			expectedAction: ActionProgressed,
 		},
 		{
@@ -442,6 +446,40 @@ func TestObjectEngine(t *testing.T) {
 					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
 			},
+			expectedAction: ActionCollision,
+		},
+		{
+			name:          "Progressed - sibling owner higher revision via classifier",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "ConfigMap", "future-owner", "9999", true)),
+			expectedObject: buildObj("testi", "test", withRevision("4"),
+				withOwnerRef("v1", "ConfigMap", "future-owner", "9999", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			opts: []types.ObjectReconcileOption{
+				types.WithSiblingOwnerRefs([]metav1.OwnerReference{
+					{UID: "9999"},
+				}),
+			},
+			mockSetup:      mockSetupCacheGetAndCompare,
+			expectedAction: ActionProgressed,
+		},
+		{
+			name:          "Collision - sibling owner same revision via classifier",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("1"),
+				withOwnerRef("v1", "ConfigMap", "future-owner", "9999", true)),
+			expectedObject: buildObj("testi", "test", withRevision("1"),
+				withOwnerRef("v1", "ConfigMap", "future-owner", "9999", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			opts: []types.ObjectReconcileOption{
+				types.WithSiblingOwnerClassifier(func(ownerRef metav1.OwnerReference) bool {
+					return ownerRef.UID == "9999"
+				}),
+			},
+			mockSetup:      mockSetupCacheGetAndCompare,
 			expectedAction: ActionCollision,
 		},
 		{ //nolint:dupl // Similar to CollisionProtectionNone test
@@ -528,20 +566,18 @@ func TestObjectEngine(t *testing.T) {
 			expectedError: "diverge check",
 		},
 		{
-			name:          "Updated takeover from previousOwner",
-			revision:      1,
+			name:          "Updated takeover from sibling owner",
+			revision:      2,
 			desiredObject: buildObj("testi", "test"),
 			actualObject: buildObj("testi", "test", withRevision("1"),
 				withOwnerRef("v1", "ConfigMap", "old-owner", "6789", true)),
-			expectedObject: buildObj("testi", "test", withRevision("1"),
+			expectedObject: buildObj("testi", "test", withRevision("2"),
 				withOwnerRef("v1", "ConfigMap", "old-owner", "6789", false), withManaged),
 			modes: []ownerMode{withNativeOwnerMode},
 			opts: []types.ObjectReconcileOption{
-				types.WithPreviousOwners{&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						UID: "6789", Name: "old-owner", Namespace: "test",
-					},
-				}},
+				types.WithSiblingOwnerRefs([]metav1.OwnerReference{
+					{UID: "6789"},
+				}),
 			},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
@@ -806,7 +842,7 @@ func TestObjectEngine(t *testing.T) {
 		},
 		{
 			name:          "Paused, takeover returns actual",
-			revision:      1,
+			revision:      2,
 			desiredObject: buildObj("testi", "test"),
 			actualObject: buildObj("testi", "test", withRevision("1"),
 				withResourceVersion("888"),
@@ -817,11 +853,9 @@ func TestObjectEngine(t *testing.T) {
 			modes: []ownerMode{withNativeOwnerMode},
 			opts: []types.ObjectReconcileOption{
 				types.WithPaused{},
-				types.WithPreviousOwners{&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						UID: "6789", Name: "old-owner", Namespace: "test",
-					},
-				}},
+				types.WithSiblingOwnerRefs([]metav1.OwnerReference{
+					{UID: "6789"},
+				}),
 			},
 			mockSetup: func(
 				cache *cacheMock, _ *testutil.CtrlClient,

@@ -144,6 +144,78 @@ Comparison:
 	assert.True(t, gone)
 }
 
+func TestObjectEngine_IsControllerRevisionAnnotationDrift(t *testing.T) {
+	os := ownerhandling.NewNative(Scheme)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
+	oe := machinery.NewObjectEngine(
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix, "", nil,
+	)
+
+	ctx := t.Context()
+	owner := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "oe-rev-drift-owner",
+				"namespace": "default",
+			},
+		},
+	}
+	require.NoError(t, Client.Create(ctx, owner, client.FieldOwner(fieldOwner)))
+	cleanupOnSuccess(t, owner)
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "oe-rev-drift-test",
+				"namespace": "default",
+			},
+			"data": map[string]interface{}{
+				"key": "value",
+			},
+		},
+	}
+
+	// Create the object at revision 1.
+	res, err := oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
+	require.NoError(t, err)
+	assert.Equal(t, machinery.ActionCreated, res.Action())
+
+	// Externally bump the revision annotation to "4".
+	err = Client.Patch(ctx,
+		configMap.DeepCopy(),
+		client.RawPatch(machinerytypes.MergePatchType, []byte(
+			`{"metadata":{"annotations":{"`+systemPrefix+`/revision":"4"}}}`,
+		)),
+	)
+	require.NoError(t, err)
+
+	// Reconcile revision 1 again — we're still the controller,
+	// so the comparator detects the annotation drift as a conflict
+	// (external field manager changed our field) and we recover.
+	res, err = oe.Reconcile(ctx, 1, configMap, types.WithOwner(owner, os))
+	require.NoError(t, err)
+	assert.Equal(t, machinery.ActionRecovered, res.Action())
+
+	// Verify the revision annotation is back to "1" on the cluster.
+	actual := &unstructured.Unstructured{}
+	actual.SetGroupVersionKind(configMap.GroupVersionKind())
+	require.NoError(t, Client.Get(ctx, client.ObjectKeyFromObject(configMap), actual))
+	assert.Equal(t, "1", actual.GetAnnotations()[systemPrefix+"/revision"])
+
+	// Cleanup.
+	gone, err := oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
+	require.NoError(t, err)
+	assert.False(t, gone)
+
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(owner, os))
+	require.NoError(t, err)
+	assert.True(t, gone)
+}
+
 func TestObjectEnginePaused(t *testing.T) {
 	os := ownerhandling.NewNative(Scheme)
 	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)

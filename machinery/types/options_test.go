@@ -253,48 +253,37 @@ func TestWithCollisionProtection(t *testing.T) {
 	})
 }
 
-func TestWithPreviousOwners(t *testing.T) {
+func TestWithSiblingOwnerClassifier(t *testing.T) {
 	t.Parallel()
 
-	owner1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner1",
-			Namespace: "test",
-		},
-	}
-	owner2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner2",
-			Namespace: "test",
-		},
-	}
-
-	previousOwners := WithPreviousOwners{owner1, owner2}
+	classifier := WithSiblingOwnerClassifier(func(ref metav1.OwnerReference) bool {
+		return ref.UID == "test-uid"
+	})
 
 	t.Run("applies to object reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &ObjectReconcileOptions{}
-		previousOwners.ApplyToObjectReconcileOptions(opts)
-		assert.Equal(t, []client.Object{owner1, owner2}, opts.PreviousOwners)
+		classifier.ApplyToObjectReconcileOptions(opts)
+		require.NotNil(t, opts.SiblingOwnerClassifier)
+		assert.True(t, opts.SiblingOwnerClassifier(metav1.OwnerReference{UID: "test-uid"}))
+		assert.False(t, opts.SiblingOwnerClassifier(metav1.OwnerReference{UID: "other-uid"}))
 	})
 
 	t.Run("applies to phase reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &PhaseReconcileOptions{}
-		previousOwners.ApplyToPhaseReconcileOptions(opts)
+		classifier.ApplyToPhaseReconcileOptions(opts)
 		require.Len(t, opts.DefaultObjectOptions, 1)
-		assert.Equal(t, previousOwners, opts.DefaultObjectOptions[0])
 	})
 
 	t.Run("applies to revision reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &RevisionReconcileOptions{}
-		previousOwners.ApplyToRevisionReconcileOptions(opts)
+		classifier.ApplyToRevisionReconcileOptions(opts)
 		require.Len(t, opts.DefaultPhaseOptions, 1)
-		assert.Equal(t, previousOwners, opts.DefaultPhaseOptions[0])
 	})
 }
 
@@ -540,19 +529,25 @@ func TestInterfaceImplementations(t *testing.T) {
 
 	var _ ObjectReconcileOption = WithPaused{}
 
-	var _ ObjectReconcileOption = WithPreviousOwners{}
+	var _ ObjectReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ ObjectReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 
 	var _ PhaseReconcileOption = WithCollisionProtection("")
 
 	var _ PhaseReconcileOption = WithPaused{}
 
-	var _ PhaseReconcileOption = WithPreviousOwners{}
+	var _ PhaseReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ PhaseReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 
 	var _ RevisionReconcileOption = WithCollisionProtection("")
 
 	var _ RevisionReconcileOption = WithPaused{}
 
-	var _ RevisionReconcileOption = WithPreviousOwners{}
+	var _ RevisionReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ RevisionReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 }
 
 func TestWithOrphan(t *testing.T) {
