@@ -287,6 +287,57 @@ func TestWithSiblingOwnerClassifier(t *testing.T) {
 	})
 }
 
+func TestWithSiblingOwnerConvenienceConstructors(t *testing.T) {
+	t.Parallel()
+
+	matchUID := metav1.OwnerReference{UID: "uid-1"}
+	unknownUID := metav1.OwnerReference{UID: "uid-unknown"}
+
+	applyClassifier := func(t *testing.T, classifier WithSiblingOwnerClassifier) SiblingOwnerClassifierFunc {
+		t.Helper()
+
+		opts := &ObjectReconcileOptions{}
+		classifier.ApplyToObjectReconcileOptions(opts)
+		require.NotNil(t, opts.SiblingOwnerClassifier)
+
+		return opts.SiblingOwnerClassifier
+	}
+
+	t.Run("WithSiblingOwners", func(t *testing.T) {
+		t.Parallel()
+
+		siblings := []client.Object{
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "uid-1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "uid-2"}},
+		}
+
+		classify := applyClassifier(t, WithSiblingOwners(siblings))
+		assert.True(t, classify(matchUID))
+		assert.True(t, classify(metav1.OwnerReference{UID: "uid-2"}))
+		assert.False(t, classify(unknownUID))
+
+		emptyClassify := applyClassifier(t, WithSiblingOwners([]client.Object{}))
+		assert.False(t, emptyClassify(matchUID))
+	})
+
+	t.Run("WithSiblingOwnerRefs", func(t *testing.T) {
+		t.Parallel()
+
+		refs := []metav1.OwnerReference{
+			{UID: "uid-1"},
+			{UID: "uid-2"},
+		}
+
+		classify := applyClassifier(t, WithSiblingOwnerRefs(refs))
+		assert.True(t, classify(matchUID))
+		assert.True(t, classify(metav1.OwnerReference{UID: "uid-2"}))
+		assert.False(t, classify(unknownUID))
+
+		emptyClassify := applyClassifier(t, WithSiblingOwnerRefs([]metav1.OwnerReference{}))
+		assert.False(t, emptyClassify(matchUID))
+	})
+}
+
 func TestWithPaused(t *testing.T) {
 	t.Parallel()
 
