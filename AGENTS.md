@@ -7,7 +7,7 @@ Run single unit tests with `go test -run '^TestName$' ./modulepath/`.
 Run the full unit test suite with `./do dev:unit`.
 Run single e2e tests with `./do dev:integration <golang test filter>`.
 Run the full e2e test suite with `./do dev:integration`. The test cluster MUST be removed with `./do dev:destroy` before rerunning e2e tests.
-Ensure no trailing whitespace in edited files but keep a trailing newline..
+Ensure no trailing whitespace in edited files but keep a trailing newline.
 Preserve existing code comments, do not remove or rewrite comments that are still relevant.
 Respect when a user tells you that a relevant repo is checked out relative to this project.
 
