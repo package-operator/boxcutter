@@ -33,20 +33,20 @@ func TestRevisionEngine(t *testing.T) {
 	obj1Probe := &stubProbe{status: probing.StatusFalse, messages: []string{"nope"}}
 	obj2Probe := &stubProbe{status: probing.StatusTrue}
 	obj1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-rev-obj-1",
 				"namespace": "default",
 			},
 		},
 	}
 	obj2 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-rev-obj-2",
 				"namespace": "default",
 			},

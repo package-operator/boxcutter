@@ -37,10 +37,10 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"phase1",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test1",
 										"namespace": "default",
 									},
@@ -52,10 +52,10 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"phase2",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test2",
 										"namespace": "default",
 									},
@@ -76,10 +76,10 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"Invalid_Phase_Name",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test1",
 										"namespace": "default",
 									},
@@ -101,9 +101,9 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"phase1",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"kind": "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test1",
 										"namespace": "default",
 									},
@@ -125,10 +125,10 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"phase1",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test1",
 										"namespace": "default",
 									},
@@ -140,10 +140,10 @@ func TestRevisionValidator_Validate(t *testing.T) {
 						"phase2",
 						[]client.Object{
 							&unstructured.Unstructured{
-								Object: map[string]interface{}{
+								Object: map[string]any{
 									"apiVersion": "v1",
 									"kind":       "ConfigMap",
-									"metadata": map[string]interface{}{
+									"metadata": map[string]any{
 										"name":      "test1",
 										"namespace": "default",
 									},
@@ -202,10 +202,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"phase1",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -217,10 +217,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"phase2",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test2",
 									"namespace": "default",
 								},
@@ -238,10 +238,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"Invalid_Phase_Name",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -259,9 +259,9 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"valid-phase",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"kind": "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -279,10 +279,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"phase1",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -294,10 +294,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"phase2",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -315,9 +315,9 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"Invalid_Phase_Name",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"kind": "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test1",
 									"namespace": "default",
 								},
@@ -329,10 +329,10 @@ func TestStaticValidateMultiplePhases(t *testing.T) {
 					"phase2",
 					[]client.Object{
 						&unstructured.Unstructured{
-							Object: map[string]interface{}{
+							Object: map[string]any{
 								"apiVersion": "v1",
 								"kind":       "ConfigMap",
-								"metadata": map[string]interface{}{
+								"metadata": map[string]any{
 									"name":      "test2",
 									"namespace": "default",
 									"uid":       "some-uid",
@@ -366,10 +366,10 @@ func TestStaticValidateMultiplePhases_DuplicateHandling(t *testing.T) {
 	t.Parallel()
 
 	obj1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test1",
 				"namespace": "default",
 			},
@@ -401,10 +401,10 @@ func TestStaticValidateMultiplePhases_PhaseWithoutErrors(t *testing.T) {
 		"valid-phase",
 		[]client.Object{
 			&unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test1",
 						"namespace": "default",
 					},

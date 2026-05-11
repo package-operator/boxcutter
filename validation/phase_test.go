@@ -108,10 +108,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				"valid-phase",
 				[]client.Object{
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
@@ -120,8 +120,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				},
 			),
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 					},
 				},
@@ -137,10 +137,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				"Invalid_Phase_Name",
 				[]client.Object{
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
@@ -149,8 +149,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				},
 			),
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 					},
 				},
@@ -167,10 +167,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				"valid-phase",
 				[]client.Object{
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
@@ -179,8 +179,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				},
 			),
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 					},
 				},
@@ -202,10 +202,10 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				"valid-phase",
 				[]client.Object{
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
@@ -214,8 +214,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				},
 			),
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 					},
 				},
@@ -233,20 +233,20 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				"valid-phase",
 				[]client.Object{
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
 						},
 					},
 					&unstructured.Unstructured{
-						Object: map[string]interface{}{
+						Object: map[string]any{
 							"apiVersion": "v1",
 							"kind":       "ConfigMap",
-							"metadata": map[string]interface{}{
+							"metadata": map[string]any{
 								"name":      "test1",
 								"namespace": "default",
 							},
@@ -255,8 +255,8 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				},
 			),
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 					},
 				},
@@ -442,10 +442,10 @@ func TestCheckForObjectDuplicates(t *testing.T) {
 	t.Parallel()
 
 	obj1 := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test1",
 				"namespace": "default",
 			},
@@ -453,10 +453,10 @@ func TestCheckForObjectDuplicates(t *testing.T) {
 	}
 
 	obj2 := unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test2",
 				"namespace": "default",
 			},

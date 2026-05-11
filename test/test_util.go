@@ -58,7 +58,7 @@ func toUns(obj client.Object) *unstructured.Unstructured {
 }
 
 // Needed for `setTypeMeta`.
-var typeMetaType = reflect.TypeOf(metav1.TypeMeta{})
+var typeMetaType = reflect.TypeFor[metav1.TypeMeta]()
 
 // Test helper that uses reflection to get to the underlying struct value of a `runtime.Object`
 // and set its TypeMeta field with data acquired from the passed scheme.

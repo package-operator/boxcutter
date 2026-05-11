@@ -441,6 +441,7 @@ func WithOwner(obj client.Object, start OwnerStrategy) interface {
 type combinedOpts struct {
 	optionFn
 	teardownOptionFn
+
 	fn func(opts *ComparatorOptions)
 }
 

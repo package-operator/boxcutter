@@ -52,40 +52,40 @@ func TestComparator_Unstructured(t *testing.T) {
 	// Test Case 1
 	// Another actor has updated .data.test and the field owner has changed.
 	desiredNewFieldOwner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test": "test123",
 			},
 		},
 	}
 
 	actualNewFieldOwner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
-				"managedFields": []interface{}{
-					map[string]interface{}{
+				"managedFields": []any{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1":   map[string]interface{}{},
+						"fieldsV1":   map[string]any{},
 						"manager":    testFieldOwner,
 						"operation":  "Apply",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1": map[string]interface{}{
-							"f:data": map[string]interface{}{
-								"f:test": map[string]interface{}{},
+						"fieldsV1": map[string]any{
+							"f:data": map[string]any{
+								"f:test": map[string]any{},
 							},
 						},
 						"manager":   "Hans",
@@ -93,7 +93,7 @@ func TestComparator_Unstructured(t *testing.T) {
 					},
 				},
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test": "test123",
 			},
 		},
@@ -103,36 +103,36 @@ func TestComparator_Unstructured(t *testing.T) {
 
 	// Test Case 2
 	pod := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Pod",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
-				"managedFields": []interface{}{
-					map[string]interface{}{
+				"managedFields": []any{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1": map[string]interface{}{
-							"f:spec": map[string]interface{}{
-								"f:containers": map[string]interface{}{
-									`k:{"name":"manager"}`: map[string]interface{}{
-										".": map[string]interface{}{},
-										"f:env": map[string]interface{}{
-											".": map[string]interface{}{},
-											`k:{"name":"TEST"}`: map[string]interface{}{
-												".":       map[string]interface{}{},
-												"f:name":  map[string]interface{}{},
-												"f:value": map[string]interface{}{},
+						"fieldsV1": map[string]any{
+							"f:spec": map[string]any{
+								"f:containers": map[string]any{
+									`k:{"name":"manager"}`: map[string]any{
+										".": map[string]any{},
+										"f:env": map[string]any{
+											".": map[string]any{},
+											`k:{"name":"TEST"}`: map[string]any{
+												".":       map[string]any{},
+												"f:name":  map[string]any{},
+												"f:value": map[string]any{},
 											},
 										},
-										"f:ports": map[string]interface{}{
-											".": map[string]interface{}{},
-											`k:{"containerPort":8080,"protocol":"TCP"}`: map[string]interface{}{
-												".":               map[string]interface{}{},
-												"f:name":          map[string]interface{}{},
-												"f:protocol":      map[string]interface{}{},
-												"f:containerPort": map[string]interface{}{},
+										"f:ports": map[string]any{
+											".": map[string]any{},
+											`k:{"containerPort":8080,"protocol":"TCP"}`: map[string]any{
+												".":               map[string]any{},
+												"f:name":          map[string]any{},
+												"f:protocol":      map[string]any{},
+												"f:containerPort": map[string]any{},
 											},
 										},
 									},
@@ -144,18 +144,18 @@ func TestComparator_Unstructured(t *testing.T) {
 					},
 				},
 			},
-			"spec": map[string]interface{}{
-				"containers": []interface{}{
-					map[string]interface{}{
+			"spec": map[string]any{
+				"containers": []any{
+					map[string]any{
 						"name": "manager",
-						"ports": []interface{}{
-							map[string]interface{}{
+						"ports": []any{
+							map[string]any{
 								"containerPort": float64(8080),
 								"protocol":      "TCP",
 							},
 						},
-						"env": []interface{}{
-							map[string]interface{}{
+						"env": []any{
+							map[string]any{
 								"name":  "TEST",
 								"value": "xxx",
 							},
@@ -164,9 +164,9 @@ func TestComparator_Unstructured(t *testing.T) {
 				},
 			},
 			// Status dropped in strip set due to presence of /status subresource.
-			"status": map[string]interface{}{
-				"conditions": []interface{}{
-					map[string]interface{}{
+			"status": map[string]any{
+				"conditions": []any{
+					map[string]any{
 						"type":   "Ready",
 						"status": "True",
 					},
@@ -244,33 +244,33 @@ Comparison:
 		t.Parallel()
 
 		desiredValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test123",
 				},
 			},
 		}
 
 		actualValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
-					"managedFields": []interface{}{
-						map[string]interface{}{
+					"managedFields": []any{
+						map[string]any{
 							"apiVersion": "v1",
 							"fieldsType": "FieldsV1",
-							"fieldsV1": map[string]interface{}{
-								"f:data": map[string]interface{}{
-									"f:test": map[string]interface{}{},
+							"fieldsV1": map[string]any{
+								"f:data": map[string]any{
+									"f:test": map[string]any{},
 								},
 							},
 							"manager":   testFieldOwner,
@@ -278,7 +278,7 @@ Comparison:
 						},
 					},
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test1234",
 				},
 			},
@@ -295,7 +295,7 @@ Comparison:
 	})
 }
 
-//nolint:dupl
+//nolint:dupl,maintidx
 func TestComparator_Structured(t *testing.T) {
 	t.Parallel()
 
@@ -530,33 +530,33 @@ func TestComparator_Structured(t *testing.T) {
 		t.Parallel()
 
 		desiredValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test123",
 				},
 			},
 		}
 
 		actualValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
-					"managedFields": []interface{}{
-						map[string]interface{}{
+					"managedFields": []any{
+						map[string]any{
 							"apiVersion": "v1",
 							"fieldsType": "FieldsV1",
-							"fieldsV1": map[string]interface{}{
-								"f:data": map[string]interface{}{
-									"f:test": map[string]interface{}{},
+							"fieldsV1": map[string]any{
+								"f:data": map[string]any{
+									"f:test": map[string]any{},
 								},
 							},
 							"manager":   testFieldOwner,
@@ -564,7 +564,7 @@ func TestComparator_Structured(t *testing.T) {
 						},
 					},
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test1234",
 				},
 			},
@@ -666,7 +666,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "Pod",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "Pod",
 				},
@@ -676,7 +676,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "ConfigMap",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
 				},
@@ -686,7 +686,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "Secret",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "Secret",
 				},
@@ -696,7 +696,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "Deployment",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "apps/v1",
 					"kind":       "Deployment",
 				},
@@ -706,7 +706,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "RoleBinding",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "rbac.authorization.k8s.io/v1",
 					"kind":       "RoleBinding",
 				},
@@ -716,7 +716,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "PKO CRD",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "package-operator.run/v1alpha1",
 					"kind":       "Package",
 				},

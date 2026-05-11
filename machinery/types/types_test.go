@@ -46,10 +46,10 @@ func TestToObjectRef(t *testing.T) {
 		{
 			name: "Unstructured object",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "apps/v1",
 					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test-deploy",
 						"namespace": "test-ns",
 					},
@@ -153,10 +153,10 @@ func TestPhase_GetName(t *testing.T) {
 
 	phase := NewPhase("test-phase", []client.Object{
 		&unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-cm",
 				},
 			},
@@ -171,19 +171,19 @@ func TestPhase_GetObjects(t *testing.T) {
 
 	objects := []client.Object{
 		&unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-cm",
 				},
 			},
 		},
 		&unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-secret",
 				},
 			},
@@ -225,10 +225,10 @@ func TestRevision_GetPhases(t *testing.T) {
 			Name: "phase1",
 			Objects: []client.Object{
 				&unstructured.Unstructured{
-					Object: map[string]interface{}{
+					Object: map[string]any{
 						"apiVersion": "v1",
 						"kind":       "ConfigMap",
-						"metadata": map[string]interface{}{
+						"metadata": map[string]any{
 							"name": "test-cm",
 						},
 					},
@@ -239,10 +239,10 @@ func TestRevision_GetPhases(t *testing.T) {
 			Name: "phase2",
 			Objects: []client.Object{
 				&unstructured.Unstructured{
-					Object: map[string]interface{}{
+					Object: map[string]any{
 						"apiVersion": "v1",
 						"kind":       "Secret",
-						"metadata": map[string]interface{}{
+						"metadata": map[string]any{
 							"name": "test-secret",
 						},
 					},
@@ -336,10 +336,10 @@ func TestNewPhaseWithOwner(t *testing.T) {
 
 	objects := []client.Object{
 		&unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-cm",
 				},
 			},

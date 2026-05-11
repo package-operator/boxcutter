@@ -131,10 +131,10 @@ func TestRevisionEngine_Reconcile_Success_AllPhasesComplete(t *testing.T) {
 	}
 
 	obj1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "obj1",
 				"namespace": "test",
 			},
@@ -142,10 +142,10 @@ func TestRevisionEngine_Reconcile_Success_AllPhasesComplete(t *testing.T) {
 	}
 
 	obj2 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "obj2",
 				"namespace": "test",
 			},
@@ -153,10 +153,10 @@ func TestRevisionEngine_Reconcile_Success_AllPhasesComplete(t *testing.T) {
 	}
 
 	obj3 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Service",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "obj3",
 				"namespace": "test",
 			},
@@ -209,10 +209,10 @@ func TestRevisionEngine_Reconcile_WaitsOnIncompletePhase(t *testing.T) {
 	}
 
 	obj1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "obj1",
 				"namespace": "test",
 			},
@@ -371,10 +371,10 @@ func TestRevisionEngine_Reconcile_WithRevisionOptions(t *testing.T) {
 	}
 
 	testObj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-obj",
 				"namespace": "test",
 			},
@@ -693,10 +693,10 @@ func TestRevisionResult_String(t *testing.T) {
 	t.Parallel()
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},

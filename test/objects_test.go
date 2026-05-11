@@ -28,10 +28,10 @@ func TestObjectEngine(t *testing.T) {
 
 	ctx := t.Context()
 	owner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-owner",
 				"namespace": "default",
 			},
@@ -45,14 +45,14 @@ func TestObjectEngine(t *testing.T) {
 	})
 
 	configMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-test",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test1": "test",
 				"test2": "test",
 			},
@@ -153,10 +153,10 @@ func TestObjectEnginePaused(t *testing.T) {
 
 	ctx := t.Context()
 	owner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-owner-paused",
 				"namespace": "default",
 			},
@@ -170,14 +170,14 @@ func TestObjectEnginePaused(t *testing.T) {
 	})
 
 	configMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-test-paused",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test1": "test",
 				"test2": "test",
 			},
@@ -273,10 +273,10 @@ func TestObjectEngineProbing(t *testing.T) {
 
 	ctx := t.Context()
 	owner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-owner-probing",
 				"namespace": "default",
 			},
@@ -294,14 +294,14 @@ func TestObjectEngineProbing(t *testing.T) {
 	probeUnknown := &stubProbe{status: types.ProbeStatusUnknown, messages: []string{"no clue!"}}
 
 	configMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-test-probing",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test1": "test",
 				"test2": "test",
 			},
@@ -389,14 +389,14 @@ func TestObjectEngine_StaleManagedFieldMigration(t *testing.T) {
 	ctx := t.Context()
 
 	configMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "oe-test-migrate",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"key": "value",
 			},
 		},

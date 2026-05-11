@@ -89,10 +89,10 @@ type objBuilder func(*ownerMode) *unstructured.Unstructured
 func buildObj(name, namespace string, opts ...objOption) objBuilder { //nolint:unparam
 	return func(mode *ownerMode) *unstructured.Unstructured {
 		obj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      name,
 					"namespace": namespace,
 				},
@@ -134,9 +134,9 @@ func withManaged(obj *unstructured.Unstructured, r *ownerMode) {
 
 func withOwnerRef(apiVersion, kind, name, uid string, controller bool) objOption {
 	return func(obj *unstructured.Unstructured, _ *ownerMode) {
-		md := obj.Object["metadata"].(map[string]interface{})
-		refs, _ := md["ownerReferences"].([]interface{})
-		refs = append(refs, map[string]interface{}{
+		md := obj.Object["metadata"].(map[string]any)
+		refs, _ := md["ownerReferences"].([]any)
+		refs = append(refs, map[string]any{
 			"apiVersion":         apiVersion,
 			"kind":               kind,
 			"controller":         controller,
@@ -1535,10 +1535,10 @@ func TestObjectEngine_CustomManagedByLabel(t *testing.T) {
 	)
 
 	desiredObject := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-custom-managed-by",
 				"namespace": "test",
 			},
@@ -1579,13 +1579,13 @@ func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
 	)
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test",
 				"namespace": "test",
-				"annotations": map[string]interface{}{
+				"annotations": map[string]any{
 					testSystemPrefix + "/revision": "not-a-number",
 				},
 			},
@@ -1612,10 +1612,10 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 	)
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test",
 				"namespace": "test",
 			},

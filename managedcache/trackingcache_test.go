@@ -438,16 +438,12 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	cmObj := &corev1.ConfigMap{}
 	err = itc.Get(t.Context(), client.ObjectKey{
@@ -527,16 +523,12 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	cmObj := &corev1.ConfigMapList{}
 	err = itc.List(t.Context(), cmObj)
@@ -610,16 +602,12 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	// No informers
 	objectsPerInformer, err := itc.GetObjectsPerInformer(t.Context())

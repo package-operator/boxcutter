@@ -13,10 +13,10 @@ func TestCreateCollisionError_Error(t *testing.T) {
 	t.Parallel()
 
 	desiredObj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -65,10 +65,10 @@ func TestCreateCollisionError_Implementation(t *testing.T) {
 	t.Parallel()
 
 	desiredObj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},

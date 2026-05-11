@@ -55,27 +55,27 @@ func TestComparator(t *testing.T) {
 
 	// ConfigMap unstructured
 	actualConfigMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "comp-test-1",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test": "test",
 			},
 		},
 	}
 	desiredConfigMap := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "comp-test-1",
 				"namespace": "default",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test":  "testxx",
 				"test1": "test1",
 			},
@@ -84,33 +84,33 @@ func TestComparator(t *testing.T) {
 
 	// Deployment unstructured
 	actualDeployment := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "apps/v1",
 			"kind":       "Deployment",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "comp-test-2",
 				"namespace": "default",
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": int64(1),
-				"selector": map[string]interface{}{
-					"matchLabels": map[string]interface{}{
+				"selector": map[string]any{
+					"matchLabels": map[string]any{
 						"app": "com-test-2",
 					},
 				},
-				"template": map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"labels": map[string]interface{}{
+				"template": map[string]any{
+					"metadata": map[string]any{
+						"labels": map[string]any{
 							"app": "com-test-2",
 						},
 					},
-					"spec": map[string]interface{}{
-						"containers": []interface{}{
-							map[string]interface{}{
+					"spec": map[string]any{
+						"containers": []any{
+							map[string]any{
 								"name":  "app",
 								"image": "does-not-matter",
-								"env": []interface{}{
-									map[string]interface{}{
+								"env": []any{
+									map[string]any{
 										"name":  "XXX",
 										"value": "XXX",
 									},
@@ -123,33 +123,33 @@ func TestComparator(t *testing.T) {
 		},
 	}
 	desiredDeployment := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "apps/v1",
 			"kind":       "Deployment",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "comp-test-2",
 				"namespace": "default",
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": int64(1),
-				"selector": map[string]interface{}{
-					"matchLabels": map[string]interface{}{
+				"selector": map[string]any{
+					"matchLabels": map[string]any{
 						"app": "com-test-2",
 					},
 				},
-				"template": map[string]interface{}{
-					"metadata": map[string]interface{}{
-						"labels": map[string]interface{}{
+				"template": map[string]any{
+					"metadata": map[string]any{
+						"labels": map[string]any{
 							"app": "com-test-2",
 						},
 					},
-					"spec": map[string]interface{}{
-						"containers": []interface{}{
-							map[string]interface{}{
+					"spec": map[string]any{
+						"containers": []any{
+							map[string]any{
 								"name":  "app",
 								"image": "still-does-not-matter",
-								"env": []interface{}{
-									map[string]interface{}{
+								"env": []any{
+									map[string]any{
 										"name":  "XXX",
 										"value": "XXX",
 									},

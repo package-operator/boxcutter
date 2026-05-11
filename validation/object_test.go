@@ -116,18 +116,18 @@ func TestObjectValidator_Validate(t *testing.T) {
 			name:                     "valid object with cluster validator",
 			allowNamespaceEscalation: true,
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
 				},
 			},
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 						"uid":       "234",
 					},
@@ -143,18 +143,18 @@ func TestObjectValidator_Validate(t *testing.T) {
 			name:                     "valid object with namespaced validator",
 			allowNamespaceEscalation: false,
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
 				},
 			},
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 						"uid":       "234",
 					},
@@ -172,18 +172,18 @@ func TestObjectValidator_Validate(t *testing.T) {
 			name:                     "namespace validation fails",
 			allowNamespaceEscalation: false,
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "other",
 					},
 				},
 			},
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 						"uid":       "234",
 					},
@@ -200,18 +200,18 @@ func TestObjectValidator_Validate(t *testing.T) {
 			name:                     "dry run validation fails",
 			allowNamespaceEscalation: true,
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
 				},
 			},
 			owner: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"namespace": "default",
 						"uid":       "234",
 					},
@@ -296,10 +296,10 @@ func TestValidateNamespace(t *testing.T) {
 			name:      "no namespace limitation",
 			namespace: "",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "any",
 					},
@@ -312,10 +312,10 @@ func TestValidateNamespace(t *testing.T) {
 			name:      "cluster-scoped resource",
 			namespace: "default",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "Namespace",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name": "test",
 					},
 				},
@@ -330,10 +330,10 @@ func TestValidateNamespace(t *testing.T) {
 			name:      "namespace-scoped resource in correct namespace",
 			namespace: "default",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -349,10 +349,10 @@ func TestValidateNamespace(t *testing.T) {
 			name:      "namespace-scoped resource in wrong namespace",
 			namespace: "default",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "other",
 					},
@@ -371,10 +371,10 @@ func TestValidateNamespace(t *testing.T) {
 			name:      "API does not exist",
 			namespace: "default",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "example.com/v1",
 					"kind":       "Unknown",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -432,10 +432,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "successful dry run",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -449,10 +449,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "not found, create succeeds",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -468,10 +468,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "validation error",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -491,10 +491,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "unauthorized error",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -514,10 +514,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "empty reason with typed patch error",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -538,10 +538,10 @@ func TestValidateDryRun(t *testing.T) {
 		{
 			name: "non-API status error",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},

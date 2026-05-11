@@ -37,10 +37,10 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -80,10 +80,10 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -127,10 +127,10 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -472,10 +472,10 @@ func TestPhaseResult_String(t *testing.T) {
 	t.Parallel()
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -611,10 +611,10 @@ func TestPhaseResult_GetObjects(t *testing.T) {
 	t.Parallel()
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
