@@ -133,6 +133,68 @@ func TestCollisionProtectionPreventOwned(t *testing.T) {
 	}
 }
 
+// TestCollisionProtectionHigherRevisionDoesNotAdoptForeignObject is a
+// regression test for https://github.com/package-operator/boxcutter/pull/501.
+// Before that PR, reconciling at a higher revision than a foreign object
+// would silently adopt it. This test ensures that an object controlled by
+// an unknown (non-sibling) owner reports a collision regardless of revision.
+func TestCollisionProtectionHigherRevisionDoesNotAdoptForeignObject(t *testing.T) {
+	ctx := logr.NewContext(t.Context(), testr.New(t))
+
+	foreignOwner := newConfigMap("test-no-adopt-foreign-foreign-owner", map[string]string{})
+	require.NoError(t, Client.Create(ctx, foreignOwner))
+	cleanupOnSuccess(t, foreignOwner)
+
+	existing := newConfigMap("test-no-adopt-foreign-cm", map[string]string{
+		"banana": "bread",
+	})
+	require.NoError(t, controllerutil.SetControllerReference(foreignOwner, existing, Scheme))
+	existing.Annotations = map[string]string{
+		systemPrefix + "/revision": "1",
+	}
+	existing.Labels = map[string]string{
+		"app.kubernetes.io/managed-by": "boxcutter.test",
+	}
+	require.NoError(t, Client.Create(ctx, existing))
+	cleanupOnSuccess(t, existing)
+
+	owner := newConfigMap("test-no-adopt-foreign-owner", map[string]string{})
+	require.NoError(t, Client.Create(ctx, owner))
+	cleanupOnSuccess(t, owner)
+
+	desired := newConfigMap("test-no-adopt-foreign-cm", map[string]string{
+		"banana": "bread",
+		"apple":  "pie",
+	})
+
+	re := newTestRevisionEngineBuilder().build(t)
+	res, err := re.Reconcile(ctx, boxcutter.NewRevisionWithOwner(
+		"test-no-adopt-foreign", 4,
+		[]boxcutter.Phase{
+			boxcutter.NewPhase(
+				"simple",
+				[]client.Object{toUns(desired)},
+			),
+		},
+		owner, ownerhandling.NewNative(Scheme),
+	))
+	require.NoError(t, err)
+	assert.False(t, res.IsComplete())
+	assert.True(t, res.InTransition())
+
+	phases := res.GetPhases()
+	require.Len(t, phases, 1)
+	objects := phases[0].GetObjects()
+	require.Len(t, objects, 1)
+	assert.Equal(t, machinery.ActionCollision, objects[0].Action())
+
+	actual := &corev1.ConfigMap{}
+	require.NoError(t, Client.Get(ctx, client.ObjectKeyFromObject(existing), actual))
+	assert.Equal(t, existing.Data, actual.Data, "object must not be modified")
+	assert.Equal(t, "1", actual.Annotations[systemPrefix+"/revision"], "revision must not change")
+	assertController(t, actual, foreignOwner.UID)
+}
+
 // TestCollisionProtectionNotInCache exercises collision protection when the
 // object exists on the cluster but is not in the (label-filtered) cache.
 func TestCollisionProtectionNotInCache(t *testing.T) {
