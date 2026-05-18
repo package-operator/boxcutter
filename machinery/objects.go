@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -404,6 +405,16 @@ func (e *ObjectEngine) objectUpdateHandling(
 		// This should not happen - the current owner has been classified as a sibling
 		// but the object's revision is the same as the desired revision we're reconciling here.
 		// Must be a user or data error. Surface as conflict.
+		log := logr.FromContextOrDiscard(ctx)
+		log.WithName("objectEngine").Info("update conflict without revision change",
+			"revision", revision,
+			"actualObjectRevision", actualObjectRevision,
+			"gvk", actualObject.GetObjectKind().GroupVersionKind().String(),
+			"namespace", actualObject.GetNamespace(),
+			"name", actualObject.GetName(),
+			"ownerName", actualOwner.Name,
+		)
+
 		return newObjectResultConflict(
 			actualObject, compareRes,
 			actualOwner, options,
