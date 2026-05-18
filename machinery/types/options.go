@@ -1,6 +1,8 @@
 package types
 
 import (
+	"slices"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -246,13 +248,7 @@ func WithSiblingOwners(siblings []client.Object) WithSiblingOwnerClassifier {
 	}
 
 	return func(actualOwnerRef metav1.OwnerReference) bool {
-		for _, uid := range uids {
-			if actualOwnerRef.UID == uid {
-				return true
-			}
-		}
-
-		return false
+		return slices.Contains(uids, actualOwnerRef.UID)
 	}
 }
 
