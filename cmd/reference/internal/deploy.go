@@ -38,7 +38,6 @@ const (
 	hashAnnotation      = "boxcutter.test/hash"
 	cmPhasesKey         = "phases"
 	cmRevisionNumberKey = "revision"
-	cmPreviousKey       = "previous"
 	cmStateKey          = "state"
 
 	revisionHistoryLimit = 5
@@ -128,7 +127,7 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 	existingRevisions := make([]boxcutter.Revision, 0, len(existingRevisionsRaw.Items))
 
 	for _, rev := range existingRevisionsRaw.Items {
-		r, _, _, err := c.toRevision(cm.Name, &rev)
+		r, _, err := c.toRevision(cm.Name, &rev, nil)
 		if err != nil {
 			return res, fmt.Errorf("to revision: %w", err)
 		}
@@ -180,7 +179,6 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 			Data: cm.Data,
 		}
 		newRevision.Data[cmRevisionNumberKey] = strconv.FormatInt(revisionNumber, 10)
-		newRevision.Data[cmPreviousKey] = prevJSON(prevRevisions)
 
 		if err := controllerutil.SetControllerReference(cm, newRevision, c.scheme); err != nil {
 			return res, fmt.Errorf("set ownerref: %w", err)
@@ -213,7 +211,25 @@ func (c *Reconciler) handleDeployment(ctx context.Context, cm *corev1.ConfigMap)
 func (c *Reconciler) handleRevision(
 	ctx context.Context, deploy *corev1.ConfigMap, revisionCM *corev1.ConfigMap,
 ) (res ctrl.Result, err error) {
-	revision, opts, previous, err := c.toRevision(deploy.Name, revisionCM)
+	siblingCMs := &corev1.ConfigMapList{}
+	if err := c.client.List(ctx, siblingCMs, client.MatchingLabels{
+		typeLabel:       "Revision",
+		deploymentLabel: deploy.Name,
+	}); err != nil {
+		return res, fmt.Errorf("listing sibling revisions: %w", err)
+	}
+
+	var siblings []client.Object
+
+	for i := range siblingCMs.Items {
+		if siblingCMs.Items[i].GetUID() == revisionCM.GetUID() {
+			continue
+		}
+
+		siblings = append(siblings, &siblingCMs.Items[i])
+	}
+
+	revision, opts, err := c.toRevision(deploy.Name, revisionCM, siblings)
 	if err != nil {
 		return res, fmt.Errorf("converting CM to revision: %w", err)
 	}
@@ -295,10 +311,21 @@ func (c *Reconciler) handleRevision(
 		}
 	}
 
-	// Archive other revisions.
+	// Archive previous revisions.
 	if rres.IsComplete() {
-		for _, a := range previous {
-			if err := c.client.Patch(ctx, a, client.RawPatch(
+		for _, s := range siblings {
+			siblingConfigMap := s.(*corev1.ConfigMap)
+
+			if siblingConfigMap.Data[cmStateKey] == "Archived" {
+				continue
+			}
+
+			siblingRevisionNumber, err := parseRevisionNumber(siblingConfigMap.Data[cmRevisionNumberKey])
+			if err != nil || siblingRevisionNumber >= revision.GetRevisionNumber() {
+				continue
+			}
+
+			if err := c.client.Patch(ctx, s, client.RawPatch(
 				types.MergePatchType, []byte(`{"data":{"state":"Archived"}}`))); err != nil {
 				return res, fmt.Errorf("archive previous Revision: %w", err)
 			}
@@ -331,13 +358,12 @@ func (e RevisionNumberNotSetError) Error() string {
 	return e.msg
 }
 
-func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
-	r boxcutter.Revision, opts []boxcutter.RevisionReconcileOption, previous []client.Object, err error,
+func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap, siblings []client.Object) (
+	r boxcutter.Revision, opts []boxcutter.RevisionReconcileOption, err error,
 ) {
 	var (
-		phaseNames    []string
-		previousUnstr []unstructured.Unstructured
-		revision      int64
+		phaseNames []string
+		revision   int64
 	)
 
 	objects := map[string][]client.Object{}
@@ -345,7 +371,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	for k, v := range cm.Data {
 		if k == cmPhasesKey {
 			if err := json.Unmarshal([]byte(v), &phaseNames); err != nil {
-				return nil, nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
+				return nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
 			}
 
 			continue
@@ -354,7 +380,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		if k == cmRevisionNumberKey {
 			i, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("parsing revision: %w", err)
+				return nil, nil, fmt.Errorf("parsing revision: %w", err)
 			}
 
 			revision = i
@@ -362,11 +388,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 			continue
 		}
 
-		if k == cmPreviousKey {
-			if err := json.Unmarshal([]byte(v), &previousUnstr); err != nil {
-				return nil, nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
-			}
-
+		if k == cmStateKey {
 			continue
 		}
 
@@ -379,7 +401,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 
 		obj := &unstructured.Unstructured{}
 		if err := json.Unmarshal([]byte(v), obj); err != nil {
-			return nil, nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
+			return nil, nil, fmt.Errorf("json unmarshal key %s: %w", k, err)
 		}
 
 		// Force namespace to the owner's namespace.
@@ -398,11 +420,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 	}
 
 	if revision == 0 {
-		return nil, nil, nil, RevisionNumberNotSetError{msg: "revision not set"}
-	}
-
-	for _, obj := range previousUnstr {
-		previous = append(previous, &obj)
+		return nil, nil, RevisionNumberNotSetError{msg: "revision not set"}
 	}
 
 	phases := make([]boxcutter.Phase, 0, len(phaseNames))
@@ -415,13 +433,13 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		phases = append(phases, p)
 	}
 
-	rev := boxcutter.NewRevisionWithOwner(
+	rev := boxcutter.NewRevisionWithOwnerAndSiblings(
 		cm.Name, revision, phases,
 		cm, c.ownerStrategy,
+		siblings,
 	)
 
 	opts = []boxcutter.RevisionReconcileOption{
-		boxcutter.WithPreviousOwners(previous),
 		boxcutter.WithProbe(
 			boxcutter.ProgressProbeType,
 			boxcutter.ProbeFunc(func(obj client.Object) probing.Result {
@@ -447,7 +465,7 @@ func (c *Reconciler) toRevision(deployName string, cm *corev1.ConfigMap) (
 		opts = append(opts, boxcutter.WithPaused{})
 	}
 
-	return rev, opts, previous, nil
+	return rev, opts, nil
 }
 
 func (c *Reconciler) ensureFinalizer(

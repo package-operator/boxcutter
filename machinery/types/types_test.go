@@ -445,3 +445,59 @@ func TestNewRevisionWithOwner(t *testing.T) {
 	teardownOpts := revision.GetTeardownOptions()
 	assert.NotEmpty(t, teardownOpts)
 }
+
+func TestNewWithOwnerAndSiblings(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owner",
+			Namespace: "test-ns",
+			UID:       "owner-uid",
+		},
+	}
+
+	siblings := []client.Object{
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "sibling-1"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "sibling-2"}},
+	}
+
+	mockStrat := &mockOwnerStrategy{}
+
+	t.Run("Phase", func(t *testing.T) {
+		t.Parallel()
+
+		objects := []client.Object{
+			&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       "ConfigMap",
+					"metadata":   map[string]any{"name": "test-cm"},
+				},
+			},
+		}
+
+		phase := NewPhaseWithOwnerAndSiblings("test-phase", objects, owner, mockStrat, siblings)
+
+		assert.Equal(t, "test-phase", phase.GetName())
+		assert.Equal(t, objects, phase.GetObjects())
+		assert.Len(t, phase.GetReconcileOptions(), 2, "should have owner + sibling classifier")
+		assert.Len(t, phase.GetTeardownOptions(), 1, "should have owner only")
+	})
+
+	t.Run("Revision", func(t *testing.T) {
+		t.Parallel()
+
+		phases := []Phase{
+			NewPhase("phase1", []client.Object{}),
+		}
+
+		revision := NewRevisionWithOwnerAndSiblings("test-revision", 1, phases, owner, mockStrat, siblings)
+
+		assert.Equal(t, "test-revision", revision.GetName())
+		assert.Equal(t, int64(1), revision.GetRevisionNumber())
+		assert.Equal(t, phases, revision.GetPhases())
+		assert.Len(t, revision.GetReconcileOptions(), 2, "should have owner + sibling classifier")
+		assert.Len(t, revision.GetTeardownOptions(), 1, "should have owner only")
+	})
+}
