@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter"
@@ -42,8 +41,8 @@ func TestWithOwnerReference(t *testing.T) {
 					Kind:               "notus",
 					Name:               "notuse",
 					APIVersion:         "3",
-					BlockOwnerDeletion: ptr.To(true),
-					Controller:         ptr.To(controller),
+					BlockOwnerDeletion: new(true),
+					Controller:         new(controller),
 				},
 			}
 

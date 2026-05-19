@@ -14,7 +14,6 @@ import (
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -183,8 +182,8 @@ func (e *ObjectEngine) Teardown(
 	}
 
 	err = writer.Delete(ctx, desiredObject, client.Preconditions{
-		UID:             ptr.To(actualObject.GetUID()),
-		ResourceVersion: ptr.To(actualObject.GetResourceVersion()),
+		UID:             new(actualObject.GetUID()),
+		ResourceVersion: new(actualObject.GetResourceVersion()),
 	})
 	if errors.IsNotFound(err) {
 		return true, nil

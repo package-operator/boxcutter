@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -268,7 +267,7 @@ func TestAnnotationEnqueueOwnerHandler_GetOwnerReconcileRequest(t *testing.T) {
 	}{
 		{
 			name:              "owner is controller, enqueue is controller, types match",
-			isOwnerController: ptr.To(true),
+			isOwnerController: new(true),
 			enqueue: AnnotationEnqueueRequestForOwner{
 				OwnerType:    &corev1.ConfigMap{},
 				IsController: true,
@@ -277,7 +276,7 @@ func TestAnnotationEnqueueOwnerHandler_GetOwnerReconcileRequest(t *testing.T) {
 		},
 		{
 			name:              "owner is not controller, enqueue is controller, types match",
-			isOwnerController: ptr.To(false),
+			isOwnerController: new(false),
 			enqueue: AnnotationEnqueueRequestForOwner{
 				OwnerType:    &corev1.ConfigMap{},
 				IsController: true,
@@ -286,7 +285,7 @@ func TestAnnotationEnqueueOwnerHandler_GetOwnerReconcileRequest(t *testing.T) {
 		},
 		{
 			name:              "owner is controller, enqueue is not controller, types match",
-			isOwnerController: ptr.To(true),
+			isOwnerController: new(true),
 			enqueue: AnnotationEnqueueRequestForOwner{
 				OwnerType:    &corev1.ConfigMap{},
 				IsController: false,
@@ -295,7 +294,7 @@ func TestAnnotationEnqueueOwnerHandler_GetOwnerReconcileRequest(t *testing.T) {
 		},
 		{
 			name:              "owner is not controller, enqueue is not controller, types match",
-			isOwnerController: ptr.To(false),
+			isOwnerController: new(false),
 			enqueue: AnnotationEnqueueRequestForOwner{
 				OwnerType:    &corev1.ConfigMap{},
 				IsController: false,
@@ -322,7 +321,7 @@ func TestAnnotationEnqueueOwnerHandler_GetOwnerReconcileRequest(t *testing.T) {
 		},
 		{
 			name:              "owner is controller, enqueue is controller, types do not match",
-			isOwnerController: ptr.To(true),
+			isOwnerController: new(true),
 			enqueue: AnnotationEnqueueRequestForOwner{
 				OwnerType:    &appsv1.Deployment{},
 				IsController: true,
@@ -391,7 +390,7 @@ func newConfigMapAnnotationOwnerRef() annotationOwnerRef {
 		UID:        types.UID("cm1___3245"),
 		Name:       "cm1",
 		Namespace:  "cm1namespace",
-		Controller: ptr.To(false),
+		Controller: new(false),
 	}
 
 	return ownerRef1
@@ -497,14 +496,14 @@ func TestIsController(t *testing.T) {
 		{
 			name: "controller is false",
 			annOwnerRef: annotationOwnerRef{
-				Controller: ptr.To(false),
+				Controller: new(false),
 			},
 			expectedController: false,
 		},
 		{
 			name: "conroller is defined and true",
 			annOwnerRef: annotationOwnerRef{
-				Controller: ptr.To(true),
+				Controller: new(true),
 			},
 			expectedController: true,
 		},
@@ -554,7 +553,7 @@ func TestOwnerStrategyAnnotation_GetController(t *testing.T) {
 					Name:       "secret1",
 					Namespace:  "test",
 					UID:        types.UID("5678"),
-					Controller: ptr.To(false),
+					Controller: new(false),
 				},
 			},
 			expectedController: metav1.OwnerReference{},
@@ -569,7 +568,7 @@ func TestOwnerStrategyAnnotation_GetController(t *testing.T) {
 					Name:       "cm1",
 					Namespace:  "test",
 					UID:        types.UID("1234"),
-					Controller: ptr.To(false),
+					Controller: new(false),
 				},
 				{
 					APIVersion: "v1",
@@ -577,7 +576,7 @@ func TestOwnerStrategyAnnotation_GetController(t *testing.T) {
 					Name:       "secret1",
 					Namespace:  "test",
 					UID:        types.UID("5678"),
-					Controller: ptr.To(true),
+					Controller: new(true),
 				},
 			},
 			expectedController: metav1.OwnerReference{
@@ -585,8 +584,8 @@ func TestOwnerStrategyAnnotation_GetController(t *testing.T) {
 				Kind:               "Secret",
 				Name:               "secret1",
 				UID:                types.UID("5678"),
-				Controller:         ptr.To(true),
-				BlockOwnerDeletion: ptr.To(true),
+				Controller:         new(true),
+				BlockOwnerDeletion: new(true),
 			},
 			expectedFound: true,
 		},
@@ -636,7 +635,7 @@ func TestOwnerStrategyAnnotation_CopyOwnerReferences(t *testing.T) {
 			Name:       "pod1",
 			Namespace:  "test",
 			UID:        types.UID("1234"),
-			Controller: ptr.To(true),
+			Controller: new(true),
 		},
 		{
 			APIVersion: "apps/v1",
@@ -644,7 +643,7 @@ func TestOwnerStrategyAnnotation_CopyOwnerReferences(t *testing.T) {
 			Name:       "deploy1",
 			Namespace:  "test",
 			UID:        types.UID("5678"),
-			Controller: ptr.To(false),
+			Controller: new(false),
 		},
 	}
 
@@ -680,7 +679,7 @@ func TestOwnerStrategyAnnotation_ToMetaV1OwnerRef(t *testing.T) {
 				Name:               "cm1",
 				UID:                types.UID("1234"),
 				Controller:         nil,
-				BlockOwnerDeletion: ptr.To(true),
+				BlockOwnerDeletion: new(true),
 			},
 		},
 		{
@@ -691,15 +690,15 @@ func TestOwnerStrategyAnnotation_ToMetaV1OwnerRef(t *testing.T) {
 				Name:       "deploy1",
 				Namespace:  "test",
 				UID:        types.UID("5678"),
-				Controller: ptr.To(true),
+				Controller: new(true),
 			},
 			expectedOwner: metav1.OwnerReference{
 				APIVersion:         "apps/v1",
 				Kind:               "Deployment",
 				Name:               "deploy1",
 				UID:                types.UID("5678"),
-				Controller:         ptr.To(true),
-				BlockOwnerDeletion: ptr.To(true),
+				Controller:         new(true),
+				BlockOwnerDeletion: new(true),
 			},
 		},
 	}

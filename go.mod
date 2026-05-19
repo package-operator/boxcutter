@@ -1,6 +1,6 @@
 module pkg.package-operator.run/boxcutter
 
-go 1.25.3
+go 1.26
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -14,7 +14,6 @@ require (
 	k8s.io/apiserver v0.35.4
 	k8s.io/client-go v0.35.4
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4
-	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	pkg.package-operator.run/cardboard v0.0.4
 	pkg.package-operator.run/cardboard/kubeutils v0.1.0
 	pkg.package-operator.run/cardboard/modules/kind v0.1.0
@@ -94,6 +93,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/component-base v0.35.4 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
+	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	pkg.package-operator.run/cardboard/modules/kubeclients v0.1.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kind v0.31.0 // indirect

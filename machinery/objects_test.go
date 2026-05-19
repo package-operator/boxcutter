@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 	"sigs.k8s.io/structured-merge-diff/v6/typed"
@@ -1013,10 +1012,10 @@ func TestObjectEngine_Reconcile_UnsupportedTypedObject(t *testing.T) {
 					{
 						APIVersion:         "v1",
 						Kind:               "ConfigMap",
-						Controller:         ptr.To(true),
+						Controller:         new(true),
 						Name:               "owner",
 						UID:                "12345-678",
-						BlockOwnerDeletion: ptr.To(true),
+						BlockOwnerDeletion: new(true),
 					},
 				},
 			},
