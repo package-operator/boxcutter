@@ -19,6 +19,7 @@ linters:
   #- gochecknoglobals # We need globals.
   #- gochecknoinits   # We have a lot of those.
   #- gocognit         # Not that useful/false positives.
+  #- goconst          # I don't want to make "true" a constant.
   #- godoclint        # Not useful.
   #- godox            # Not that useful/false positives.
   #- inamedparam      # Not that useful.
@@ -56,13 +57,12 @@ linters:
     - ginkgolinter
     - gocheckcompilerdirectives
     - gochecksumtype
-    - goconst
     - gocritic
     - gocyclo
     - godot
     - goheader
     - gomoddirectives
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - gosmopolitan

@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -85,8 +84,8 @@ func (c *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.
 			// We are orphaned.
 			err := client.IgnoreNotFound(
 				c.client.Delete(ctx, cm, client.PropagationPolicy(metav1.DeletePropagationOrphan), client.Preconditions{
-					UID:             ptr.To(cm.GetUID()),
-					ResourceVersion: ptr.To(cm.GetResourceVersion()),
+					UID:             new(cm.GetUID()),
+					ResourceVersion: new(cm.GetResourceVersion()),
 				}),
 			)
 			if err != nil {

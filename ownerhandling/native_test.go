@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -225,7 +224,7 @@ func TestOwnerStrategyNative_GetController(t *testing.T) {
 					Kind:       "Secret",
 					Name:       "secret1",
 					UID:        types.UID("5678"),
-					Controller: ptr.To(false),
+					Controller: new(false),
 				},
 			},
 			expectedController: metav1.OwnerReference{},
@@ -239,14 +238,14 @@ func TestOwnerStrategyNative_GetController(t *testing.T) {
 					Kind:       "ConfigMap",
 					Name:       "cm1",
 					UID:        types.UID("1234"),
-					Controller: ptr.To(false),
+					Controller: new(false),
 				},
 				{
 					APIVersion: "v1",
 					Kind:       "Secret",
 					Name:       "secret1",
 					UID:        types.UID("5678"),
-					Controller: ptr.To(true),
+					Controller: new(true),
 				},
 			},
 			expectedController: metav1.OwnerReference{
@@ -254,7 +253,7 @@ func TestOwnerStrategyNative_GetController(t *testing.T) {
 				Kind:       "Secret",
 				Name:       "secret1",
 				UID:        types.UID("5678"),
-				Controller: ptr.To(true),
+				Controller: new(true),
 			},
 			expectedFound: true,
 		},
@@ -294,14 +293,14 @@ func TestOwnerStrategyNative_CopyOwnerReferences(t *testing.T) {
 					Kind:       "Pod",
 					Name:       "pod1",
 					UID:        types.UID("1234"),
-					Controller: ptr.To(true),
+					Controller: new(true),
 				},
 				{
 					APIVersion: "apps/v1",
 					Kind:       "Deployment",
 					Name:       "deploy1",
 					UID:        types.UID("5678"),
-					Controller: ptr.To(false),
+					Controller: new(false),
 				},
 			},
 		},
