@@ -780,6 +780,11 @@ type informerMock struct {
 	mock.Mock
 }
 
+// HasSyncedChecker implements [cache.Informer].
+func (m *informerMock) HasSyncedChecker() toolscache.DoneChecker {
+	return m.Called().Get(0).(toolscache.DoneChecker)
+}
+
 func (m *informerMock) AddEventHandler(
 	handler toolscache.ResourceEventHandler,
 ) (toolscache.ResourceEventHandlerRegistration, error) {
