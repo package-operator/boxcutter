@@ -53,13 +53,13 @@ func (dev *Dev) Integration(ctx context.Context, args []string) error {
 }
 
 // Lint runs local linters to check the codebase.
-func (dev *Dev) Lint(_ context.Context, _ []string) error {
-	return lint.glciCheck()
+func (dev *Dev) Lint(ctx context.Context, _ []string) error {
+	return lint.glciCheck(ctx)
 }
 
 // LintFix tries to fix linter issues.
-func (dev *Dev) LintFix(_ context.Context, _ []string) error {
-	return lint.glciFix()
+func (dev *Dev) LintFix(ctx context.Context, _ []string) error {
+	return lint.glciFix(ctx)
 }
 
 // Create creates the development cluster.

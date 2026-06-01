@@ -30,8 +30,8 @@ func main() {
 	ctx := context.Background()
 
 	err := errors.Join(
-		mgr.RegisterGoTool("gotestfmt", "github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt", "2.5.0"),
-		mgr.RegisterGoTool("golangci-lint", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint", "2.12.2"),
+		mgr.RegisterGoTool(ctx, "gotestfmt", "github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt", "2.5.0"),
+		mgr.RegisterGoTool(ctx, "golangci-lint", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint", "2.12.2"),
 		mgr.Register(&Dev{}, &CI{}),
 	)
 	if err != nil {

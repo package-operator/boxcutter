@@ -20,8 +20,8 @@ func (ci *CI) Integration(ctx context.Context, _ []string) error {
 }
 
 // Lint runs linters in CI to check the codebase.
-func (ci *CI) Lint(_ context.Context, _ []string) error {
-	return lint.glciCheck()
+func (ci *CI) Lint(ctx context.Context, _ []string) error {
+	return lint.glciCheck(ctx)
 }
 
 // PostPush runs autofixes in CI and validates that the repo is clean afterwards.
@@ -34,5 +34,5 @@ func (ci *CI) PostPush(ctx context.Context, args []string) error {
 		return err
 	}
 
-	return lint.validateGitClean()
+	return lint.validateGitClean(ctx)
 }
