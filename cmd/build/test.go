@@ -45,7 +45,7 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 
 	goTestCmd := t.makeGoIntTestCmd("integration", f, jsonOutput)
 
-	err = shr.New(env).Bash(goTestCmd)
+	err = shr.New(env).Bash(ctx, goTestCmd)
 	eErr := cluster.ExportLogs(filepath.Join(cacheDir, "integration", "logs"))
 
 	switch {
@@ -59,7 +59,7 @@ func (t Test) Integration(ctx context.Context, jsonOutput bool, filter string) e
 }
 
 // Unit runs unittests, the filter argument is passed via -run="".
-func (t Test) Unit(_ context.Context, filter string) error {
+func (t Test) Unit(ctx context.Context, filter string) error {
 	if err := os.MkdirAll(filepath.Join(cacheDir, "unit"), 0o755); err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (t Test) Unit(_ context.Context, filter string) error {
 
 	return sh.New(
 		sh.WithEnvironment{"CGO_ENABLED": "1"},
-	).Bash(
+	).Bash(ctx,
 		"set -euo pipefail",
 		fmt.Sprintf(`go test %s ./... 2>&1 | tee "%s" | gotestfmt --hide=empty-packages`, argStr, logPath),
 	)
