@@ -151,19 +151,10 @@ func (e *ObjectEngine) Teardown(
 		return false, fmt.Errorf("getting object before deletion: %w", err)
 	}
 
-	// Check revision matches.
-	actualRevision, err := e.getObjectRevision(actualObject)
-	if err != nil {
-		return false, fmt.Errorf("getting object revision: %w", err)
-	}
-
-	// Object is not owned by this revision
-	if actualRevision != revision {
-		if options.Owner == nil {
-			// No Owner to remove from the object, return.
-			return true, nil
-		}
-
+	if options.Owner != nil {
+		// Check ownership instead of revision to determine if we should delete.
+		// If we're not the controller, only remove our owner ref and leave the object in place.
+		// A possible reason for this could be an orphaning deletion.
 		ctrlSit, _ := e.detectOwner(options.Owner, options.OwnerStrategy, actualObject, nil)
 		if ctrlSit != ctrlSituationIsController {
 			// Remove us from owners list:
@@ -172,6 +163,16 @@ func (e *ObjectEngine) Teardown(
 
 			// TODO should we check if the patch differs from actualObject before firing the request?
 			return true, e.writer.Patch(ctx, patch, client.MergeFrom(actualObject))
+		}
+	} else {
+		// No Owner to check against. Fall back to revision comparison.
+		actualRevision, err := e.getObjectRevision(actualObject)
+		if err != nil {
+			return false, fmt.Errorf("getting object revision: %w", err)
+		}
+
+		if actualRevision != revision {
+			return true, nil
 		}
 	}
 

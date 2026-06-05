@@ -1083,6 +1083,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 		modes         []ownerMode // nil = both default modes
 		expectedGone  bool
 		expectedError string
+		afterAssert   func(t *testing.T, writer *testutil.CtrlClient)
 	}{
 		{
 			name:          "Orphan",
@@ -1383,6 +1384,60 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			},
 			expectedGone: true,
 		},
+		{
+			name:          "Not controller, revision matches, removes owner ref",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("1"),
+				withOwnerRef("v1", "ConfigMap", "owner", "12345-678", false),
+				withOwnerRef("v1", "Node", "node1", "xxxx", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			},
+			expectedGone: true,
+			afterAssert: func(t *testing.T, writer *testutil.CtrlClient) {
+				t.Helper()
+				writer.AssertNotCalled(t, "Delete")
+			},
+		},
+		{
+			name:          "Is controller, revision mismatch, still deletes",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject:  buildObj("testi", "test", withRevision("4"), withManaged),
+			modes:         []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+			},
+			expectedGone: false,
+		},
 	}
 
 	for _, tc := range sharedTests {
@@ -1434,6 +1489,10 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				} else {
 					require.Error(t, err)
 					assert.Contains(t, err.Error(), tc.expectedError)
+				}
+
+				if tc.afterAssert != nil {
+					tc.afterAssert(t, writer)
 				}
 			})
 		}
