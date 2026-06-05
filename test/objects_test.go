@@ -526,3 +526,112 @@ func TestObjectEngine_StaleManagedFieldMigration(t *testing.T) {
 		}
 	}
 }
+
+// TestObjectEngine_TeardownNotControllerRevisionMatch verifies that teardown
+// with an owner that is no longer the controller only removes the owner
+// reference and does NOT delete the object, even when the revision matches.
+func TestObjectEngine_TeardownNotControllerRevisionMatch(t *testing.T) {
+	os := ownerhandling.NewNative(Scheme)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
+	oe := machinery.NewObjectEngine(
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix, "", nil,
+	)
+
+	ctx := t.Context()
+
+	ownerA := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "oe-teardown-owner-a",
+				"namespace": "default",
+			},
+		},
+	}
+	ownerB := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "oe-teardown-owner-b",
+				"namespace": "default",
+			},
+		},
+	}
+
+	require.NoError(t, Client.Create(ctx, ownerA, client.FieldOwner(fieldOwner)))
+	cleanupOnSuccess(t, ownerA)
+	require.NoError(t, Client.Create(ctx, ownerB, client.FieldOwner(fieldOwner)))
+	cleanupOnSuccess(t, ownerB)
+
+	configMap := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "oe-teardown-not-ctrl",
+				"namespace": "default",
+			},
+			"data": map[string]any{
+				"key": "value",
+			},
+		},
+	}
+
+	// Step 1: Create the object owned by ownerA at revision 1.
+	res, err := oe.Reconcile(ctx, 1, configMap, types.WithOwner(ownerA, os))
+	require.NoError(t, err)
+	assert.Equal(t, machinery.ActionCreated, res.Action())
+
+	// Step 2: ownerB adopts the object (becomes controller, ownerA becomes non-controller).
+	res, err = oe.Reconcile(ctx, 1, configMap,
+		types.WithOwner(ownerB, os),
+		types.WithCollisionProtection(types.CollisionProtectionNone),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, machinery.ActionUpdated, res.Action())
+
+	// Verify ownerB is now the controller and ownerA's ref is still present.
+	actual := configMap.DeepCopy()
+	require.NoError(t, Client.Get(ctx, client.ObjectKeyFromObject(configMap), actual))
+	assert.True(t, os.IsController(ownerB, actual), "ownerB should be controller")
+	assert.False(t, os.IsController(ownerA, actual), "ownerA should not be controller")
+
+	// Step 3: Teardown with ownerA at revision 1 — revision matches but
+	// ownerA is not the controller. The object must NOT be deleted.
+	gone, err := oe.Teardown(ctx, 1, configMap, types.WithOwner(ownerA, os))
+	require.NoError(t, err)
+	assert.True(t, gone)
+
+	// Verify the object still exists on the cluster.
+	stillExists := configMap.DeepCopy()
+	err = Client.Get(ctx, client.ObjectKeyFromObject(configMap), stillExists)
+	require.NoError(t, err, "object must still exist after teardown by non-controller owner")
+
+	// Verify ownerA's ref has been removed but ownerB's ref remains.
+	hasOwnerA := false
+	hasOwnerB := false
+
+	for _, ref := range stillExists.GetOwnerReferences() {
+		if ref.UID == ownerA.GetUID() {
+			hasOwnerA = true
+		}
+
+		if ref.UID == ownerB.GetUID() {
+			hasOwnerB = true
+		}
+	}
+
+	assert.False(t, hasOwnerA, "ownerA ref should have been removed")
+	assert.True(t, hasOwnerB, "ownerB ref should still be present")
+
+	// Cleanup: teardown with ownerB (the actual controller).
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(ownerB, os))
+	require.NoError(t, err)
+	assert.False(t, gone)
+
+	gone, err = oe.Teardown(ctx, 1, configMap, types.WithOwner(ownerB, os))
+	require.NoError(t, err)
+	assert.True(t, gone)
+}

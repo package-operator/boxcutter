@@ -1177,6 +1177,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			cache *cacheMock,
 			writer *testutil.CtrlClient,
 			actualObject *unstructured.Unstructured,
+			mode ownerMode,
 		)
 		modes         []ownerMode // nil = both default modes
 		expectedGone  bool
@@ -1191,19 +1192,10 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				return []types.ObjectTeardownOption{types.WithOrphan()}
 			},
 			mockSetup: func(
-				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				_ *cacheMock, writer *testutil.CtrlClient,
+				_ *unstructured.Unstructured, _ ownerMode,
 			) {
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-				cache.
-					On("Get", mock.Anything,
-						client.ObjectKey{Name: "testi", Namespace: "test"},
-						mock.Anything, mock.Anything).
-					Run(func(args mock.Arguments) {
-						obj := args.Get(2).(*unstructured.Unstructured)
-						*obj = *actualObject
-					}).
-					Return(nil)
 			},
 			expectedGone: true,
 		},
@@ -1213,7 +1205,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			desiredObject: buildObj("testi", "test"),
 			mockSetup: func(
 				cache *cacheMock, _ *testutil.CtrlClient,
-				_ *unstructured.Unstructured,
+				_ *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1229,7 +1221,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			desiredObject: buildObj("testi", "test"),
 			mockSetup: func(
 				cache *cacheMock, _ *testutil.CtrlClient,
-				_ *unstructured.Unstructured,
+				_ *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1249,7 +1241,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			desiredObject: buildObj("testi", "test"),
 			mockSetup: func(
 				cache *cacheMock, _ *testutil.CtrlClient,
-				_ *unstructured.Unstructured,
+				_ *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1266,7 +1258,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			actualObject:  buildObj("testi", "test", withRevision("1"), withManaged),
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1290,7 +1282,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			actualObject:  buildObj("testi", "test", withRevision("1"), withManaged),
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1314,7 +1306,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			actualObject:  buildObj("testi", "test", withRevision("1"), withManaged),
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1346,7 +1338,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1357,8 +1349,6 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				writer.On("Delete", mock.Anything, mock.Anything, mock.Anything).
-					Panic("Delete should not be called on the engine writer")
 			},
 			expectedGone: false,
 		},
@@ -1377,7 +1367,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1388,8 +1378,6 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				writer.On("Delete", mock.Anything, mock.Anything, mock.Anything).
-					Panic("Delete should not be called on the engine writer")
 			},
 			expectedError: "deleting object: teardown delete failed",
 		},
@@ -1400,7 +1388,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			actualObject:  buildObj("testi", "test", withRevision("4")),
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, mode ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1411,8 +1399,11 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
+
 				// Patch may be called in with-owner mode to remove owner ref.
-				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				if mode.teardownOpts() != nil {
+					writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				}
 			},
 			expectedGone: true,
 		},
@@ -1425,7 +1416,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			modes: []ownerMode{withNativeOwnerMode},
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1447,7 +1438,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			actualObject:  buildObj("testi", "test", withRevision("2")),
 			mockSetup: func(
 				cache *cacheMock, writer *testutil.CtrlClient,
-				actualObject *unstructured.Unstructured,
+				actualObject *unstructured.Unstructured, mode ownerMode,
 			) {
 				cache.
 					On("Get", mock.Anything,
@@ -1458,7 +1449,11 @@ func TestObjectEngine_Teardown(t *testing.T) {
 						*obj = *actualObject
 					}).
 					Return(nil)
-				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+				// Patch may be called in with-owner mode to remove owner ref.
+				if mode.teardownOpts() != nil {
+					writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				}
 			},
 			expectedGone: true,
 		},
@@ -1475,11 +1470,61 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			})},
 			mockSetup: func(
 				_ *cacheMock, writer *testutil.CtrlClient,
-				_ *unstructured.Unstructured,
+				_ *unstructured.Unstructured, _ ownerMode,
 			) {
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedGone: true,
+		},
+		{
+			name:          "Not controller, revision matches, removes owner ref",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject: buildObj("testi", "test", withRevision("1"),
+				withOwnerRef("v1", "ConfigMap", "owner", "12345-678", false),
+				withOwnerRef("v1", "Node", "node1", "xxxx", true)),
+			modes: []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			},
+			expectedGone: true,
+		},
+		{
+			name:          "Is controller, revision mismatch, still deletes",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject:  buildObj("testi", "test", withRevision("4"), withManaged),
+			modes:         []ownerMode{withNativeOwnerMode},
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+			},
+			expectedGone: false,
 		},
 	}
 
@@ -1514,7 +1559,7 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					actualObject = tc.actualObject(&mode)
 				}
 
-				tc.mockSetup(cache, writer, actualObject)
+				tc.mockSetup(cache, writer, actualObject, mode)
 
 				opts := mode.teardownOpts()
 				if tc.opts != nil {
@@ -1533,6 +1578,10 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					require.Error(t, err)
 					assert.Contains(t, err.Error(), tc.expectedError)
 				}
+
+				cache.AssertExpectations(t)
+				writer.AssertExpectations(t)
+				divergeDetector.AssertExpectations(t)
 			})
 		}
 	}
