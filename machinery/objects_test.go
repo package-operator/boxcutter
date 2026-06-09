@@ -739,7 +739,7 @@ func TestObjectEngine(t *testing.T) {
 			expectedAction: ActionUpdated,
 		},
 		{
-			name:          "Paused, create skipped",
+			name:          "Paused, create dry-run",
 			revision:      1,
 			desiredObject: buildObj("testi", "test"),
 			opts: []types.ObjectReconcileOption{
@@ -756,7 +756,7 @@ func TestObjectEngine(t *testing.T) {
 					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
 
 				writer.
-					On("Create", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					On("Create", mock.Anything, mock.Anything, mock.Anything).
 					Return(nil)
 			},
 			expectedAction: ActionCreated,
@@ -944,99 +944,62 @@ func TestObjectEngine(t *testing.T) {
 func TestObjectEngine_Collision(t *testing.T) {
 	t.Parallel()
 
-	t.Run("non paused", func(t *testing.T) {
-		t.Parallel()
+	tests := []struct {
+		name string
+		opts []types.ObjectReconcileOption
+	}{
+		{name: "non paused"},
+		{name: "paused", opts: []types.ObjectReconcileOption{types.WithPaused{}}},
+	}
 
-		cache := &cacheMock{}
-		writer := testutil.NewClient()
-		divergeDetector := &comparatorMock{}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		oe := NewObjectEngine(
-			scheme.Scheme,
-			cache, writer,
-			divergeDetector,
-			testFieldOwner,
-			testSystemPrefix,
-			"",
-			nil,
-		)
-		configMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "oe-test",
-				Namespace: "test",
-			},
-			Data: map[string]string{
-				"test1": "test",
-				"test2": "test",
-			},
-		}
+			cache := &cacheMock{}
+			writer := testutil.NewClient()
+			divergeDetector := &comparatorMock{}
 
-		ctx := t.Context()
+			oe := NewObjectEngine(
+				scheme.Scheme,
+				cache, writer,
+				divergeDetector,
+				testFieldOwner,
+				testSystemPrefix,
+				"",
+				nil,
+			)
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "oe-test",
+					Namespace: "test",
+				},
+				Data: map[string]string{
+					"test1": "test",
+					"test2": "test",
+				},
+			}
 
-		cache.
-			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
-			Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+			ctx := t.Context()
 
-		writer.
-			On("Create", mock.Anything, mock.Anything, mock.Anything).
-			Return(apierrors.NewAlreadyExists(schema.GroupResource{
-				Group: "test", Resource: "banana",
-			}, "cavendish"))
+			cache.
+				On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
+				Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
 
-		_, err := oe.Reconcile(ctx, 1, configMap)
+			writer.
+				On("Create", mock.Anything, mock.Anything, mock.Anything).
+				Return(apierrors.NewAlreadyExists(schema.GroupResource{
+					Group: "test", Resource: "banana",
+				}, "cavendish"))
 
-		var terr *CreateCollisionError
+			_, err := oe.Reconcile(ctx, 1, configMap, tc.opts...)
 
-		require.ErrorAs(t, err, &terr)
-		require.ErrorContains(t, err, `banana.test "cavendish" already exists`)
-	})
+			var terr *CreateCollisionError
 
-	t.Run("paused", func(t *testing.T) {
-		t.Parallel()
-
-		cache := &cacheMock{}
-		writer := testutil.NewClient()
-		divergeDetector := &comparatorMock{}
-
-		oe := NewObjectEngine(
-			scheme.Scheme,
-			cache, writer,
-			divergeDetector,
-			testFieldOwner,
-			testSystemPrefix,
-			"",
-			nil,
-		)
-		configMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "oe-test",
-				Namespace: "test",
-			},
-			Data: map[string]string{
-				"test1": "test",
-				"test2": "test",
-			},
-		}
-
-		ctx := t.Context()
-
-		cache.
-			On("Get", mock.Anything, client.ObjectKeyFromObject(configMap), mock.Anything, mock.Anything).
-			Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
-
-		writer.
-			On("Create", mock.Anything, mock.Anything, mock.Anything).
-			Return(apierrors.NewAlreadyExists(schema.GroupResource{
-				Group: "test", Resource: "banana",
-			}, "cavendish"))
-
-		_, err := oe.Reconcile(ctx, 1, configMap, types.WithPaused{})
-
-		var terr *CreateCollisionError
-
-		require.ErrorAs(t, err, &terr)
-		require.ErrorContains(t, err, `banana.test "cavendish" already exists`)
-	})
+			require.ErrorAs(t, err, &terr)
+			require.ErrorContains(t, err, `banana.test "cavendish" already exists`)
+		})
+	}
 }
 
 func TestObjectEngine_Reconcile_SanityChecks(t *testing.T) {
