@@ -1,6 +1,10 @@
 package types
 
 import (
+	"slices"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,6 +23,20 @@ func (rropts RevisionReconcileOptions) ForPhase(phaseName string) []PhaseReconci
 	opts = append(opts, rropts.PhaseOptions[phaseName]...)
 
 	return opts
+}
+
+func (rropts RevisionReconcileOptions) GetOwner() client.Object {
+	var phaseOptions PhaseReconcileOptions
+	for _, opt := range rropts.DefaultPhaseOptions {
+		opt.ApplyToPhaseReconcileOptions(&phaseOptions)
+	}
+
+	var objectOptions ObjectReconcileOptions
+	for _, opt := range phaseOptions.DefaultObjectOptions {
+		opt.ApplyToObjectReconcileOptions(&objectOptions)
+	}
+
+	return objectOptions.Owner
 }
 
 // RevisionReconcileOption is the common interface for revision reconciliation options.
@@ -54,6 +72,8 @@ type PhaseReconcileOptions struct {
 	DefaultObjectOptions []ObjectReconcileOption
 	// ObjectOptions maps ObjectOptions for specific objects.
 	ObjectOptions map[ObjectRef][]ObjectReconcileOption
+	// AggregateErrors aggregates all object errors from the phase and returns them as a single error.
+	AggregateErrors bool
 }
 
 // ForObject returns the options for the given object.
@@ -79,6 +99,8 @@ type PhaseTeardownOptions struct {
 	DefaultObjectOptions []ObjectTeardownOption
 	// ObjectOptions maps ObjectOptions for specific objects.
 	ObjectOptions map[ObjectRef][]ObjectTeardownOption
+	// AggregateErrors aggregates all object errors from the phase and returns them as a single error.
+	AggregateErrors bool
 }
 
 // ForObject returns the options for the given object.
@@ -98,16 +120,27 @@ type PhaseTeardownOption interface {
 	RevisionTeardownOption
 }
 
+// SiblingOwnerClassifierFunc is called when an object is controlled by an
+// unknown owner. Returns true if the owner belongs to the same deployment
+// and should be treated as a sibling revision instead of a collision.
+type SiblingOwnerClassifierFunc func(ownerRef metav1.OwnerReference) bool
+
 // ObjectReconcileOptions holds configuration options changing object reconciliation.
 type ObjectReconcileOptions struct {
-	CollisionProtection CollisionProtection
-	PreviousOwners      []client.Object
-	Paused              bool
-	Probes              map[string]Prober
+	CollisionProtection    CollisionProtection
+	SiblingOwnerClassifier SiblingOwnerClassifierFunc
+	Owner                  client.Object
+	OwnerStrategy          OwnerStrategy
+	Paused                 bool
+	Probes                 map[string]Prober
 }
 
 // Default sets empty Option fields to their default value.
 func (opts *ObjectReconcileOptions) Default() {
+	if opts.Owner != nil && opts.OwnerStrategy == nil {
+		panic("Owner without ownerStrategy set")
+	}
+
 	if len(opts.CollisionProtection) == 0 {
 		opts.CollisionProtection = CollisionProtectionPrevent
 	}
@@ -122,15 +155,25 @@ type ObjectReconcileOption interface {
 var (
 	_ ObjectReconcileOption = (WithCollisionProtection)("")
 	_ ObjectReconcileOption = (WithPaused{})
-	_ ObjectReconcileOption = (WithPreviousOwners{})
+	_ ObjectReconcileOption = (WithSiblingOwnerClassifier)(nil)
 	_ ObjectReconcileOption = (WithProbe("", nil))
+	_ ObjectTeardownOption  = (WithTeardownWriter(nil))
 )
 
 // ObjectTeardownOptions holds configuration options changing object teardown.
-type ObjectTeardownOptions struct{}
+type ObjectTeardownOptions struct {
+	Orphan         bool
+	TeardownWriter client.Writer
+	Owner          client.Object
+	OwnerStrategy  OwnerStrategy
+}
 
 // Default sets empty Option fields to their default value.
-func (opts *ObjectTeardownOptions) Default() {}
+func (opts *ObjectTeardownOptions) Default() {
+	if opts.Owner != nil && opts.OwnerStrategy == nil {
+		panic("Owner without ownerStrategy set")
+	}
+}
 
 // ObjectTeardownOption is the common interface for object teardown options.
 type ObjectTeardownOption interface {
@@ -176,23 +219,51 @@ func (p WithCollisionProtection) ApplyToRevisionReconcileOptions(opts *RevisionR
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
-// WithPreviousOwners is a list of known objects allowed to take ownership from.
-// Objects from this list will not trigger collision detection and prevention.
-type WithPreviousOwners []client.Object
+// WithSiblingOwnerClassifier sets a callback to classify unknown controllers.
+// When the callback returns true, the unknown controller is treated as a
+// sibling revision of the same deployment instead of a collision.
+type WithSiblingOwnerClassifier SiblingOwnerClassifierFunc
 
 // ApplyToObjectReconcileOptions implements ObjectReconcileOption.
-func (p WithPreviousOwners) ApplyToObjectReconcileOptions(opts *ObjectReconcileOptions) {
-	opts.PreviousOwners = p
+func (p WithSiblingOwnerClassifier) ApplyToObjectReconcileOptions(opts *ObjectReconcileOptions) {
+	opts.SiblingOwnerClassifier = SiblingOwnerClassifierFunc(p)
 }
 
 // ApplyToPhaseReconcileOptions implements PhaseOption.
-func (p WithPreviousOwners) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
+func (p WithSiblingOwnerClassifier) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
 	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
 }
 
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
-func (p WithPreviousOwners) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+func (p WithSiblingOwnerClassifier) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+// WithSiblingOwners returns a WithSiblingOwnerClassifier option that
+// compares against UIDs of all passed `siblings` objects.
+func WithSiblingOwners(siblings []client.Object) WithSiblingOwnerClassifier {
+	uids := make([]types.UID, 0, len(siblings))
+	for _, sibling := range siblings {
+		uids = append(uids, sibling.GetUID())
+	}
+
+	return func(actualOwnerRef metav1.OwnerReference) bool {
+		return slices.Contains(uids, actualOwnerRef.UID)
+	}
+}
+
+// WithSiblingOwnerRefs returns a WithSiblingOwnerClassifier option that
+// compares against UIDs of all passed owner references.
+func WithSiblingOwnerRefs(ownerRefs []metav1.OwnerReference) WithSiblingOwnerClassifier {
+	return func(actualOwnerRef metav1.OwnerReference) bool {
+		for _, ownerRef := range ownerRefs {
+			if actualOwnerRef.UID == ownerRef.UID {
+				return true
+			}
+		}
+
+		return false
+	}
 }
 
 // WithPaused skips reconciliation and just reports status information.
@@ -214,27 +285,6 @@ func (p WithPaused) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptio
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }
 
-// ProgressProbeType is a well-known probe type used to guard phase progression.
-const ProgressProbeType = "Progress"
-
-// Prober needs to be implemented by any probing implementation.
-type Prober interface {
-	Probe(obj client.Object) (success bool, messages []string)
-}
-
-// ProbeFunc wraps the given function to work with the Prober interface.
-func ProbeFunc(fn func(obj client.Object) (success bool, messages []string)) Prober {
-	return &probeFn{Fn: fn}
-}
-
-type probeFn struct {
-	Fn func(obj client.Object) (success bool, messages []string)
-}
-
-func (p *probeFn) Probe(obj client.Object) (success bool, messages []string) {
-	return p.Fn(obj)
-}
-
 // WithProbe registers the given probe to evaluate state of objects.
 func WithProbe(t string, probe Prober) ObjectReconcileOption {
 	return &optionFn{
@@ -242,7 +292,44 @@ func WithProbe(t string, probe Prober) ObjectReconcileOption {
 			if opts.Probes == nil {
 				opts.Probes = map[string]Prober{}
 			}
+
 			opts.Probes[t] = probe
+		},
+	}
+}
+
+// WithOrphan exclude objects from Teardown.
+// use it as WithObjectTeardownOptions(obj, WithOrphan()) to exclude individual objects or
+// use it as WithPhaseTeardownOptions("my-phase", WithOrphan()) to exclude a whole phase.
+func WithOrphan() ObjectTeardownOption {
+	return &teardownOptionFn{
+		fn: func(opts *ObjectTeardownOptions) {
+			opts.Orphan = true
+		},
+	}
+}
+
+// WithAggregatePhaseReconcileErrors causes phase reconciliation to aggregate all object
+// errors as a single error instead of returning on the first error.
+func WithAggregatePhaseReconcileErrors() PhaseReconcileOption {
+	return phaseReconcileOptionFn(func(opts *PhaseReconcileOptions) {
+		opts.AggregateErrors = true
+	})
+}
+
+// WithAggregatePhaseTeardownErrors causes phase teardown to aggregate all object
+// errors as a single error instead of returning on the first error.
+func WithAggregatePhaseTeardownErrors() PhaseTeardownOption {
+	return phaseTeardownOptionFn(func(opts *PhaseTeardownOptions) {
+		opts.AggregateErrors = true
+	})
+}
+
+// WithTeardownWriter tears down the revision with the given writer.
+func WithTeardownWriter(writer client.Writer) ObjectTeardownOption {
+	return &teardownOptionFn{
+		fn: func(opts *ObjectTeardownOptions) {
+			opts.TeardownWriter = writer
 		},
 	}
 }
@@ -345,6 +432,68 @@ func (p *withPhaseTeardownOptions) ApplyToRevisionTeardownOptions(opts *Revision
 	opts.PhaseOptions[p.phaseName] = p.opts
 }
 
+// OwnerStrategy interface needed for RevisionEngine.
+type OwnerStrategy interface {
+	SetControllerReference(owner, obj metav1.Object) error
+	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
+	IsController(owner, obj metav1.Object) bool
+	CopyOwnerReferences(objA, objB metav1.Object)
+	ReleaseController(obj metav1.Object)
+	RemoveOwner(owner, obj metav1.Object)
+}
+
+// WithOwner sets an owning object and the strategy to use with it.
+// Ensures controller-refs are set to track the owner and
+// enables handover between owners.
+func WithOwner(obj client.Object, start OwnerStrategy) interface {
+	ComparatorOption
+	ObjectReconcileOption
+	ObjectTeardownOption
+} {
+	if len(obj.GetUID()) == 0 {
+		panic("owner must be persisted to cluster, empty UID")
+	}
+
+	return &combinedOpts{
+		fn: func(opts *ComparatorOptions) {
+			opts.Owner = obj
+			opts.OwnerStrategy = start
+		},
+		optionFn: optionFn{
+			fn: func(opts *ObjectReconcileOptions) {
+				opts.Owner = obj
+				opts.OwnerStrategy = start
+			},
+		},
+		teardownOptionFn: teardownOptionFn{
+			fn: func(opts *ObjectTeardownOptions) {
+				opts.Owner = obj
+				opts.OwnerStrategy = start
+			},
+		},
+	}
+}
+
+type combinedOpts struct {
+	optionFn
+	teardownOptionFn
+
+	fn func(opts *ComparatorOptions)
+}
+
+func (copt *combinedOpts) ApplyToComparatorOptions(opts *ComparatorOptions) {
+	copt.fn(opts)
+}
+
+type ComparatorOptions struct {
+	Owner         client.Object
+	OwnerStrategy OwnerStrategy
+}
+
+type ComparatorOption interface {
+	ApplyToComparatorOptions(opts *ComparatorOptions)
+}
+
 type optionFn struct {
 	fn func(opts *ObjectReconcileOptions)
 }
@@ -361,5 +510,48 @@ func (p *optionFn) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
 
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
 func (p *optionFn) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+type phaseReconcileOptionFn func(opts *PhaseReconcileOptions)
+
+// ApplyToPhaseReconcileOptions implements PhaseOption.
+func (p phaseReconcileOptionFn) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
+	p(opts)
+}
+
+// ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
+func (p phaseReconcileOptionFn) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+type phaseTeardownOptionFn func(opts *PhaseTeardownOptions)
+
+// ApplyToPhaseTeardownOptions implements PhaseOption.
+func (p phaseTeardownOptionFn) ApplyToPhaseTeardownOptions(opts *PhaseTeardownOptions) {
+	p(opts)
+}
+
+// ApplyToRevisionTeardownOptions implements RevisionTeardownOptions.
+func (p phaseTeardownOptionFn) ApplyToRevisionTeardownOptions(opts *RevisionTeardownOptions) {
+	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+type teardownOptionFn struct {
+	fn func(opts *ObjectTeardownOptions)
+}
+
+// ApplyToObjectTeardownOptions implements ObjectTeardownOption.
+func (p *teardownOptionFn) ApplyToObjectTeardownOptions(opts *ObjectTeardownOptions) {
+	p.fn(opts)
+}
+
+// ApplyToPhaseTeardownOptions implements PhaseOption.
+func (p *teardownOptionFn) ApplyToPhaseTeardownOptions(opts *PhaseTeardownOptions) {
+	opts.DefaultObjectOptions = append(opts.DefaultObjectOptions, p)
+}
+
+// ApplyToRevisionTeardownOptions implements RevisionTeardownOptions.
+func (p *teardownOptionFn) ApplyToRevisionTeardownOptions(opts *RevisionTeardownOptions) {
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
 }

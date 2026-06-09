@@ -10,8 +10,8 @@ import (
 // Lint is a collection of lint related functions.
 type Lint struct{}
 
-func (l Lint) goModTidy(workdir string) error {
-	return shr.New(sh.WithWorkDir(workdir)).Run("go", "mod", "tidy")
+func (l Lint) goModTidy(ctx context.Context, workdir string) error {
+	return shr.New(sh.WithWorkDir(workdir)).Run(ctx, "go", "mod", "tidy")
 }
 
 func (l Lint) goModTidyAll(ctx context.Context) error {
@@ -20,14 +20,14 @@ func (l Lint) goModTidyAll(ctx context.Context) error {
 	)
 }
 
-func (Lint) glciFix() error {
-	return shr.Run("golangci-lint", "run", "--concurrency=4", "--fix", "./...")
+func (Lint) glciFix(ctx context.Context) error {
+	return shr.Run(ctx, "golangci-lint", "run", "--concurrency=4", "--fix", "./...")
 }
 
-func (Lint) glciCheck() error {
-	return shr.Run("golangci-lint", "run", "./...")
+func (Lint) glciCheck(ctx context.Context) error {
+	return shr.Run(ctx, "golangci-lint", "run", "./...")
 }
 
-func (Lint) validateGitClean() error {
-	return shr.Run("git", "diff", "--exit-code")
+func (Lint) validateGitClean(ctx context.Context) error {
+	return shr.Run(ctx, "git", "diff", "--exit-code")
 }

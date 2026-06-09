@@ -29,7 +29,6 @@ func cleanupOnSuccess(t *testing.T, obj client.Object) {
 	t.Cleanup(func() {
 		if !t.Failed() {
 			// Make sure objects are completely gone before closing the test.
-			//nolint:usetesting
 			ctx := context.Background()
 			_ = Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground))
 			_ = Waiter.WaitToBeGone(ctx, obj, func(client.Object) (bool, error) { return false, nil })
@@ -48,18 +47,18 @@ func mustGVKForObject(obj client.Object) schema.GroupVersionKind {
 
 // Converts the given client.Object to an unstructured object.
 // Panics if this fails.
-func toUns(obj client.Object) unstructured.Unstructured {
+func toUns(obj client.Object) *unstructured.Unstructured {
 	must(setTypeMeta(obj, Scheme))
 	raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	must(err)
 
-	return unstructured.Unstructured{
+	return &unstructured.Unstructured{
 		Object: raw,
 	}
 }
 
 // Needed for `setTypeMeta`.
-var typeMetaType = reflect.TypeOf(metav1.TypeMeta{})
+var typeMetaType = reflect.TypeFor[metav1.TypeMeta]()
 
 // Test helper that uses reflection to get to the underlying struct value of a `runtime.Object`
 // and set its TypeMeta field with data acquired from the passed scheme.

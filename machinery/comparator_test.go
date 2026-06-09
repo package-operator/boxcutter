@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,8 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/openapi"
 	"k8s.io/kube-openapi/pkg/spec3"
 
+	bctypes "pkg.package-operator.run/boxcutter/machinery/types"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
 )
 
@@ -29,12 +32,11 @@ func TestComparator_Unstructured(t *testing.T) {
 	oapi := &spec3.OpenAPI{}
 	require.NoError(t, oapi.UnmarshalJSON(testOAPISchema))
 
-	a := &dummyOpenAPIAccessor{
-		openAPI: oapi,
-	}
+	a := &dummyOpenAPIAccessor{}
+	a.On("Get", mock.Anything).Return(oapi, nil)
+
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -50,40 +52,40 @@ func TestComparator_Unstructured(t *testing.T) {
 	// Test Case 1
 	// Another actor has updated .data.test and the field owner has changed.
 	desiredNewFieldOwner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test": "test123",
 			},
 		},
 	}
 
 	actualNewFieldOwner := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
-				"managedFields": []interface{}{
-					map[string]interface{}{
+				"managedFields": []any{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1":   map[string]interface{}{},
+						"fieldsV1":   map[string]any{},
 						"manager":    testFieldOwner,
 						"operation":  "Apply",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1": map[string]interface{}{
-							"f:data": map[string]interface{}{
-								"f:test": map[string]interface{}{},
+						"fieldsV1": map[string]any{
+							"f:data": map[string]any{
+								"f:test": map[string]any{},
 							},
 						},
 						"manager":   "Hans",
@@ -91,7 +93,7 @@ func TestComparator_Unstructured(t *testing.T) {
 					},
 				},
 			},
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"test": "test123",
 			},
 		},
@@ -101,36 +103,36 @@ func TestComparator_Unstructured(t *testing.T) {
 
 	// Test Case 2
 	pod := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Pod",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "t",
 				"namespace": "test",
-				"managedFields": []interface{}{
-					map[string]interface{}{
+				"managedFields": []any{
+					map[string]any{
 						"apiVersion": "v1",
 						"fieldsType": "FieldsV1",
-						"fieldsV1": map[string]interface{}{
-							"f:spec": map[string]interface{}{
-								"f:containers": map[string]interface{}{
-									`k:{"name":"manager"}`: map[string]interface{}{
-										".": map[string]interface{}{},
-										"f:env": map[string]interface{}{
-											".": map[string]interface{}{},
-											`k:{"name":"TEST"}`: map[string]interface{}{
-												".":       map[string]interface{}{},
-												"f:name":  map[string]interface{}{},
-												"f:value": map[string]interface{}{},
+						"fieldsV1": map[string]any{
+							"f:spec": map[string]any{
+								"f:containers": map[string]any{
+									`k:{"name":"manager"}`: map[string]any{
+										".": map[string]any{},
+										"f:env": map[string]any{
+											".": map[string]any{},
+											`k:{"name":"TEST"}`: map[string]any{
+												".":       map[string]any{},
+												"f:name":  map[string]any{},
+												"f:value": map[string]any{},
 											},
 										},
-										"f:ports": map[string]interface{}{
-											".": map[string]interface{}{},
-											`k:{"containerPort":8080,"protocol":"TCP"}`: map[string]interface{}{
-												".":               map[string]interface{}{},
-												"f:name":          map[string]interface{}{},
-												"f:protocol":      map[string]interface{}{},
-												"f:containerPort": map[string]interface{}{},
+										"f:ports": map[string]any{
+											".": map[string]any{},
+											`k:{"containerPort":8080,"protocol":"TCP"}`: map[string]any{
+												".":               map[string]any{},
+												"f:name":          map[string]any{},
+												"f:protocol":      map[string]any{},
+												"f:containerPort": map[string]any{},
 											},
 										},
 									},
@@ -142,18 +144,18 @@ func TestComparator_Unstructured(t *testing.T) {
 					},
 				},
 			},
-			"spec": map[string]interface{}{
-				"containers": []interface{}{
-					map[string]interface{}{
+			"spec": map[string]any{
+				"containers": []any{
+					map[string]any{
 						"name": "manager",
-						"ports": []interface{}{
-							map[string]interface{}{
+						"ports": []any{
+							map[string]any{
 								"containerPort": float64(8080),
 								"protocol":      "TCP",
 							},
 						},
-						"env": []interface{}{
-							map[string]interface{}{
+						"env": []any{
+							map[string]any{
 								"name":  "TEST",
 								"value": "xxx",
 							},
@@ -162,9 +164,9 @@ func TestComparator_Unstructured(t *testing.T) {
 				},
 			},
 			// Status dropped in strip set due to presence of /status subresource.
-			"status": map[string]interface{}{
-				"conditions": []interface{}{
-					map[string]interface{}{
+			"status": map[string]any{
+				"conditions": []any{
+					map[string]any{
 						"type":   "Ready",
 						"status": "True",
 					},
@@ -179,6 +181,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		name    string
 		desired *unstructured.Unstructured
 		actual  *unstructured.Unstructured
+		opts    []bctypes.ComparatorOption
 
 		expectedReport string
 	}{
@@ -186,15 +189,43 @@ func TestComparator_Unstructured(t *testing.T) {
 			name:    "Hans updated .data.test",
 			desired: desiredNewFieldOwner,
 			actual:  actualNewFieldOwner,
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
 			expectedReport: `Conflicts:
 - "Hans"
   .data.test
 `,
 		},
 		{
-			name:           "Pod Compare",
-			desired:        pod.DeepCopy(),
-			actual:         pod.DeepCopy(),
+			name:    "Hans updated .data.test - no owner",
+			desired: desiredNewFieldOwner,
+			actual:  actualNewFieldOwner,
+
+			expectedReport: `Conflicts:
+- "Hans"
+  .data.test
+Comparison:
+- Added:
+  .metadata.ownerReferences[uid="12345-678"]
+`,
+		},
+		{
+			name:    "Pod Compare",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+			opts: []bctypes.ComparatorOption{
+				bctypes.WithOwner(owner, n),
+			},
+
+			expectedReport: ``,
+		},
+		{
+			name:    "Pod Compare - no owner",
+			desired: pod.DeepCopy(),
+			actual:  pod.DeepCopy(),
+
 			expectedReport: ``,
 		},
 	}
@@ -202,14 +233,10 @@ func TestComparator_Unstructured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, test.opts...)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.expectedReport, res.String())
-
-			if res.Comparison != nil {
-				assert.True(t, res.Comparison.IsSame(), res.Comparison.String())
-			}
 		})
 	}
 
@@ -217,33 +244,33 @@ func TestComparator_Unstructured(t *testing.T) {
 		t.Parallel()
 
 		desiredValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test123",
 				},
 			},
 		}
 
 		actualValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
-					"managedFields": []interface{}{
-						map[string]interface{}{
+					"managedFields": []any{
+						map[string]any{
 							"apiVersion": "v1",
 							"fieldsType": "FieldsV1",
-							"fieldsV1": map[string]interface{}{
-								"f:data": map[string]interface{}{
-									"f:test": map[string]interface{}{},
+							"fieldsV1": map[string]any{
+								"f:data": map[string]any{
+									"f:test": map[string]any{},
 								},
 							},
 							"manager":   testFieldOwner,
@@ -251,7 +278,7 @@ func TestComparator_Unstructured(t *testing.T) {
 						},
 					},
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test1234",
 				},
 			},
@@ -259,7 +286,7 @@ func TestComparator_Unstructured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -268,7 +295,7 @@ func TestComparator_Unstructured(t *testing.T) {
 	})
 }
 
-//nolint:dupl
+//nolint:dupl,maintidx
 func TestComparator_Structured(t *testing.T) {
 	t.Parallel()
 
@@ -278,12 +305,11 @@ func TestComparator_Structured(t *testing.T) {
 	oapi := &spec3.OpenAPI{}
 	require.NoError(t, oapi.UnmarshalJSON(testOAPISchema))
 
-	a := &dummyOpenAPIAccessor{
-		openAPI: oapi,
-	}
+	a := &dummyOpenAPIAccessor{}
+	a.On("Get", mock.Anything).Return(oapi, nil)
+
 	n := ownerhandling.NewNative(scheme.Scheme)
 	d := &Comparator{
-		ownerStrategy:   n,
 		openAPIAccessor: a,
 		fieldOwner:      testFieldOwner,
 	}
@@ -491,7 +517,7 @@ func TestComparator_Structured(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			res, err := d.Compare(owner, test.desired, test.actual)
+			res, err := d.Compare(test.desired, test.actual, bctypes.WithOwner(owner, n))
 			require.NoError(t, err)
 
 			if res.Comparison != nil {
@@ -504,33 +530,33 @@ func TestComparator_Structured(t *testing.T) {
 		t.Parallel()
 
 		desiredValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test123",
 				},
 			},
 		}
 
 		actualValueChange := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "t",
 					"namespace": "test",
-					"managedFields": []interface{}{
-						map[string]interface{}{
+					"managedFields": []any{
+						map[string]any{
 							"apiVersion": "v1",
 							"fieldsType": "FieldsV1",
-							"fieldsV1": map[string]interface{}{
-								"f:data": map[string]interface{}{
-									"f:test": map[string]interface{}{},
+							"fieldsV1": map[string]any{
+								"f:data": map[string]any{
+									"f:test": map[string]any{},
 								},
 							},
 							"manager":   testFieldOwner,
@@ -538,7 +564,7 @@ func TestComparator_Structured(t *testing.T) {
 						},
 					},
 				},
-				"data": map[string]interface{}{
+				"data": map[string]any{
 					"test": "test1234",
 				},
 			},
@@ -546,7 +572,7 @@ func TestComparator_Structured(t *testing.T) {
 		err = n.SetControllerReference(owner, actualValueChange)
 		require.NoError(t, err)
 
-		res, err := d.Compare(owner, desiredValueChange, actualValueChange)
+		res, err := d.Compare(desiredValueChange, actualValueChange, bctypes.WithOwner(owner, n))
 		require.NoError(t, err)
 		// no conflicts
 		assert.Empty(t, res.ConflictingMangers)
@@ -555,12 +581,78 @@ func TestComparator_Structured(t *testing.T) {
 	})
 }
 
-type dummyOpenAPIAccessor struct {
-	openAPI *spec3.OpenAPI
+func TestNewComparator(t *testing.T) {
+	t.Parallel()
+
+	// Use a simple mock discovery client
+	oapiClient := &simpleOpenAPIClientMock{}
+	oapiClient.On("Paths").Return(nil, nil)
+	oapiClient.On("GV", mock.Anything).Return(&spec3.OpenAPI{}, nil)
+
+	discoveryClient := &simpleDiscoveryMock{}
+	discoveryClient.On("OpenAPIV3").Return(oapiClient)
+
+	c := NewComparator(discoveryClient, scheme.Scheme, "test-owner")
+
+	assert.NotNil(t, c)
+	assert.Equal(t, "test-owner", c.fieldOwner)
+	assert.NotNil(t, c.openAPIAccessor)
+	assert.Equal(t, scheme.Scheme, c.scheme)
 }
 
-func (a *dummyOpenAPIAccessor) Get(_ schema.GroupVersion) (*spec3.OpenAPI, error) {
-	return a.openAPI, nil
+func TestCompareResult_Modified(t *testing.T) {
+	t.Parallel()
+
+	// Test the nil comparison case which has 0% coverage
+	result := CompareResult{Comparison: nil}
+	modified := result.Modified()
+
+	assert.Nil(t, modified)
+}
+
+type simpleDiscoveryMock struct {
+	mock.Mock
+}
+
+func (m *simpleDiscoveryMock) OpenAPIV3() openapi.Client {
+	args := m.Called()
+
+	return args.Get(0).(openapi.Client)
+}
+
+type simpleOpenAPIClientMock struct {
+	mock.Mock
+}
+
+func (m *simpleOpenAPIClientMock) Paths() (map[string]openapi.GroupVersion, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(map[string]openapi.GroupVersion), args.Error(1)
+}
+
+func (m *simpleOpenAPIClientMock) GV(path string) (*spec3.OpenAPI, error) {
+	args := m.Called(path)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*spec3.OpenAPI), args.Error(1)
+}
+
+type dummyOpenAPIAccessor struct {
+	mock.Mock
+}
+
+func (a *dummyOpenAPIAccessor) Get(gv schema.GroupVersion) (*spec3.OpenAPI, error) {
+	args := a.Called(gv)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*spec3.OpenAPI), args.Error(1)
 }
 
 func Test_openAPICanonicalName(t *testing.T) {
@@ -574,7 +666,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "Pod",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "Pod",
 				},
@@ -582,9 +674,19 @@ func Test_openAPICanonicalName(t *testing.T) {
 			cn: "io.k8s.api.core.v1.Pod",
 		},
 		{
+			name: "ConfigMap",
+			obj: unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       "ConfigMap",
+				},
+			},
+			cn: "io.k8s.api.core.v1.ConfigMap",
+		},
+		{
 			name: "Secret",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "Secret",
 				},
@@ -594,7 +696,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "Deployment",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "apps/v1",
 					"kind":       "Deployment",
 				},
@@ -604,7 +706,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "RoleBinding",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "rbac.authorization.k8s.io/v1",
 					"kind":       "RoleBinding",
 				},
@@ -614,7 +716,7 @@ func Test_openAPICanonicalName(t *testing.T) {
 		{
 			name: "PKO CRD",
 			obj: unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "package-operator.run/v1alpha1",
 					"kind":       "Package",
 				},

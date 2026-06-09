@@ -19,14 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
     - name: Setup Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.24.6'
+        go-version: '1.26'
         cache-dependency-path: "**/*.sum"
         check-latest: true
 
@@ -42,7 +42,7 @@ jobs:
         CARDBOARD_CONTAINER_RUNTIME: docker
 
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v6
       with:
         files: .cache/unit/cover.txt,.cache/integration/cover.txt
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -50,14 +50,14 @@ jobs:
         verbose: true
 
     - name: Archive unit test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: success() || failure()
       with:
         name: unit-test-results
         path: .cache/unit
 
     - name: Archive integration test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: success() || failure()
       with:
         name: integration-test-results

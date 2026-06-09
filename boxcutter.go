@@ -3,22 +3,47 @@ package boxcutter
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/machinery/types"
-	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
 // Revision represents multiple phases at a given point in time.
 type Revision = types.Revision
 
+// RevisionBuilder is a Revision with methods to attach options.
+type RevisionBuilder = types.RevisionBuilder
+
+// NewRevision creates a new RevisionBuilder with the given name, rev and phases.
+var NewRevision = types.NewRevision
+
+// NewRevisionWithOwner creates a new RevisionBuilder
+// with the given name, rev, phases and owner.
+var NewRevisionWithOwner = types.NewRevisionWithOwner
+
+// NewRevisionWithOwnerAndSiblings creates a new RevisionBuilder
+// with the given name, rev, phases, owner and sibling owners for revision handover.
+var NewRevisionWithOwnerAndSiblings = types.NewRevisionWithOwnerAndSiblings
+
 // Phase represents a collection of objects lifecycled together.
 type Phase = types.Phase
+
+// PhaseBuilder is a Phase with methods to attach options.
+type PhaseBuilder = types.PhaseBuilder
+
+// NewPhase creates a new PhaseBuilder with the given name and objects.
+var NewPhase = types.NewPhase
+
+// NewPhaseWithOwner creates a new PhaseBuilder with the given name, objects and owner.
+var NewPhaseWithOwner = types.NewPhaseWithOwner
+
+// NewPhaseWithOwnerAndSiblings creates a new PhaseBuilder with the given name, objects, owner
+// and sibling owners for revision handover.
+var NewPhaseWithOwnerAndSiblings = types.NewPhaseWithOwnerAndSiblings
 
 // ObjectReconcileOption is the common interface for object reconciliation options.
 type ObjectReconcileOption = types.ObjectReconcileOption
@@ -38,9 +63,18 @@ type RevisionReconcileOption = types.RevisionReconcileOption
 // RevisionTeardownOption holds configuration options changing revision teardown.
 type RevisionTeardownOption = types.RevisionTeardownOption
 
-// WithPreviousOwners is a list of known objects allowed to take ownership from.
-// Objects from this list will not trigger collision detection and prevention.
-type WithPreviousOwners = types.WithPreviousOwners
+// WithSiblingOwnerClassifier sets a callback to classify unknown controllers.
+// When the callback returns true, the unknown controller is treated as a
+// sibling revision of the same deployment instead of a collision.
+type WithSiblingOwnerClassifier = types.WithSiblingOwnerClassifier
+
+// WithSiblingOwners returns a WithSiblingOwnerClassifier option that
+// compares against UIDs of all passed `siblings` objects.
+var WithSiblingOwners = types.WithSiblingOwners
+
+// WithSiblingOwnerRefs returns a WithSiblingOwnerClassifier option that
+// compares against UIDs of all passed owner references.
+var WithSiblingOwnerRefs = types.WithSiblingOwnerRefs
 
 const (
 	// CollisionProtectionPrevent prevents owner collisions entirely
@@ -65,6 +99,14 @@ type WithCollisionProtection = types.WithCollisionProtection
 // Can also be described as dry-run, as no modification will occur.
 type WithPaused = types.WithPaused
 
+// WithAggregatePhaseReconcileErrors causes phase reconciliation to aggregate all object
+// errors as a single error instead of returning on the first error.
+var WithAggregatePhaseReconcileErrors = types.WithAggregatePhaseReconcileErrors
+
+// WithAggregatePhaseTeardownErrors causes phase teardown to aggregate all object
+// errors as a single error instead of returning on the first error.
+var WithAggregatePhaseTeardownErrors = types.WithAggregatePhaseTeardownErrors
+
 // Prober needs to be implemented by any probing implementation.
 type Prober = types.Prober
 
@@ -86,6 +128,11 @@ var WithPhaseReconcileOptions = types.WithPhaseReconcileOptions
 // WithPhaseTeardownOptions applies the given options only to the given Phase.
 var WithPhaseTeardownOptions = types.WithPhaseTeardownOptions
 
+// WithOwner sets an owning object and the strategy to use with it.
+// Ensures controller-refs are set to track the owner and
+// enables handover between owners.
+var WithOwner = types.WithOwner
+
 // ProgressProbeType is a well-known probe type used to guard phase progression.
 const ProgressProbeType = types.ProgressProbeType
 
@@ -93,28 +140,53 @@ const ProgressProbeType = types.ProgressProbeType
 type RevisionEngine = machinery.RevisionEngine
 
 // OwnerStrategy interface needed for RevisionEngine.
-type OwnerStrategy interface {
-	SetControllerReference(owner, obj metav1.Object) error
-	GetController(obj metav1.Object) (metav1.OwnerReference, bool)
-	IsController(owner, obj metav1.Object) bool
-	CopyOwnerReferences(objA, objB metav1.Object)
-	ReleaseController(obj metav1.Object)
-	RemoveOwner(owner, obj metav1.Object)
-}
+type OwnerStrategy = types.OwnerStrategy
 
 // RevisionEngineOptions holds all configuration options for the RevisionEngine.
 type RevisionEngineOptions struct {
 	Scheme          *runtime.Scheme
 	FieldOwner      string
 	SystemPrefix    string
-	DiscoveryClient discovery.DiscoveryInterface
+	DiscoveryClient discovery.OpenAPIV3SchemaInterface
 	RestMapper      meta.RESTMapper
 	Writer          client.Writer
 	Reader          client.Reader
 
 	// Optional
 
-	OwnerStrategy OwnerStrategy
+	// ManagedBy is the value to use for the app.kubernetes.io/managed-by label.
+	// If unset, defaults to "boxcutter".
+	ManagedBy string
+	// UnfilteredReader is a client.Reader which is not subject to filtering
+	// which may be applied to Reader if it is cached using object selectors.
+	// UnfilteredReader is used rarely in edge cases that do not persist, so it
+	// is safe that it should not be cached. It is additionally recommended that
+	// it should not be cached, as caching it would negate the benefits of cache
+	// filtering.
+	UnfilteredReader client.Reader
+	PhaseValidator   *validation.PhaseValidator
+}
+
+// NewPhaseEngine  returns a new PhaseEngine instance.
+func NewPhaseEngine(opts RevisionEngineOptions) (*machinery.PhaseEngine, error) {
+	if err := validateRevisionEngineOpts(opts); err != nil {
+		return nil, err
+	}
+
+	if opts.PhaseValidator == nil {
+		opts.PhaseValidator = validation.NewNamespacedPhaseValidator(opts.RestMapper, opts.Writer)
+	}
+
+	comp := machinery.NewComparator(
+		opts.DiscoveryClient, opts.Scheme, opts.FieldOwner)
+
+	oe := machinery.NewObjectEngine(
+		opts.Scheme, opts.Reader, opts.Writer,
+		comp, opts.FieldOwner, opts.SystemPrefix,
+		opts.ManagedBy, opts.UnfilteredReader,
+	)
+
+	return machinery.NewPhaseEngine(oe, opts.PhaseValidator), nil
 }
 
 // NewRevisionEngine returns a new RevisionEngine instance.
@@ -123,19 +195,16 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 		return nil, err
 	}
 
-	if opts.OwnerStrategy == nil {
-		opts.OwnerStrategy = ownerhandling.NewNative(opts.Scheme)
-	}
-
 	pval := validation.NewNamespacedPhaseValidator(opts.RestMapper, opts.Writer)
 	rval := validation.NewRevisionValidator()
 
 	comp := machinery.NewComparator(
-		opts.OwnerStrategy, opts.DiscoveryClient, opts.Scheme, opts.FieldOwner)
+		opts.DiscoveryClient, opts.Scheme, opts.FieldOwner)
 
 	oe := machinery.NewObjectEngine(
 		opts.Scheme, opts.Reader, opts.Writer,
-		opts.OwnerStrategy, comp, opts.FieldOwner, opts.SystemPrefix,
+		comp, opts.FieldOwner, opts.SystemPrefix,
+		opts.ManagedBy, opts.UnfilteredReader,
 	)
 	pe := machinery.NewPhaseEngine(oe, pval)
 

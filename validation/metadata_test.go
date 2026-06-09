@@ -11,10 +11,10 @@ import (
 
 func createObjWithUID() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test",
 				"namespace": "default",
 			},
@@ -27,10 +27,10 @@ func createObjWithUID() *unstructured.Unstructured {
 
 func createObjWithGeneration() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name": "test",
 			},
 		},
@@ -42,10 +42,10 @@ func createObjWithGeneration() *unstructured.Unstructured {
 
 func createObjWithGenerateName() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"generateName": "test-",
 			},
 		},
@@ -56,10 +56,10 @@ func createObjWithGenerateName() *unstructured.Unstructured {
 
 func createObjWithFinalizers() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name": "test",
 			},
 		},
@@ -71,10 +71,10 @@ func createObjWithFinalizers() *unstructured.Unstructured {
 
 func createObjWithOwnerReferences() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name": "test",
 			},
 		},
@@ -93,10 +93,10 @@ func createObjWithOwnerReferences() *unstructured.Unstructured {
 
 func createObjWithResourceVersion() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name": "test",
 			},
 		},
@@ -108,10 +108,10 @@ func createObjWithResourceVersion() *unstructured.Unstructured {
 
 func createObjWithMultipleForbiddenFields() *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name": "test",
 			},
 		},
@@ -135,10 +135,10 @@ func TestValidateObjectMetadata(t *testing.T) {
 		{
 			name: "valid object",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
 					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test",
 						"namespace": "default",
 					},
@@ -149,9 +149,9 @@ func TestValidateObjectMetadata(t *testing.T) {
 		{
 			name: "missing apiVersion",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"kind": "ConfigMap",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name": "test",
 					},
 				},
@@ -163,9 +163,9 @@ func TestValidateObjectMetadata(t *testing.T) {
 		{
 			name: "missing kind",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "v1",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name": "test",
 					},
 				},
@@ -177,8 +177,8 @@ func TestValidateObjectMetadata(t *testing.T) {
 		{
 			name: "both apiVersion and kind missing",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"metadata": map[string]interface{}{
+				Object: map[string]any{
+					"metadata": map[string]any{
 						"name": "test",
 					},
 				},

@@ -23,6 +23,7 @@ func main() {
 	ref := internal.NewReference(ourScheme, ctrl.GetConfigOrDie())
 	if err := ref.Start(ctrl.SetupSignalHandler()); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "crashed: ", err)
+
 		os.Exit(1)
 	}
 }

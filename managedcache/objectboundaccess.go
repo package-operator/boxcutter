@@ -62,6 +62,13 @@ type ObjectsPerOwnerPerGVK map[AccessManagerKey]map[schema.GroupVersionKind]int
 type Accessor interface {
 	client.Writer
 	TrackingCache
+
+	// UnfilteredReader returns a client.Reader with the same permissions as the
+	// TrackingCache client, but which is not subject to filtering which has
+	// been applied to the cache. UnfilteredReader is also usually uncached, so
+	// it should be used carefully and only in cases where the object will never
+	// be available in the cache.
+	UnfilteredReader() client.Reader
 }
 
 // NewObjectBoundAccessManager returns a new ObjectBoundAccessManager for T.
@@ -119,10 +126,11 @@ type objectBoundAccessManagerImpl[T RefType] struct {
 
 // AccessManagerKey is the key type on the ObjectBoundAccessManager's internal cache accessor map.
 type AccessManagerKey struct {
-	// UID ensures a re-created object also gets it's own cache.
-	UID types.UID
 	schema.GroupVersionKind
 	client.ObjectKey
+
+	// UID ensures a re-created object also gets it's own cache.
+	UID types.UID
 }
 
 type accessorEntry struct {
@@ -152,6 +160,12 @@ type cacheDone struct {
 type accessor struct {
 	TrackingCache
 	client.Writer
+
+	unfilteredReader client.Reader
+}
+
+func (a *accessor) UnfilteredReader() client.Reader {
+	return a.unfilteredReader
 }
 
 func (m *objectBoundAccessManagerImpl[T]) Source(
@@ -314,8 +328,9 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 	// start cache
 	ctx, cancel := context.WithCancel(ctx)
 	a := &accessor{
-		TrackingCache: ctrlcache,
-		Writer:        client,
+		TrackingCache:    ctrlcache,
+		Writer:           client,
+		unfilteredReader: client,
 	}
 
 	entry = accessorEntry{
@@ -338,6 +353,7 @@ func (m *objectBoundAccessManagerImpl[T]) handleAccessorRequest(
 
 	go func(ctx context.Context, doneCh chan<- cacheDone) {
 		defer wg.Done()
+
 		doneCh <- cacheDone{key: key, err: ctrlcache.Start(ctx)}
 	}(ctx, doneCh)
 
@@ -364,6 +380,7 @@ func (m *objectBoundAccessManagerImpl[T]) request(
 	}
 
 	responseCh := make(chan accessorResponse, 1)
+
 	req.responseCh = responseCh
 	select {
 	case accCh <- req:

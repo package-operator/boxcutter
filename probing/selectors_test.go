@@ -19,7 +19,7 @@ func TestKindSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(true, []string{})
+			Return(Result{Status: StatusTrue})
 
 		gk := schema.GroupKind{
 			Kind: "Pod",
@@ -30,9 +30,9 @@ func TestKindSelector(t *testing.T) {
 			Prober:    prober,
 			GroupKind: gk,
 		}
-		success, message := s.Probe(obj)
-		assert.True(t, success)
-		assert.Empty(t, message)
+		r := s.Probe(obj)
+		assert.Equal(t, StatusTrue, r.Status)
+		assert.Empty(t, r.Messages)
 		prober.AssertCalled(t, "Probe", mock.Anything)
 	})
 
@@ -52,9 +52,9 @@ func TestKindSelector(t *testing.T) {
 			Prober:    prober,
 			GroupKind: gk,
 		}
-		success, message := s.Probe(obj)
-		assert.True(t, success)
-		assert.Nil(t, message)
+		r := s.Probe(obj)
+		assert.Equal(t, StatusTrue, r.Status)
+		assert.Empty(t, r.Messages)
 		prober.AssertNotCalled(t, "Probe", mock.Anything)
 	})
 }
@@ -68,16 +68,16 @@ func TestLabelSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(true, []string{})
+			Return(Result{Status: StatusTrue})
 
 		obj := &unstructured.Unstructured{}
 		s := &LabelSelector{
 			Prober:   prober,
 			Selector: labels.Everything(),
 		}
-		success, message := s.Probe(obj)
-		assert.True(t, success)
-		assert.Empty(t, message)
+		r := s.Probe(obj)
+		assert.Equal(t, StatusTrue, r.Status)
+		assert.Empty(t, r.Messages)
 		prober.AssertCalled(t, "Probe", mock.Anything)
 	})
 
@@ -87,16 +87,16 @@ func TestLabelSelector(t *testing.T) {
 		prober := &proberMock{}
 		prober.
 			On("Probe", mock.Anything).
-			Return(true, "")
+			Return(Result{Status: StatusTrue})
 
 		obj := &unstructured.Unstructured{}
 		s := &LabelSelector{
 			Prober:   prober,
 			Selector: labels.Nothing(),
 		}
-		success, message := s.Probe(obj)
-		assert.True(t, success)
-		assert.Nil(t, message)
+		r := s.Probe(obj)
+		assert.Equal(t, StatusTrue, r.Status)
+		assert.Empty(t, r.Messages)
 		prober.AssertNotCalled(t, "Probe", mock.Anything)
 	})
 }

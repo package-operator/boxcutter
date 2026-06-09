@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -36,10 +37,10 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -51,15 +52,15 @@ func TestPhaseEngine_Reconcile(t *testing.T) {
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
-	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
+	oe.On("Reconcile", mock.Anything, revision, obj, mock.Anything).
+		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj,
+	_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{
+			obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 }
 
@@ -79,10 +80,10 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -95,14 +96,14 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
 		Return(validation.PhaseValidationError{})
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
-		Return(newNormalObjectResult(ActionCreated, obj, CompareResult{}, nil), nil)
+		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 
-	_, err := pe.Reconcile(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj,
+	_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+		"test",
+		[]client.Object{
+			obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 	oe.AssertNotCalled(
 		t, "Reconcile", mock.Anything, mock.Anything,
@@ -126,10 +127,10 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 	}
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -138,19 +139,176 @@ func TestPhaseEngine_Teardown(t *testing.T) {
 
 	var revision int64 = 1
 
-	oe.On("Teardown", mock.Anything, owner, revision, obj, mock.Anything, mock.Anything).
+	oe.On("Teardown", mock.Anything, revision, obj, mock.Anything, mock.Anything).
 		Return(true, nil)
 
-	deleted, err := pe.Teardown(t.Context(), owner, revision, types.Phase{
-		Name: "test",
-		Objects: []unstructured.Unstructured{
-			*obj, *obj,
+	deleted, err := pe.Teardown(t.Context(), revision, types.NewPhase(
+		"test", []client.Object{
+			obj, obj,
 		},
-	})
+	), types.WithOwner(owner, nil))
 	require.NoError(t, err)
 	assert.True(t, deleted.IsComplete())
 	assert.Empty(t, deleted.Waiting())
 	assert.Len(t, deleted.Gone(), 2)
+}
+
+func TestPhaseEngine_AggregateErrors(t *testing.T) {
+	t.Parallel()
+
+	obj1 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]any{
+				"name":      "secret1",
+				"namespace": "test",
+			},
+		},
+	}
+	obj2 := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]any{
+				"name":      "cm1",
+				"namespace": "test",
+			},
+		},
+	}
+
+	t.Run("Reconcile", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name             string
+			obj1Error        error
+			obj2Error        error
+			expectedCalls    int
+			checkTooManyReqs bool
+			checkObjRefs     bool
+		}{
+			{
+				name:          "aggregates multiple errors",
+				obj1Error:     errTest,
+				obj2Error:     errTest,
+				expectedCalls: 2,
+				checkObjRefs:  true,
+			},
+			{
+				name:             "short-circuits on TooManyRequests",
+				obj1Error:        apierrors.NewTooManyRequests("slow down", 5),
+				obj2Error:        errTest,
+				expectedCalls:    1,
+				checkTooManyReqs: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				oe := &objectEngineMock{}
+				pv := &phaseValidatorMock{}
+				pe := NewPhaseEngine(oe, pv)
+
+				var revision int64 = 1
+
+				pv.
+					On("Validate", mock.Anything, mock.Anything, mock.Anything).
+					Return(nil)
+				oe.On("Reconcile", mock.Anything, revision, obj1, mock.Anything).
+					Return(ObjectResultCreated{}, tt.obj1Error)
+				oe.On("Reconcile", mock.Anything, revision, obj2, mock.Anything).
+					Return(ObjectResultCreated{}, tt.obj2Error)
+
+				_, err := pe.Reconcile(t.Context(), revision, types.NewPhase(
+					"test",
+					[]client.Object{obj1, obj2},
+				), types.WithAggregatePhaseReconcileErrors())
+
+				require.Error(t, err)
+
+				if tt.checkTooManyReqs {
+					assert.True(t, apierrors.IsTooManyRequests(err))
+				} else {
+					require.ErrorIs(t, err, errTest)
+
+					if tt.checkObjRefs {
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+					}
+				}
+
+				oe.AssertNumberOfCalls(t, "Reconcile", tt.expectedCalls)
+			})
+		}
+	})
+
+	t.Run("Teardown", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name             string
+			obj1Error        error
+			obj2Error        error
+			expectedCalls    int
+			checkTooManyReqs bool
+			checkObjRefs     bool
+		}{
+			{
+				name:          "aggregates multiple errors",
+				obj1Error:     errTest,
+				obj2Error:     errTest,
+				expectedCalls: 2,
+				checkObjRefs:  true,
+			},
+			{
+				name:             "short-circuits on TooManyRequests",
+				obj1Error:        apierrors.NewTooManyRequests("slow down", 5),
+				obj2Error:        errTest,
+				expectedCalls:    1,
+				checkTooManyReqs: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				oe := &objectEngineMock{}
+				pv := &phaseValidatorMock{}
+				pe := NewPhaseEngine(oe, pv)
+
+				var revision int64 = 1
+
+				oe.On("Teardown", mock.Anything, revision, obj1, mock.Anything).
+					Return(false, tt.obj1Error)
+				oe.On("Teardown", mock.Anything, revision, obj2, mock.Anything).
+					Return(false, tt.obj2Error)
+
+				_, err := pe.Teardown(t.Context(), revision, types.NewPhase(
+					"test",
+					[]client.Object{obj1, obj2},
+				), types.WithAggregatePhaseTeardownErrors())
+
+				require.Error(t, err)
+
+				if tt.checkTooManyReqs {
+					assert.True(t, apierrors.IsTooManyRequests(err))
+				} else {
+					require.ErrorIs(t, err, errTest)
+
+					if tt.checkObjRefs {
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj1).String())
+						assert.Contains(t, err.Error(), types.ToObjectRef(obj2).String())
+					}
+				}
+
+				oe.AssertNumberOfCalls(t, "Teardown", tt.expectedCalls)
+			})
+		}
+	})
 }
 
 type objectEngineMock struct {
@@ -159,24 +317,22 @@ type objectEngineMock struct {
 
 func (m *objectEngineMock) Reconcile(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectReconcileOption,
 ) (ObjectResult, error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, revision, desiredObject, opts)
 
 	return args.Get(0).(ObjectResult), args.Error(1)
 }
 
 func (m *objectEngineMock) Teardown(
 	ctx context.Context,
-	owner client.Object,
 	revision int64,
 	desiredObject Object,
 	opts ...types.ObjectTeardownOption,
 ) (objectDeleted bool, err error) {
-	args := m.Called(ctx, owner, revision, desiredObject, opts)
+	args := m.Called(ctx, revision, desiredObject, opts)
 
 	return args.Bool(0), args.Error(1)
 }
@@ -187,17 +343,17 @@ type phaseValidatorMock struct {
 
 func (m *phaseValidatorMock) Validate(
 	ctx context.Context,
-	owner client.Object,
 	phase types.Phase,
+	opts ...types.PhaseReconcileOption,
 ) error {
-	args := m.Called(ctx, owner, phase)
+	args := m.Called(ctx, phase, opts)
 
 	return args.Error(0)
 }
 
 func TestPhaseResult(t *testing.T) {
 	t.Parallel()
-	t.Run("InTransistion", func(t *testing.T) {
+	t.Run("InTransition", func(t *testing.T) {
 		t.Parallel()
 
 		tests := []struct {
@@ -209,16 +365,16 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true - progressed",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultProgressed(nil, CompareResult{}, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultProgressed(nil, CompareResult{}, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
 			{
 				name: "true - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultConflict(nil, CompareResult{}, nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
@@ -239,7 +395,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - created",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
 				},
 				expected: false,
 			},
@@ -251,7 +407,7 @@ func TestPhaseResult(t *testing.T) {
 				pr := &phaseResult{
 					objects: test.res,
 				}
-				assert.Equal(t, test.expected, pr.InTransistion())
+				assert.Equal(t, test.expected, pr.InTransition())
 			})
 		}
 	})
@@ -259,8 +415,9 @@ func TestPhaseResult(t *testing.T) {
 	t.Run("IsComplete", func(t *testing.T) {
 		t.Parallel()
 
-		failedProbeRes := newObjectResultCreated(nil, nil).(ObjectResultCreated)
-		failedProbeRes.probeResults[types.ProgressProbeType] = ObjectProbeResult{Success: false}
+		failedProbeRes := newObjectResultCreated(nil, types.ObjectReconcileOptions{
+			Paused: true,
+		}).(ObjectResultCreated)
 
 		tests := []struct {
 			name     string
@@ -271,7 +428,7 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "true",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
 				},
 				expected: true,
 			},
@@ -284,8 +441,8 @@ func TestPhaseResult(t *testing.T) {
 			{
 				name: "false - conflict",
 				res: []ObjectResult{
-					newObjectResultCreated(nil, nil),
-					newObjectResultConflict(nil, CompareResult{}, nil, nil),
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+					newObjectResultConflict(nil, CompareResult{}, nil, types.ObjectReconcileOptions{}),
 				},
 				expected: false,
 			},
@@ -315,10 +472,10 @@ func TestPhaseResult_String(t *testing.T) {
 	t.Parallel()
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -332,7 +489,7 @@ func TestPhaseResult_String(t *testing.T) {
 			PhaseError: errTest,
 		},
 		objects: []ObjectResult{
-			newObjectResultCreated(obj, nil),
+			newObjectResultCreated(obj, types.ObjectReconcileOptions{}),
 		},
 	}
 
@@ -454,10 +611,10 @@ func TestPhaseResult_GetObjects(t *testing.T) {
 	t.Parallel()
 
 	obj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "Secret",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "testi",
 				"namespace": "test",
 			},
@@ -465,7 +622,7 @@ func TestPhaseResult_GetObjects(t *testing.T) {
 	}
 
 	objects := []ObjectResult{
-		newObjectResultCreated(obj, map[string]types.Prober{}),
+		newObjectResultCreated(obj, types.ObjectReconcileOptions{}),
 	}
 
 	result := &phaseResult{

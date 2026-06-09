@@ -18,6 +18,7 @@ import (
 	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery"
 	"pkg.package-operator.run/boxcutter/ownerhandling"
+	"pkg.package-operator.run/boxcutter/probing"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -29,48 +30,32 @@ func TestRevisionEngine(t *testing.T) {
 		},
 	}
 
-	obj1Probe := &stubProbe{success: false, messages: []string{"nope"}}
-	obj2Probe := &stubProbe{success: true}
+	obj1Probe := &stubProbe{status: probing.StatusFalse, messages: []string{"nope"}}
+	obj2Probe := &stubProbe{status: probing.StatusTrue}
 	obj1 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-rev-obj-1",
 				"namespace": "default",
 			},
 		},
 	}
 	obj2 := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			"apiVersion": "v1",
 			"kind":       "ConfigMap",
-			"metadata": map[string]interface{}{
+			"metadata": map[string]any{
 				"name":      "test-rev-obj-2",
 				"namespace": "default",
 			},
 		},
 	}
-	rev := boxcutter.Revision{
-		Name:     "rev-1",
-		Owner:    revOwner,
-		Revision: 1,
-		Phases: []boxcutter.Phase{
-			{
-				Name:    "phase-1",
-				Objects: []unstructured.Unstructured{*obj1},
-			},
-			{
-				Name:    "phase-2",
-				Objects: []unstructured.Unstructured{*obj2},
-			},
-		},
-	}
 
-	os := ownerhandling.NewNative(Scheme)
-	comp := machinery.NewComparator(os, DiscoveryClient, Scheme, fieldOwner)
+	comp := machinery.NewComparator(DiscoveryClient, Scheme, fieldOwner)
 	oe := machinery.NewObjectEngine(
-		Scheme, Client, Client, os, comp, fieldOwner, systemPrefix,
+		Scheme, Client, Client, comp, fieldOwner, systemPrefix, "", nil,
 	)
 	pval := validation.NewNamespacedPhaseValidator(Client.RESTMapper(), Client)
 	pe := machinery.NewPhaseEngine(oe, pval)
@@ -83,9 +68,24 @@ func TestRevisionEngine(t *testing.T) {
 	err := Client.Create(ctx, revOwner)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		//nolint:usetesting
 		require.NoError(t, Client.Delete(context.Background(), revOwner))
 	})
+
+	os := ownerhandling.NewNative(Scheme)
+	rev := boxcutter.NewRevisionWithOwner(
+		"rev-1", 1,
+		[]boxcutter.Phase{
+			boxcutter.NewPhase(
+				"phase-1",
+				[]client.Object{obj1},
+			),
+			boxcutter.NewPhase(
+				"phase-2",
+				[]client.Object{obj2},
+			),
+		},
+		revOwner, os,
+	)
 
 	// Test execution
 	// --------------
@@ -98,7 +98,7 @@ func TestRevisionEngine(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, res.IsComplete(), "Revision should not be complete.")
-	assert.True(t, res.InTransistion(), "Revision should be in transition.")
+	assert.True(t, res.InTransition(), "Revision should be in transition.")
 
 	cm := &corev1.ConfigMap{}
 	require.NoError(t, Client.Get(
@@ -110,13 +110,13 @@ func TestRevisionEngine(t *testing.T) {
 		"test-rev-obj-2 should not have been created")
 
 	// 2nd Run.
-	obj1Probe.success = true
+	obj1Probe.status = probing.StatusTrue
 	obj1Probe.messages = nil
 	res, err = re.Reconcile(ctx, rev)
 	require.NoError(t, err)
 
 	assert.True(t, res.IsComplete(), "Revision should be complete.")
-	assert.False(t, res.InTransistion(), "Revision should not be in transition.")
+	assert.False(t, res.InTransition(), "Revision should not be in transition.")
 	assert.NoError(t, Client.Get(ctx, client.ObjectKey{Name: "test-rev-obj-1", Namespace: "default"}, cm),
 		"test-rev-obj-1 should have been created")
 	assert.NoError(t, Client.Get(ctx, client.ObjectKey{Name: "test-rev-obj-2", Namespace: "default"}, cm),
@@ -169,10 +169,10 @@ func TestRevisionEngine(t *testing.T) {
 }
 
 type stubProbe struct {
-	success  bool
+	status   probing.Status
 	messages []string
 }
 
-func (p *stubProbe) Probe(_ client.Object) (success bool, messages []string) {
-	return p.success, p.messages
+func (p *stubProbe) Probe(_ client.Object) probing.Result {
+	return probing.Result{Status: p.status, Messages: p.messages}
 }

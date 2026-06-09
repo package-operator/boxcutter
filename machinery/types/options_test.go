@@ -253,48 +253,88 @@ func TestWithCollisionProtection(t *testing.T) {
 	})
 }
 
-func TestWithPreviousOwners(t *testing.T) {
+func TestWithSiblingOwnerClassifier(t *testing.T) {
 	t.Parallel()
 
-	owner1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner1",
-			Namespace: "test",
-		},
-	}
-	owner2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner2",
-			Namespace: "test",
-		},
-	}
-
-	previousOwners := WithPreviousOwners{owner1, owner2}
+	classifier := WithSiblingOwnerClassifier(func(ref metav1.OwnerReference) bool {
+		return ref.UID == "test-uid"
+	})
 
 	t.Run("applies to object reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &ObjectReconcileOptions{}
-		previousOwners.ApplyToObjectReconcileOptions(opts)
-		assert.Equal(t, []client.Object{owner1, owner2}, opts.PreviousOwners)
+		classifier.ApplyToObjectReconcileOptions(opts)
+		require.NotNil(t, opts.SiblingOwnerClassifier)
+		assert.True(t, opts.SiblingOwnerClassifier(metav1.OwnerReference{UID: "test-uid"}))
+		assert.False(t, opts.SiblingOwnerClassifier(metav1.OwnerReference{UID: "other-uid"}))
 	})
 
 	t.Run("applies to phase reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &PhaseReconcileOptions{}
-		previousOwners.ApplyToPhaseReconcileOptions(opts)
+		classifier.ApplyToPhaseReconcileOptions(opts)
 		require.Len(t, opts.DefaultObjectOptions, 1)
-		assert.Equal(t, previousOwners, opts.DefaultObjectOptions[0])
 	})
 
 	t.Run("applies to revision reconcile options", func(t *testing.T) {
 		t.Parallel()
 
 		opts := &RevisionReconcileOptions{}
-		previousOwners.ApplyToRevisionReconcileOptions(opts)
+		classifier.ApplyToRevisionReconcileOptions(opts)
 		require.Len(t, opts.DefaultPhaseOptions, 1)
-		assert.Equal(t, previousOwners, opts.DefaultPhaseOptions[0])
+	})
+}
+
+func TestWithSiblingOwnerConvenienceConstructors(t *testing.T) {
+	t.Parallel()
+
+	matchUID := metav1.OwnerReference{UID: "uid-1"}
+	unknownUID := metav1.OwnerReference{UID: "uid-unknown"}
+
+	applyClassifier := func(t *testing.T, classifier WithSiblingOwnerClassifier) SiblingOwnerClassifierFunc {
+		t.Helper()
+
+		opts := &ObjectReconcileOptions{}
+		classifier.ApplyToObjectReconcileOptions(opts)
+		require.NotNil(t, opts.SiblingOwnerClassifier)
+
+		return opts.SiblingOwnerClassifier
+	}
+
+	t.Run("WithSiblingOwners", func(t *testing.T) {
+		t.Parallel()
+
+		siblings := []client.Object{
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "uid-1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "uid-2"}},
+		}
+
+		classify := applyClassifier(t, WithSiblingOwners(siblings))
+		assert.True(t, classify(matchUID))
+		assert.True(t, classify(metav1.OwnerReference{UID: "uid-2"}))
+		assert.False(t, classify(unknownUID))
+
+		emptyClassify := applyClassifier(t, WithSiblingOwners([]client.Object{}))
+		assert.False(t, emptyClassify(matchUID))
+	})
+
+	t.Run("WithSiblingOwnerRefs", func(t *testing.T) {
+		t.Parallel()
+
+		refs := []metav1.OwnerReference{
+			{UID: "uid-1"},
+			{UID: "uid-2"},
+		}
+
+		classify := applyClassifier(t, WithSiblingOwnerRefs(refs))
+		assert.True(t, classify(matchUID))
+		assert.True(t, classify(metav1.OwnerReference{UID: "uid-2"}))
+		assert.False(t, classify(unknownUID))
+
+		emptyClassify := applyClassifier(t, WithSiblingOwnerRefs([]metav1.OwnerReference{}))
+		assert.False(t, emptyClassify(matchUID))
 	})
 }
 
@@ -343,24 +383,24 @@ func TestProbeFunc(t *testing.T) {
 	t.Run("wraps function correctly", func(t *testing.T) {
 		t.Parallel()
 
-		expectedSuccess := true
-		expectedMessages := []string{"test message"}
-
-		probeFn := ProbeFunc(func(_ client.Object) (bool, []string) {
-			return expectedSuccess, expectedMessages
+		expectedResult := ProbeResult{
+			Status:   ProbeStatusTrue,
+			Messages: []string{"test message"},
+		}
+		probeFn := ProbeFunc(func(_ client.Object) ProbeResult {
+			return expectedResult
 		})
 
-		success, messages := probeFn.Probe(obj)
-		assert.Equal(t, expectedSuccess, success)
-		assert.Equal(t, expectedMessages, messages)
+		r := probeFn.Probe(obj)
+		assert.Equal(t, expectedResult, r)
 	})
 }
 
 func TestWithProbe(t *testing.T) {
 	t.Parallel()
 
-	probe := ProbeFunc(func(_ client.Object) (bool, []string) {
-		return true, []string{"success"}
+	probe := ProbeFunc(func(_ client.Object) ProbeResult {
+		return ProbeResult{Status: ProbeStatusTrue, Messages: []string{"success"}}
 	})
 
 	probeOption := WithProbe("test-probe", probe)
@@ -379,8 +419,8 @@ func TestWithProbe(t *testing.T) {
 	t.Run("preserves existing probes", func(t *testing.T) {
 		t.Parallel()
 
-		existingProbe := ProbeFunc(func(_ client.Object) (bool, []string) {
-			return false, []string{"existing"}
+		existingProbe := ProbeFunc(func(_ client.Object) ProbeResult {
+			return ProbeResult{Status: ProbeStatusFalse, Messages: []string{"existing"}}
 		})
 
 		opts := &ObjectReconcileOptions{
@@ -540,17 +580,290 @@ func TestInterfaceImplementations(t *testing.T) {
 
 	var _ ObjectReconcileOption = WithPaused{}
 
-	var _ ObjectReconcileOption = WithPreviousOwners{}
+	var _ ObjectReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ ObjectReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 
 	var _ PhaseReconcileOption = WithCollisionProtection("")
 
 	var _ PhaseReconcileOption = WithPaused{}
 
-	var _ PhaseReconcileOption = WithPreviousOwners{}
+	var _ PhaseReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ PhaseReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 
 	var _ RevisionReconcileOption = WithCollisionProtection("")
 
 	var _ RevisionReconcileOption = WithPaused{}
 
-	var _ RevisionReconcileOption = WithPreviousOwners{}
+	var _ RevisionReconcileOption = WithSiblingOwnerClassifier(nil)
+
+	var _ RevisionReconcileOption = WithSiblingOwnerRefs([]metav1.OwnerReference{})
 }
+
+func TestWithOrphan(t *testing.T) {
+	t.Parallel()
+
+	orphanOpt := WithOrphan()
+
+	t.Run("applies to object teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ObjectTeardownOptions{}
+		orphanOpt.ApplyToObjectTeardownOptions(opts)
+		assert.True(t, opts.Orphan)
+	})
+
+	t.Run("applies to phase teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseTeardownOptions{}
+		orphanOpt.ApplyToPhaseTeardownOptions(opts)
+		require.Len(t, opts.DefaultObjectOptions, 1)
+	})
+
+	t.Run("applies to revision teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionTeardownOptions{}
+		orphanOpt.ApplyToRevisionTeardownOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
+func TestWithAggregatePhaseReconcileErrors(t *testing.T) {
+	t.Parallel()
+
+	opt := WithAggregatePhaseReconcileErrors()
+
+	t.Run("applies to phase reconcile options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseReconcileOptions{}
+		opt.ApplyToPhaseReconcileOptions(opts)
+		assert.True(t, opts.AggregateErrors)
+	})
+
+	t.Run("applies to revision reconcile options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionReconcileOptions{}
+		opt.ApplyToRevisionReconcileOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
+func TestWithAggregatePhaseTeardownErrors(t *testing.T) {
+	t.Parallel()
+
+	opt := WithAggregatePhaseTeardownErrors()
+
+	t.Run("applies to phase teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseTeardownOptions{}
+		opt.ApplyToPhaseTeardownOptions(opts)
+		assert.True(t, opts.AggregateErrors)
+	})
+
+	t.Run("applies to revision teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionTeardownOptions{}
+		opt.ApplyToRevisionTeardownOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
+func TestWithTeardownWriter(t *testing.T) {
+	t.Parallel()
+
+	// Use nil writer for testing - we're only testing that the option sets the field
+	var writer client.Writer
+
+	writerOpt := WithTeardownWriter(writer)
+
+	t.Run("applies to object teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ObjectTeardownOptions{}
+		writerOpt.ApplyToObjectTeardownOptions(opts)
+		assert.Equal(t, writer, opts.TeardownWriter)
+	})
+
+	t.Run("applies to phase teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseTeardownOptions{}
+		writerOpt.ApplyToPhaseTeardownOptions(opts)
+		require.Len(t, opts.DefaultObjectOptions, 1)
+	})
+
+	t.Run("applies to revision teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionTeardownOptions{}
+		writerOpt.ApplyToRevisionTeardownOptions(opts)
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+}
+
+func TestRevisionReconcileOptions_GetOwner(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns owner from default phase options", func(t *testing.T) {
+		t.Parallel()
+
+		owner := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "owner",
+				Namespace: "test-ns",
+				UID:       "test-uid",
+			},
+		}
+
+		mockStrat := &mockOwnerStrategy{}
+		ownerOpt := WithOwner(owner, mockStrat)
+
+		opts := RevisionReconcileOptions{
+			DefaultPhaseOptions: []PhaseReconcileOption{ownerOpt.(PhaseReconcileOption)},
+		}
+
+		gotOwner := opts.GetOwner()
+		assert.Equal(t, owner, gotOwner)
+	})
+
+	t.Run("returns nil when no owner is set", func(t *testing.T) {
+		t.Parallel()
+
+		opts := RevisionReconcileOptions{}
+
+		gotOwner := opts.GetOwner()
+		assert.Nil(t, gotOwner)
+	})
+}
+
+func TestWithOwner(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owner",
+			Namespace: "test-ns",
+			UID:       "test-uid",
+		},
+	}
+
+	mockStrat := &mockOwnerStrategy{}
+
+	t.Run("applies to object reconcile options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ObjectReconcileOptions{}
+		ownerOpt := WithOwner(owner, mockStrat)
+		ownerOpt.(ObjectReconcileOption).ApplyToObjectReconcileOptions(opts)
+
+		assert.Equal(t, owner, opts.Owner)
+		assert.Equal(t, mockStrat, opts.OwnerStrategy)
+	})
+
+	t.Run("applies to object teardown options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ObjectTeardownOptions{}
+		ownerOpt := WithOwner(owner, mockStrat)
+		ownerOpt.(ObjectTeardownOption).ApplyToObjectTeardownOptions(opts)
+
+		assert.Equal(t, owner, opts.Owner)
+		assert.Equal(t, mockStrat, opts.OwnerStrategy)
+	})
+
+	t.Run("applies to Comparator options", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ComparatorOptions{}
+		ownerOpt := WithOwner(owner, mockStrat)
+		ownerOpt.(ComparatorOption).ApplyToComparatorOptions(opts)
+
+		assert.Equal(t, owner, opts.Owner)
+		assert.Equal(t, mockStrat, opts.OwnerStrategy)
+	})
+
+	t.Run("applies to phase reconcile options via optionFn", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &PhaseReconcileOptions{}
+		ownerOpt := WithOwner(owner, mockStrat)
+		ownerOpt.(PhaseReconcileOption).ApplyToPhaseReconcileOptions(opts)
+
+		require.Len(t, opts.DefaultObjectOptions, 1)
+	})
+
+	t.Run("applies to revision reconcile options via optionFn", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &RevisionReconcileOptions{}
+		ownerOpt := WithOwner(owner, mockStrat)
+		ownerOpt.(RevisionReconcileOption).ApplyToRevisionReconcileOptions(opts)
+
+		require.Len(t, opts.DefaultPhaseOptions, 1)
+	})
+
+	t.Run("panics when owner has empty UID", func(t *testing.T) {
+		t.Parallel()
+
+		invalidOwner := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "owner",
+				Namespace: "test-ns",
+			},
+		}
+
+		assert.Panics(t, func() {
+			WithOwner(invalidOwner, mockStrat)
+		})
+	})
+}
+
+func TestObjectReconcileOptions_Default_Panic(t *testing.T) {
+	t.Parallel()
+
+	t.Run("panics when owner is set without strategy", func(t *testing.T) {
+		t.Parallel()
+
+		opts := &ObjectReconcileOptions{
+			Owner: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "owner",
+					UID:  "test-uid",
+				},
+			},
+			OwnerStrategy: nil,
+		}
+
+		assert.Panics(t, func() {
+			opts.Default()
+		})
+	})
+}
+
+// mockOwnerStrategy is a mock implementation of ownerStrategy for testing.
+type mockOwnerStrategy struct{}
+
+func (m *mockOwnerStrategy) SetControllerReference(owner, obj metav1.Object) error {
+	return nil
+}
+
+func (m *mockOwnerStrategy) GetController(obj metav1.Object) (metav1.OwnerReference, bool) {
+	return metav1.OwnerReference{}, false
+}
+
+func (m *mockOwnerStrategy) IsController(owner, obj metav1.Object) bool {
+	return false
+}
+
+func (m *mockOwnerStrategy) CopyOwnerReferences(objA, objB metav1.Object) {}
+
+func (m *mockOwnerStrategy) ReleaseController(obj metav1.Object) {}
+
+func (m *mockOwnerStrategy) RemoveOwner(owner, obj metav1.Object) {}

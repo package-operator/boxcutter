@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"pkg.package-operator.run/boxcutter"
 	"pkg.package-operator.run/boxcutter/machinery/types"
+	"pkg.package-operator.run/boxcutter/ownerhandling"
 	"pkg.package-operator.run/boxcutter/validation"
 )
 
@@ -41,29 +41,28 @@ func TestWithOwnerReference(t *testing.T) {
 					Kind:               "notus",
 					Name:               "notuse",
 					APIVersion:         "3",
-					BlockOwnerDeletion: ptr.To(true),
-					Controller:         ptr.To(controller),
+					BlockOwnerDeletion: new(true),
+					Controller:         new(controller),
 				},
 			}
 
-			re := newTestRevisionEngine()
-			res, err := re.Reconcile(ctx, types.Revision{
-				Name:     "test-collision-prevention-invalid-set",
-				Revision: 1,
-				Owner:    owner,
-				Phases: []types.Phase{
-					{
-						Name: "simple",
-						Objects: []unstructured.Unstructured{
+			re := newTestRevisionEngineBuilder().build(t)
+			res, err := re.Reconcile(ctx, boxcutter.NewRevisionWithOwner(
+				"test-collision-prevention-invalid-set", 1,
+				[]boxcutter.Phase{
+					boxcutter.NewPhase(
+						"simple",
+						[]client.Object{
 							toUns(invalid),
 						},
-					},
+					),
 				},
-			})
+				owner, ownerhandling.NewNative(Scheme),
+			))
 
 			require.NoError(t, err)
 			assert.False(t, res.IsComplete())
-			assert.False(t, res.InTransistion())
+			assert.False(t, res.InTransition())
 
 			var objValErr validation.ObjectValidationError
 

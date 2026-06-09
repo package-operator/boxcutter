@@ -46,10 +46,10 @@ func TestToObjectRef(t *testing.T) {
 		{
 			name: "Unstructured object",
 			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+				Object: map[string]any{
 					"apiVersion": "apps/v1",
 					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
+					"metadata": map[string]any{
 						"name":      "test-deploy",
 						"namespace": "test-ns",
 					},
@@ -66,6 +66,11 @@ func TestToObjectRef(t *testing.T) {
 					Namespace: "test-ns",
 				},
 			},
+		},
+		{
+			name: "nil object",
+			obj:  nil,
+			want: ObjectRef{},
 		},
 	}
 
@@ -146,20 +151,17 @@ func TestObjectRef_String(t *testing.T) {
 func TestPhase_GetName(t *testing.T) {
 	t.Parallel()
 
-	phase := &Phase{
-		Name: "test-phase",
-		Objects: []unstructured.Unstructured{
-			{
-				Object: map[string]interface{}{
-					"apiVersion": "v1",
-					"kind":       "ConfigMap",
-					"metadata": map[string]interface{}{
-						"name": "test-cm",
-					},
+	phase := NewPhase("test-phase", []client.Object{
+		&unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]any{
+					"name": "test-cm",
 				},
 			},
 		},
-	}
+	})
 
 	assert.Equal(t, "test-phase", phase.GetName())
 }
@@ -167,31 +169,30 @@ func TestPhase_GetName(t *testing.T) {
 func TestPhase_GetObjects(t *testing.T) {
 	t.Parallel()
 
-	objects := []unstructured.Unstructured{
-		{
-			Object: map[string]interface{}{
+	objects := []client.Object{
+		&unstructured.Unstructured{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-cm",
 				},
 			},
 		},
-		{
-			Object: map[string]interface{}{
+		&unstructured.Unstructured{
+			Object: map[string]any{
 				"apiVersion": "v1",
 				"kind":       "Secret",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name": "test-secret",
 				},
 			},
 		},
 	}
 
-	phase := &Phase{
-		Name:    "test-phase",
-		Objects: objects,
-	}
+	phase := NewPhase(
+		"test-phase", objects,
+	)
 
 	got := phase.GetObjects()
 	assert.Equal(t, objects, got)
@@ -201,36 +202,17 @@ func TestPhase_GetObjects(t *testing.T) {
 func TestRevision_GetName(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
-		Name: "test-revision",
-	}
+	revision := NewRevision(
+		"test-revision", 1, nil,
+	)
 
 	assert.Equal(t, "test-revision", revision.GetName())
-}
-
-func TestRevision_GetOwner(t *testing.T) {
-	t.Parallel()
-
-	owner := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owner",
-			Namespace: "test",
-		},
-	}
-
-	revision := &Revision{
-		Owner: owner,
-	}
-
-	assert.Equal(t, owner, revision.GetOwner())
 }
 
 func TestRevision_GetRevisionNumber(t *testing.T) {
 	t.Parallel()
 
-	revision := &Revision{
-		Revision: 42,
-	}
+	revision := NewRevision("test-revision", 42, nil)
 
 	assert.Equal(t, int64(42), revision.GetRevisionNumber())
 }
@@ -239,28 +221,28 @@ func TestRevision_GetPhases(t *testing.T) {
 	t.Parallel()
 
 	phases := []Phase{
-		{
+		&phase{
 			Name: "phase1",
-			Objects: []unstructured.Unstructured{
-				{
-					Object: map[string]interface{}{
+			Objects: []client.Object{
+				&unstructured.Unstructured{
+					Object: map[string]any{
 						"apiVersion": "v1",
 						"kind":       "ConfigMap",
-						"metadata": map[string]interface{}{
+						"metadata": map[string]any{
 							"name": "test-cm",
 						},
 					},
 				},
 			},
 		},
-		{
+		&phase{
 			Name: "phase2",
-			Objects: []unstructured.Unstructured{
-				{
-					Object: map[string]interface{}{
+			Objects: []client.Object{
+				&unstructured.Unstructured{
+					Object: map[string]any{
 						"apiVersion": "v1",
 						"kind":       "Secret",
-						"metadata": map[string]interface{}{
+						"metadata": map[string]any{
 							"name": "test-secret",
 						},
 					},
@@ -269,11 +251,253 @@ func TestRevision_GetPhases(t *testing.T) {
 		},
 	}
 
-	revision := &Revision{
-		Phases: phases,
-	}
+	revision := NewRevision(
+		"test", 2, phases,
+	)
 
 	got := revision.GetPhases()
 	assert.Equal(t, phases, got)
 	assert.Len(t, got, 2)
+}
+
+func TestPhase_WithReconcileOptions(t *testing.T) {
+	t.Parallel()
+
+	phase := NewPhase("test-phase", []client.Object{})
+
+	opts := []PhaseReconcileOption{
+		WithCollisionProtection(CollisionProtectionNone),
+	}
+
+	result := phase.WithReconcileOptions(opts...)
+
+	assert.Equal(t, phase, result, "should return same phase for chaining")
+	assert.Equal(t, opts, phase.GetReconcileOptions())
+}
+
+func TestPhase_WithTeardownOptions(t *testing.T) {
+	t.Parallel()
+
+	phase := NewPhase("test-phase", []client.Object{})
+
+	opts := []PhaseTeardownOption{}
+
+	result := phase.WithTeardownOptions(opts...)
+
+	assert.Equal(t, phase, result, "should return same phase for chaining")
+	assert.Empty(t, phase.GetTeardownOptions())
+
+	chainedOpts := []PhaseTeardownOption{
+		WithTeardownWriter(nil),
+	}
+
+	result = phase.WithTeardownOptions(chainedOpts...)
+	assert.Equal(t, chainedOpts, result.GetTeardownOptions())
+}
+
+func TestPhase_GetReconcileOptions(t *testing.T) {
+	t.Parallel()
+
+	opts := []PhaseReconcileOption{
+		WithCollisionProtection(CollisionProtectionNone),
+	}
+
+	phase := NewPhase("test-phase", []client.Object{}).
+		WithReconcileOptions(opts...)
+
+	assert.Equal(t, opts, phase.GetReconcileOptions())
+}
+
+func TestPhase_GetTeardownOptions(t *testing.T) {
+	t.Parallel()
+
+	opts := []PhaseTeardownOption{}
+
+	phase := NewPhase("test-phase", []client.Object{}).
+		WithTeardownOptions(opts...)
+
+	assert.Empty(t, phase.GetTeardownOptions())
+}
+
+func TestNewPhaseWithOwner(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owner",
+			Namespace: "test-ns",
+			UID:       "test-uid",
+		},
+	}
+
+	objects := []client.Object{
+		&unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]any{
+					"name": "test-cm",
+				},
+			},
+		},
+	}
+
+	mockStrat := &mockOwnerStrategy{}
+
+	phase := NewPhaseWithOwner("test-phase", objects, owner, mockStrat)
+
+	assert.Equal(t, "test-phase", phase.GetName())
+	assert.Equal(t, objects, phase.GetObjects())
+
+	reconcileOpts := phase.GetReconcileOptions()
+	assert.NotEmpty(t, reconcileOpts)
+
+	teardownOpts := phase.GetTeardownOptions()
+	assert.NotEmpty(t, teardownOpts)
+}
+
+func TestRevision_WithReconcileOptions(t *testing.T) {
+	t.Parallel()
+
+	revision := NewRevision("test-revision", 1, nil)
+
+	opts := []RevisionReconcileOption{
+		WithCollisionProtection(CollisionProtectionNone),
+	}
+
+	result := revision.WithReconcileOptions(opts...)
+
+	assert.Equal(t, revision, result, "should return same revision for chaining")
+	assert.Equal(t, opts, revision.GetReconcileOptions())
+}
+
+func TestRevision_WithTeardownOptions(t *testing.T) {
+	t.Parallel()
+
+	revision := NewRevision("test-revision", 1, nil)
+
+	opts := []RevisionTeardownOption{}
+
+	result := revision.WithTeardownOptions(opts...)
+
+	assert.Equal(t, revision, result, "should return same revision for chaining")
+	assert.Equal(t, opts, revision.GetTeardownOptions())
+}
+
+func TestRevision_GetReconcileOptions(t *testing.T) {
+	t.Parallel()
+
+	opts := []RevisionReconcileOption{
+		WithCollisionProtection(CollisionProtectionNone),
+	}
+
+	revision := NewRevision("test-revision", 1, nil).
+		WithReconcileOptions(opts...)
+
+	assert.Equal(t, opts, revision.GetReconcileOptions())
+}
+
+func TestRevision_GetTeardownOptions(t *testing.T) {
+	t.Parallel()
+
+	opts := []RevisionTeardownOption{}
+
+	revision := NewRevision("test-revision", 1, nil).
+		WithTeardownOptions(opts...)
+
+	assert.Equal(t, opts, revision.GetTeardownOptions())
+}
+
+func TestNewRevisionWithOwner(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owner",
+			Namespace: "test-ns",
+			UID:       "test-uid",
+		},
+	}
+
+	phases := []Phase{
+		NewPhase("phase1", []client.Object{}),
+	}
+
+	mockStrat := &mockOwnerStrategy{}
+
+	revision := NewRevisionWithOwner("test-revision", 1, phases, owner, mockStrat)
+
+	assert.Equal(t, "test-revision", revision.GetName())
+	assert.Equal(t, int64(1), revision.GetRevisionNumber())
+	assert.Equal(t, phases, revision.GetPhases())
+
+	reconcileOpts := revision.GetReconcileOptions()
+	assert.NotEmpty(t, reconcileOpts)
+
+	teardownOpts := revision.GetTeardownOptions()
+	assert.NotEmpty(t, teardownOpts)
+}
+
+func TestNewWithOwnerAndSiblings(t *testing.T) {
+	t.Parallel()
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owner",
+			Namespace: "test-ns",
+			UID:       "owner-uid",
+		},
+	}
+
+	siblings := []client.Object{
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "sibling-1"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: "sibling-2"}},
+	}
+
+	mockStrat := &mockOwnerStrategy{}
+
+	t.Run("Phase", func(t *testing.T) {
+		t.Parallel()
+
+		objects := []client.Object{
+			&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       "ConfigMap",
+					"metadata":   map[string]any{"name": "test-cm"},
+				},
+			},
+		}
+
+		phase := NewPhaseWithOwnerAndSiblings("test-phase", objects, owner, mockStrat, siblings)
+
+		assert.Equal(t, "test-phase", phase.GetName())
+		assert.Equal(t, objects, phase.GetObjects())
+		assert.Len(t, phase.GetReconcileOptions(), 2, "should have owner + sibling classifier")
+		assert.Len(t, phase.GetTeardownOptions(), 1, "should have owner only")
+	})
+
+	t.Run("Revision", func(t *testing.T) {
+		t.Parallel()
+
+		phases := []Phase{
+			NewPhase("phase1", []client.Object{}),
+		}
+
+		revision := NewRevisionWithOwnerAndSiblings("test-revision", 1, phases, owner, mockStrat, siblings)
+
+		assert.Equal(t, "test-revision", revision.GetName())
+		assert.Equal(t, int64(1), revision.GetRevisionNumber())
+		assert.Equal(t, phases, revision.GetPhases())
+		assert.Len(t, revision.GetReconcileOptions(), 2, "should have owner + sibling classifier")
+		assert.Len(t, revision.GetTeardownOptions(), 1, "should have owner only")
+	})
 }

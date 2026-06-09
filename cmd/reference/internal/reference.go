@@ -23,7 +23,6 @@ import (
 const (
 	fieldOwner        = "boxcutter.test"
 	systemPrefix      = "boxcutter.test"
-	cacheFinalizer    = "boxcutter.test/cache"
 	teardownFinalizer = "boxcutter.test/teardown"
 	typeLabel         = "boxcutter.test/type"
 )
@@ -109,7 +108,7 @@ func (r *Reference) Start(ctx context.Context) error {
 		return c, o, nil
 	}
 
-	mc := managedcache.NewObjectBoundAccessManager[*corev1.ConfigMap](
+	mc := managedcache.NewObjectBoundAccessManager(
 		ctrl.Log,
 		mapper, r.restConfig, cache.Options{
 			Mapper: mgr.GetRESTMapper(),

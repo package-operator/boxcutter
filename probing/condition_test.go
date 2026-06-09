@@ -18,7 +18,7 @@ func TestCondition(t *testing.T) {
 	tests := []struct {
 		name     string
 		obj      *unstructured.Unstructured
-		succeeds bool
+		status   Status
 		messages []string
 	}{
 		{
@@ -44,7 +44,10 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: true,
+			status: StatusTrue,
+			messages: []string{
+				`.status.condition["Available"] is False`,
+			},
 		},
 		{
 			name: "outdated",
@@ -55,7 +58,7 @@ func TestCondition(t *testing.T) {
 							map[string]any{
 								"type":               "Available",
 								"status":             "False",
-								"observedGeneration": int64(1), // up to date
+								"observedGeneration": int64(1), // outdated
 							},
 						},
 					},
@@ -64,8 +67,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": outdated`},
+			status:   StatusUnknown,
+			messages: []string{`.status.condition["Available"] outdated`},
 		},
 		{
 			name: "wrong status",
@@ -85,8 +88,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": wrong status`},
+			status:   StatusFalse,
+			messages: []string{`.status.condition["Available"] is Unknown`},
 		},
 		{
 			name: "not reported",
@@ -106,8 +109,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": not reported`},
+			status:   StatusUnknown,
+			messages: []string{`missing .status.condition["Available"]`},
 		},
 		{
 			name: "malformed condition type int",
@@ -123,8 +126,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": malformed`},
+			status:   StatusUnknown,
+			messages: []string{`malformed .status.conditions`},
 		},
 		{
 			name: "malformed condition type string",
@@ -140,8 +143,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": malformed`},
+			status:   StatusUnknown,
+			messages: []string{`malformed .status.conditions`},
 		},
 		{
 			name: "malformed conditions array",
@@ -155,8 +158,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": malformed`},
+			status:   StatusUnknown,
+			messages: []string{`malformed .status.conditions`},
 		},
 		{
 			name: "missing conditions",
@@ -168,8 +171,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": missing .status.conditions`},
+			status:   StatusUnknown,
+			messages: []string{`missing .status.conditions`},
 		},
 		{
 			name: "missing status",
@@ -180,8 +183,8 @@ func TestCondition(t *testing.T) {
 					},
 				},
 			},
-			succeeds: false,
-			messages: []string{`condition "Available" == "False": missing .status.conditions`},
+			status:   StatusUnknown,
+			messages: []string{`missing .status.conditions`},
 		},
 	}
 
@@ -191,9 +194,9 @@ func TestCondition(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			s, m := c.Probe(test.obj)
-			assert.Equal(t, test.succeeds, s)
-			assert.Equal(t, test.messages, m)
+			r := c.Probe(test.obj)
+			assert.Equal(t, test.status, r.Status)
+			assert.Equal(t, test.messages, r.Messages)
 		})
 	}
 }

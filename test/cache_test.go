@@ -376,3 +376,90 @@ func TestManagedCacheMetrics(t *testing.T) {
 	cancel()
 	require.NoError(t, eg.Wait())
 }
+
+// TestManagedCacheUnfilteredReader verifies that UnfilteredReader() can read
+// objects that are invisible to a label-filtered cache.
+func TestManagedCacheUnfilteredReader(t *testing.T) {
+	log := testr.New(t)
+
+	const ownerLabel = "owner-label"
+
+	accessManager := managedcache.NewObjectBoundAccessManager(
+		log,
+		func(_ context.Context, owner client.Object, config *rest.Config, options cache.Options) (*rest.Config, cache.Options, error) {
+			req, err := labels.NewRequirement(ownerLabel, selection.Equals, []string{string(owner.GetUID())})
+			if err != nil {
+				return nil, options, err
+			}
+
+			dynSelector := labels.NewSelector().Add(*req)
+			options.DefaultLabelSelector = dynSelector
+
+			return config, options, nil
+		},
+		Config,
+		cache.Options{
+			Scheme: scheme.Scheme,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		return ignoreContextCanceled(accessManager.Start(ctx))
+	})
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID: "unfiltered-reader-test-owner",
+		},
+	}
+
+	// Create an object WITHOUT the owner label so the filtered cache won't see it.
+	unlabeledCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unfiltered-reader-test",
+			Namespace: "default",
+		},
+		Data: map[string]string{"key": "value"},
+	}
+	require.NoError(t, Client.Create(ctx, deepCopyClientObject(unlabeledCM)))
+	cleanupOnSuccess(t, unlabeledCM)
+
+	// A labeled object for the cache to have something to watch.
+	labeledCM := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "unfiltered-reader-labeled",
+			Namespace: "default",
+			Labels: map[string]string{
+				ownerLabel: string(owner.UID),
+			},
+		},
+	}
+
+	accessor, err := accessManager.GetWithUser(ctx, owner, owner, []client.Object{labeledCM})
+	require.NoError(t, err)
+
+	// The filtered cache should NOT find the unlabeled object.
+	getCM := &corev1.ConfigMap{}
+	err = accessor.Get(ctx, client.ObjectKeyFromObject(unlabeledCM), getCM)
+	require.True(t, k8sapierrors.IsNotFound(err), "expected NotFound from filtered cache, got: %v", err)
+
+	// The unfiltered reader SHOULD find it.
+	err = accessor.UnfilteredReader().Get(ctx, client.ObjectKeyFromObject(unlabeledCM), getCM)
+	require.NoError(t, err)
+	assert.Equal(t, "value", getCM.Data["key"])
+
+	cancel()
+	require.NoError(t, eg.Wait())
+}

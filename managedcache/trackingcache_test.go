@@ -438,16 +438,12 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	cmObj := &corev1.ConfigMap{}
 	err = itc.Get(t.Context(), client.ObjectKey{
@@ -527,16 +523,12 @@ func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	cmObj := &corev1.ConfigMapList{}
 	err = itc.List(t.Context(), cmObj)
@@ -610,16 +602,12 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 
 	var doneWG sync.WaitGroup
 
-	doneWG.Add(1)
-
-	go func() {
+	doneWG.Go(func() {
 		err := tc.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
-
-		doneWG.Done()
-	}()
+	})
 
 	// No informers
 	objectsPerInformer, err := itc.GetObjectsPerInformer(t.Context())
@@ -646,6 +634,9 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	}, secretObj)
 	require.NoError(t, err)
 
+	cancel()
+	doneWG.Wait()
+
 	// Expect a new Secret informer with two objects to be present
 	objectsPerInformer, err = itc.GetObjectsPerInformer(t.Context())
 	require.NoError(t, err)
@@ -660,9 +651,6 @@ func TestTrackingCache_GetObjectsPerInformer(t *testing.T) {
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 type reflectorWatchErrorHandlerMock struct {
@@ -790,6 +778,11 @@ var _ cache.Informer = (*informerMock)(nil)
 
 type informerMock struct {
 	mock.Mock
+}
+
+// HasSyncedChecker implements [cache.Informer].
+func (m *informerMock) HasSyncedChecker() toolscache.DoneChecker {
+	return m.Called().Get(0).(toolscache.DoneChecker)
 }
 
 func (m *informerMock) AddEventHandler(
