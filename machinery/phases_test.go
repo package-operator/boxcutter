@@ -94,7 +94,7 @@ func TestPhaseEngine_Reconcile_PreflightViolation(t *testing.T) {
 
 	pv.
 		On("Validate", mock.Anything, mock.Anything, mock.Anything).
-		Return(validation.PhaseValidationError{})
+		Return(validation.NewPhaseValidationError("mockPhase", errors.New("mock phase error")))
 	oe.On("Reconcile", mock.Anything, owner, revision, obj, mock.Anything).
 		Return(newObjectResultCreated(obj, types.ObjectReconcileOptions{}), nil)
 

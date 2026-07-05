@@ -61,9 +61,9 @@ func (v *PhaseValidator) Validate(
 			continue
 		}
 
-		var oerr ObjectValidationError
+		var oerr *ObjectValidationError
 		if errors.As(err, &oerr) {
-			objectErrors = append(objectErrors, oerr)
+			objectErrors = append(objectErrors, *oerr)
 		} else {
 			errs = append(errs, err)
 		}

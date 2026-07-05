@@ -197,9 +197,9 @@ func (e *PhaseEngine) Reconcile(
 	// Preflight
 	err := e.phaseValidator.Validate(ctx, phase, opts...)
 	if err != nil {
-		var perr validation.PhaseValidationError
+		var perr *validation.PhaseValidationError
 		if errors.As(err, &perr) {
-			pres.validationError = &perr
+			pres.validationError = perr
 
 			return pres, nil
 		}
