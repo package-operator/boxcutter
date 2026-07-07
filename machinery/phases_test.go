@@ -412,6 +412,57 @@ func TestPhaseResult(t *testing.T) {
 		}
 	})
 
+	t.Run("HasProgressed", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			pv       *validation.PhaseValidationError
+			res      []ObjectResult
+			expected bool
+		}{
+			{
+				name: "true - all progressed",
+				res: []ObjectResult{
+					newObjectResultProgressed(nil, CompareResult{}, types.ObjectReconcileOptions{}),
+				},
+				expected: true,
+			},
+			{
+				name:     "true - empty",
+				res:      []ObjectResult{},
+				expected: true,
+			},
+			{
+				name: "false - preflight violation",
+				pv: &validation.PhaseValidationError{
+					PhaseName:  "xxx",
+					PhaseError: errTest,
+				},
+				res:      []ObjectResult{},
+				expected: false,
+			},
+			{
+				name: "false - not progressed",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{}),
+				},
+				expected: false,
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+
+				pr := &phaseResult{
+					validationError: test.pv,
+					objects:         test.res,
+				}
+				assert.Equal(t, test.expected, pr.HasProgressed())
+			})
+		}
+	})
+
 	t.Run("IsComplete", func(t *testing.T) {
 		t.Parallel()
 

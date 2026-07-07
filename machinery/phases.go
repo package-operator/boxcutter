@@ -303,6 +303,10 @@ func (r *phaseResult) InTransition() bool {
 
 // HasProgressed returns true when all objects have been progressed to a newer revision.
 func (r *phaseResult) HasProgressed() bool {
+	if r.GetValidationError() != nil {
+		return false
+	}
+
 	var numProgressed int
 
 	for _, o := range r.objects {
