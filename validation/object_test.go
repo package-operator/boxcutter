@@ -536,6 +536,28 @@ func TestValidateDryRun(t *testing.T) {
 			expectDryRunValError: true,
 		},
 		{
+			name: "NoMatchError from REST mapper",
+			obj: &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "fake.example.com/v1",
+					"kind":       "Nonexistent",
+					"metadata": map[string]any{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
+			mockSetup: func(writer *mockWriter) {
+				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
+					&meta.NoKindMatchError{
+						GroupKind:        schema.GroupKind{Group: "fake.example.com", Kind: "Nonexistent"},
+						SearchedVersions: []string{"v1"},
+					})
+			},
+			expectError:          true,
+			expectDryRunValError: true,
+		},
+		{
 			name: "non-API status error",
 			obj: &unstructured.Unstructured{
 				Object: map[string]any{
