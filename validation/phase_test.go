@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -19,49 +18,12 @@ type mockObjectValidator struct {
 	mock.Mock
 }
 
-func (m *mockObjectValidator) Validate(ctx context.Context, owner client.Object, obj client.Object) error {
-	args := m.Called(ctx, owner, obj)
+func (m *mockObjectValidator) Validate(
+	ctx context.Context, obj client.Object, opts ...types.ObjectReconcileOption,
+) error {
+	args := m.Called(ctx, obj, opts)
 
 	return args.Error(0)
-}
-
-type testablePhaseValidator struct {
-	validator        *PhaseValidator
-	mockObjValidator *mockObjectValidator
-}
-
-func (v *testablePhaseValidator) Validate(ctx context.Context, owner client.Object, phase types.Phase) error {
-	phaseError := validatePhaseName(phase)
-
-	var (
-		objectErrors []ObjectValidationError
-		errs         []error
-	)
-
-	for _, obj := range phase.GetObjects() {
-		err := v.mockObjValidator.Validate(ctx, owner, obj)
-		if err == nil {
-			continue
-		}
-
-		var oerr *ObjectValidationError
-		if errors.As(err, &oerr) {
-			objectErrors = append(objectErrors, *oerr)
-		} else {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	objectErrors = append(objectErrors, checkForObjectDuplicates(phase)...)
-
-	result := NewPhaseValidationError(
-		phase.GetName(), phaseError, compactObjectViolations(objectErrors)...)
-
-	return result
 }
 
 func TestNewClusterPhaseValidator(t *testing.T) {
@@ -73,8 +35,11 @@ func TestNewClusterPhaseValidator(t *testing.T) {
 	validator := NewClusterPhaseValidator(restMapper, writer)
 
 	assert.NotNil(t, validator)
-	assert.NotNil(t, validator.ObjectValidator)
-	assert.True(t, validator.allowNamespaceEscalation)
+	require.NotNil(t, validator.objectValidator)
+
+	ov, ok := validator.objectValidator.(*ObjectValidator)
+	require.True(t, ok)
+	assert.True(t, ov.allowNamespaceEscalation)
 }
 
 func TestNewNamespacedPhaseValidator(t *testing.T) {
@@ -86,8 +51,11 @@ func TestNewNamespacedPhaseValidator(t *testing.T) {
 	validator := NewNamespacedPhaseValidator(restMapper, writer)
 
 	assert.NotNil(t, validator)
-	assert.NotNil(t, validator.ObjectValidator)
-	assert.False(t, validator.allowNamespaceEscalation)
+	require.NotNil(t, validator.objectValidator)
+
+	ov, ok := validator.objectValidator.(*ObjectValidator)
+	require.True(t, ok)
+	assert.False(t, ov.allowNamespaceEscalation)
 }
 
 func TestPhaseValidator_Validate(t *testing.T) {
@@ -100,7 +68,6 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		mockSetup                func(*mockObjectValidator)
 		expectError              bool
 		expectPhaseValidationErr bool
-		useRealValidator         bool
 	}{
 		{
 			name: "valid phase",
@@ -123,6 +90,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				Object: map[string]any{
 					"metadata": map[string]any{
 						"namespace": "default",
+						"uid":       "test-uid",
 					},
 				},
 			},
@@ -152,6 +120,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				Object: map[string]any{
 					"metadata": map[string]any{
 						"namespace": "default",
+						"uid":       "test-uid",
 					},
 				},
 			},
@@ -182,6 +151,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				Object: map[string]any{
 					"metadata": map[string]any{
 						"namespace": "default",
+						"uid":       "test-uid",
 					},
 				},
 			},
@@ -194,7 +164,6 @@ func TestPhaseValidator_Validate(t *testing.T) {
 			},
 			expectError:              true,
 			expectPhaseValidationErr: true,
-			useRealValidator:         false,
 		},
 		{
 			name: "unknown error during object validation",
@@ -217,6 +186,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				Object: map[string]any{
 					"metadata": map[string]any{
 						"namespace": "default",
+						"uid":       "test-uid",
 					},
 				},
 			},
@@ -258,6 +228,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				Object: map[string]any{
 					"metadata": map[string]any{
 						"namespace": "default",
+						"uid":       "test-uid",
 					},
 				},
 			},
@@ -273,31 +244,14 @@ func TestPhaseValidator_Validate(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			var err error
+			objValidator := &mockObjectValidator{}
+			test.mockSetup(objValidator)
 
-			var objValidator *mockObjectValidator
-
-			if test.useRealValidator {
-				restMapper := &mockRestMapper{}
-				writer := &mockWriter{}
-
-				restMapper.On("RESTMapping", mock.Anything, mock.Anything).Return(
-					&meta.RESTMapping{Scope: meta.RESTScopeNamespace}, nil)
-				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-
-				realValidator := NewClusterPhaseValidator(restMapper, writer)
-				err = realValidator.Validate(t.Context(), test.phase, types.WithOwner(test.owner, nil))
-			} else {
-				objValidator = &mockObjectValidator{}
-				test.mockSetup(objValidator)
-
-				validator := &testablePhaseValidator{
-					validator:        &PhaseValidator{ObjectValidator: &ObjectValidator{}},
-					mockObjValidator: objValidator,
-				}
-
-				err = validator.Validate(t.Context(), test.owner, test.phase)
+			validator := &PhaseValidator{
+				objectValidator: objValidator,
 			}
+
+			err := validator.Validate(t.Context(), test.phase, types.WithOwner(test.owner, nil))
 
 			if test.expectError {
 				require.Error(t, err)
@@ -311,9 +265,7 @@ func TestPhaseValidator_Validate(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			if !test.useRealValidator && objValidator != nil {
-				objValidator.AssertExpectations(t)
-			}
+			objValidator.AssertExpectations(t)
 		})
 	}
 }
