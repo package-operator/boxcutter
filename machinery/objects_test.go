@@ -236,7 +236,13 @@ func TestObjectEngine(t *testing.T) {
 					On("Get", mock.Anything,
 						client.ObjectKey{Name: "testi", Namespace: "test"},
 						mock.Anything, mock.Anything).
-					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+					Return(apierrors.NewNotFound(schema.GroupResource{}, "")).Once()
+				// Second Get is the refresh inside migrateFieldManagersToSSA.
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKey{Name: "testi", Namespace: "test"},
+						mock.Anything, mock.Anything).
+					Return(nil)
 				ddm.
 					On("Compare", mock.Anything, mock.Anything, mock.Anything).
 					Return(CompareResult{}, nil)
@@ -1729,7 +1735,13 @@ func TestObjectEngine_CustomManagedByLabel(t *testing.T) {
 		On("Get", mock.Anything,
 			client.ObjectKey{Name: "test-custom-managed-by", Namespace: "test"},
 			mock.Anything, mock.Anything).
-		Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+		Return(apierrors.NewNotFound(schema.GroupResource{}, "")).Once()
+	// Second Get is the refresh inside migrateFieldManagersToSSA.
+	cache.
+		On("Get", mock.Anything,
+			client.ObjectKey{Name: "test-custom-managed-by", Namespace: "test"},
+			mock.Anything, mock.Anything).
+		Return(nil)
 	divergeDetector.
 		On("Compare", mock.Anything, mock.Anything, mock.Anything).
 		Return(CompareResult{}, nil)
@@ -1779,18 +1791,6 @@ func TestObjectEngine_GetObjectRevision_Error(t *testing.T) {
 func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 	t.Parallel()
 
-	writer := testutil.NewClient()
-	oe := NewObjectEngine(
-		scheme.Scheme,
-		testutil.NewClient(),
-		writer,
-		&comparatorMock{},
-		testFieldOwner,
-		testSystemPrefix,
-		"",
-		nil,
-	)
-
 	obj := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "v1",
@@ -1801,6 +1801,27 @@ func TestObjectEngine_MigrateFieldManagersToSSA_NoPatch(t *testing.T) {
 			},
 		},
 	}
+
+	cache := testutil.NewClient()
+	cache.
+		On("Get", mock.Anything, client.ObjectKeyFromObject(obj), mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			out := args.Get(2).(*unstructured.Unstructured)
+			*out = *obj
+		}).
+		Return(nil)
+
+	writer := testutil.NewClient()
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		cache,
+		writer,
+		&comparatorMock{},
+		testFieldOwner,
+		testSystemPrefix,
+		"",
+		nil,
+	)
 
 	err := oe.migrateFieldManagersToSSA(context.Background(), obj, types.ObjectReconcileOptions{})
 	require.NoError(t, err)

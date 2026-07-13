@@ -14,6 +14,7 @@ import (
 	machinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -673,24 +674,38 @@ func (e *ObjectEngine) migrateFieldManagersToSSA(
 		return nil
 	}
 
-	patch, err := csaupgrade.UpgradeManagedFieldsPatch(
-		object, sets.New(e.fieldOwner), e.fieldOwner)
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		if err := e.refreshObject(ctx, object); err != nil {
+			return fmt.Errorf("re-getting object: %w", err)
+		}
 
-	switch {
-	case err != nil:
-		return err
-	case len(patch) == 0:
-		// csaupgrade.UpgradeManagedFieldsPatch returns nil, nil when no work is to be done.
-		// Empty patch cannot be applied so exit early.
+		patch, err := csaupgrade.UpgradeManagedFieldsPatch(
+			object, sets.New(e.fieldOwner), e.fieldOwner)
+
+		switch {
+		case err != nil:
+			return err
+		case len(patch) == 0:
+			// csaupgrade.UpgradeManagedFieldsPatch returns nil, nil when no work is to be done.
+			// Empty patch cannot be applied so exit early.
+			return nil
+		}
+
+		if err := e.writer.Patch(ctx, object, client.RawPatch(machinerytypes.JSONPatchType, patch)); err != nil {
+			return fmt.Errorf("update field managers: %w", err)
+		}
+
 		return nil
+	})
+}
+
+func (e *ObjectEngine) refreshObject(ctx context.Context, object Object) error {
+	reader := e.cache
+	if e.unfilteredReader != nil {
+		reader = e.unfilteredReader
 	}
 
-	if err := e.writer.Patch(ctx, object, client.RawPatch(
-		machinerytypes.JSONPatchType, patch)); err != nil {
-		return fmt.Errorf("update field managers: %w", err)
-	}
-
-	return nil
+	return reader.Get(ctx, client.ObjectKeyFromObject(object), object)
 }
 
 func (e *ObjectEngine) revisionAnnotation() string {
