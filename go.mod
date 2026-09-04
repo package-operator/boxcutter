@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	al.essio.dev/pkg/shellescape v1.6.0 // indirect
+	al.essio.dev/pkg/shellescape v1.6.1 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
