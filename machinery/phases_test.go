@@ -399,6 +399,36 @@ func TestPhaseResult(t *testing.T) {
 				},
 				expected: false,
 			},
+			{
+				name: "true - paused incomplete",
+				res: []ObjectResult{
+					newObjectResultCreated(nil, types.ObjectReconcileOptions{Paused: true}),
+				},
+				expected: true,
+			},
+			{
+				name: "false - paused complete",
+				res: []ObjectResult{
+					newObjectResultIdle(nil, CompareResult{}, types.ObjectReconcileOptions{Paused: true}),
+				},
+				expected: false,
+			},
+			{
+				// Fully progressed = handed off to a newer revision, so this
+				// revision is done transitioning even when observed (paused)
+				// with a failing progress probe (which is the new revision's
+				// concern). HasProgressed short-circuits before the paused check.
+				name: "false - paused but fully progressed",
+				res: []ObjectResult{
+					newObjectResultProgressed(nil, CompareResult{}, types.ObjectReconcileOptions{
+						Paused: true,
+						Probes: map[string]types.Prober{
+							types.ProgressProbeType: &probeStub{status: types.ProbeStatusFalse},
+						},
+					}),
+				},
+				expected: false,
+			},
 		}
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {

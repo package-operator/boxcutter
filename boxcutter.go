@@ -99,6 +99,11 @@ type WithCollisionProtection = types.WithCollisionProtection
 // Can also be described as dry-run, as no modification will occur.
 type WithPaused = types.WithPaused
 
+// WithObserveAfterIncomplete continues reconciling subsequent phases after the
+// first incomplete phase with WithPaused, so their read-only status is reported
+// instead of stopping and waiting at the first incomplete phase.
+type WithObserveAfterIncomplete = types.WithObserveAfterIncomplete
+
 // WithAggregatePhaseReconcileErrors causes phase reconciliation to aggregate all object
 // errors as a single error instead of returning on the first error.
 var WithAggregatePhaseReconcileErrors = types.WithAggregatePhaseReconcileErrors

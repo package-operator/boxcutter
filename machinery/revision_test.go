@@ -245,6 +245,67 @@ func TestRevisionEngine_Reconcile_WaitsOnIncompletePhase(t *testing.T) {
 	rv.AssertExpectations(t)
 }
 
+func TestRevisionEngine_Reconcile_ObserveAfterIncomplete(t *testing.T) {
+	t.Parallel()
+
+	pe := &phaseEngineMock{}
+	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
+
+	re := NewRevisionEngine(pe, rv, c)
+
+	rev := types.NewRevision("test", 3, []types.Phase{
+		types.NewPhase("phase-1", nil),
+		types.NewPhase("phase-2", nil),
+		types.NewPhase("phase-3", nil),
+	})
+
+	// Mock: validation passes
+	rv.On("Validate", mock.Anything, rev).Return(nil)
+
+	phaseNamed := func(name string) func(types.Phase) bool {
+		return func(p types.Phase) bool { return p.GetName() == name }
+	}
+	hasPaused := func(opts []types.PhaseReconcileOption) bool {
+		for _, opt := range opts {
+			if _, ok := opt.(types.WithPaused); ok {
+				return true
+			}
+		}
+
+		return false
+	}
+	notPaused := func(opts []types.PhaseReconcileOption) bool { return !hasPaused(opts) }
+
+	// First phase reconciles normally (not paused) and is incomplete.
+	pe.On("Reconcile", mock.Anything, int64(3),
+		mock.MatchedBy(phaseNamed("phase-1")), mock.MatchedBy(notPaused)).
+		Return(&testPhaseResult{complete: false}, nil).
+		Once()
+
+	// Remaining phases are reconciled read-only (paused) for status reporting.
+	// A paused, incomplete phase reports InTransition on its own.
+	pe.On("Reconcile", mock.Anything, int64(3),
+		mock.MatchedBy(phaseNamed("phase-2")), mock.MatchedBy(hasPaused)).
+		Return(&testPhaseResult{complete: false, inTransition: true}, nil).
+		Once()
+	pe.On("Reconcile", mock.Anything, int64(3),
+		mock.MatchedBy(phaseNamed("phase-3")), mock.MatchedBy(hasPaused)).
+		Return(&testPhaseResult{complete: false, inTransition: true}, nil).
+		Once()
+
+	res, err := re.Reconcile(context.Background(), rev, types.WithObserveAfterIncomplete{})
+
+	require.NoError(t, err)
+	assert.False(t, res.IsComplete())
+	assert.True(t, res.InTransition()) // not fully rolled out
+	assert.Len(t, res.GetPhases(), 3)  // all phases reported
+
+	pe.AssertNumberOfCalls(t, "Reconcile", 3)
+	pe.AssertExpectations(t)
+	rv.AssertExpectations(t)
+}
+
 func TestRevisionEngine_Reconcile_ValidationError(t *testing.T) {
 	t.Parallel()
 
