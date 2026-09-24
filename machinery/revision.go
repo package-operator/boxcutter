@@ -203,18 +203,32 @@ func (re *RevisionEngine) Reconcile(
 	}
 
 	// Reconcile
+	var paused bool
+
 	for _, phase := range rev.GetPhases() {
+		phaseOpts := options.ForPhase(phase.GetName())
+		if paused {
+			// A prior phase was incomplete; reconcile the remaining phases
+			// read-only so their status is reported without modification.
+			phaseOpts = append(phaseOpts, types.WithPaused{})
+		}
+
 		pres, err := re.phaseEngine.Reconcile(
-			ctx, rev.GetRevisionNumber(),
-			phase, options.ForPhase(phase.GetName())...)
+			ctx, rev.GetRevisionNumber(), phase, phaseOpts...)
 		if err != nil {
 			return rres, fmt.Errorf("reconciling object: %w", err)
 		}
 
 		rres.phasesResults = append(rres.phasesResults, pres)
 		if !pres.IsComplete() {
-			// Wait
-			return rres, nil
+			if !options.ObserveAfterIncomplete {
+				// Wait
+				return rres, nil
+			}
+
+			// Observe the remaining phases read-only (paused). Their paused,
+			// incomplete results carry the in-transition signal on their own.
+			paused = true
 		}
 	}
 

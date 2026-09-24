@@ -14,6 +14,10 @@ type RevisionReconcileOptions struct {
 	DefaultPhaseOptions []PhaseReconcileOption
 	// PhaseOptions maps PhaseOptions for specific phases.
 	PhaseOptions map[string][]PhaseReconcileOption
+	// ObserveAfterIncomplete continues reconciling phases after the first
+	// incomplete phase with WithPaused, reporting read-only status for the
+	// remaining phases instead of stopping and waiting.
+	ObserveAfterIncomplete bool
 }
 
 // ForPhase returns the options for a given phase.
@@ -43,6 +47,8 @@ func (rropts RevisionReconcileOptions) GetOwner() client.Object {
 type RevisionReconcileOption interface {
 	ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions)
 }
+
+var _ RevisionReconcileOption = (WithObserveAfterIncomplete{})
 
 // RevisionTeardownOptions holds configuration options changing revision teardown.
 type RevisionTeardownOptions struct {
@@ -283,6 +289,16 @@ func (p WithPaused) ApplyToPhaseReconcileOptions(opts *PhaseReconcileOptions) {
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
 func (p WithPaused) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
 	opts.DefaultPhaseOptions = append(opts.DefaultPhaseOptions, p)
+}
+
+// WithObserveAfterIncomplete continues reconciling subsequent phases after the
+// first incomplete phase with WithPaused, so their read-only status is reported
+// instead of stopping and waiting at the first incomplete phase.
+type WithObserveAfterIncomplete struct{}
+
+// ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
+func (p WithObserveAfterIncomplete) ApplyToRevisionReconcileOptions(opts *RevisionReconcileOptions) {
+	opts.ObserveAfterIncomplete = true
 }
 
 // WithProbe registers the given probe to evaluate state of objects.
