@@ -113,6 +113,81 @@ func TestRevisionEngine_Teardown_delayed(t *testing.T) {
 	assert.Equal(t, []string{"phase-1"}, res.GetWaitingPhaseNames())
 }
 
+func TestRevisionEngine_Teardown_ObserveAfterIncomplete(t *testing.T) {
+	t.Parallel()
+
+	pe := &phaseEngineMock{}
+	rv := &revisionValidatorMock{}
+	c := testutil.NewClient()
+
+	re := NewRevisionEngine(pe, rv, c)
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			UID:       "12345-678",
+			Name:      "owner",
+			Namespace: "test",
+		},
+	}
+
+	rev := types.NewRevision(
+		"test", 3,
+		[]types.Phase{
+			types.NewPhase("phase-1", nil),
+			types.NewPhase("phase-2", nil),
+			types.NewPhase("phase-3", nil),
+		},
+	)
+
+	hasObserve := func(opts []types.PhaseTeardownOption) bool {
+		for _, opt := range opts {
+			if _, ok := opt.(types.WithObserve); ok {
+				return true
+			}
+		}
+
+		return false
+	}
+	notObserve := func(opts []types.PhaseTeardownOption) bool { return !hasObserve(opts) }
+	phaseNamed := func(name string) func(types.Phase) bool {
+		return func(p types.Phase) bool { return p.GetName() == name }
+	}
+
+	// Phases are torn down in reverse. phase-3 is still being torn down (waiting).
+	pe.On("Teardown", mock.Anything, mock.Anything,
+		mock.MatchedBy(phaseNamed("phase-3")), mock.MatchedBy(notObserve)).
+		Return(&phaseTeardownResult{waiting: []types.ObjectRef{{}}}, nil).
+		Once()
+
+	// Remaining phases are observed read-only rather than torn down.
+	pe.On("Teardown", mock.Anything, mock.Anything,
+		mock.MatchedBy(phaseNamed("phase-2")), mock.MatchedBy(hasObserve)).
+		Return(&phaseTeardownResult{waiting: []types.ObjectRef{{}}}, nil).
+		Once()
+	pe.On("Teardown", mock.Anything, mock.Anything,
+		mock.MatchedBy(phaseNamed("phase-1")), mock.MatchedBy(hasObserve)).
+		Return(&phaseTeardownResult{}, nil).
+		Once()
+
+	res, err := re.Teardown(t.Context(), rev,
+		types.WithOwner(owner, nil), types.WithObserveAfterIncomplete{})
+	require.NoError(t, err)
+
+	assert.False(t, res.IsComplete())
+
+	// phase-3 is the active (actually deleting) phase.
+	active, ok := res.GetActivePhaseName()
+	assert.True(t, ok)
+	assert.Equal(t, "phase-3", active)
+
+	// The remaining phases are reported as waiting, but were still observed.
+	assert.Equal(t, []string{"phase-1", "phase-2"}, res.GetWaitingPhaseNames())
+	assert.Len(t, res.GetPhases(), 3) // all phases reported
+
+	pe.AssertNumberOfCalls(t, "Teardown", 3)
+	pe.AssertExpectations(t)
+}
+
 func TestRevisionEngine_Reconcile_Success_AllPhasesComplete(t *testing.T) {
 	t.Parallel()
 
