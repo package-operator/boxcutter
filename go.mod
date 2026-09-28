@@ -8,11 +8,11 @@ require (
 	github.com/google/cel-go v0.31.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.23.0
-	k8s.io/api v0.37.0
-	k8s.io/apiextensions-apiserver v0.37.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/apiserver v0.37.0
-	k8s.io/client-go v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apiextensions-apiserver v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/apiserver v0.37.1
+	k8s.io/client-go v0.37.1
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
 	pkg.package-operator.run/cardboard v0.1.0
 	pkg.package-operator.run/cardboard/kubeutils v0.1.0
