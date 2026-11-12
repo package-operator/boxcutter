@@ -6,20 +6,20 @@ By contributing to this project you agree to the [Developer Certificate of Origi
 
 ## Before Opening a Pull Request
 
-Thank you for considering making a contribution to `package-operator`.
+Thank you for considering making a contribution to `boxcutter`.
 Before opening a pull request please check that the issue/feature request
 you are addressing is not already being worked on in any of the currently
-open [pull requests](https://github.com/package-operator/package-operator/pulls).
+open [pull requests](https://github.com/package-operator/boxcutter/pulls).
 If it is then please feel free to contribute by testing and reviewing the changes.
 
-Please also check for any open [issues](https://github.com/package-operator/package-operator/issues)
+Please also check for any open [issues](https://github.com/package-operator/boxcutter/issues)
 that your PR may close and be sure to link those issues in your PR description.
 
 ### Testing Pull Requests Locally
 
 To test PR's locally you must first clone this repository:
 
-`git clone git@github.com:package-operator/package-operator.git`
+`git clone git@github.com:package-operator/boxcutter.git`
 
 Then execute the following with the correct `<PULL REQUEST NUMBER>`:
 
@@ -27,7 +27,7 @@ Then execute the following with the correct `<PULL REQUEST NUMBER>`:
 
 ```bash
 PULL_REQUEST=<PULL REQUEST NUMBER>
-git fetch $(curl -s https://api.github.com/repos/package-operator/package-operator/pulls/${PULL_REQUEST} \
+git fetch $(curl -s https://api.github.com/repos/package-operator/boxcutter/pulls/${PULL_REQUEST} \
      | jq -r '(.head.repo.ssh_url) + " " + (.head.ref) + ":" + (.head.ref)')
 ```
 
