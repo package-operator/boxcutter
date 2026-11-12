@@ -256,7 +256,9 @@ func (r ObjectResultCollision) Success() bool {
 // String returns a human readable description of the Result.
 func (r ObjectResultCollision) String() string {
 	msg := r.normalResult.String()
-	msg += fmt.Sprintf("Conflicting Owner: %s\n", r.conflictingOwner.String())
+	if r.conflictingOwner != nil {
+		msg += fmt.Sprintf("Conflicting Owner: %s\n", r.conflictingOwner.String())
+	}
 
 	return msg
 }
@@ -298,7 +300,8 @@ const (
 func reportStart(or ObjectResult) string {
 	obj := or.Object()
 	if err := ensureGVKIsSet(obj, scheme.Scheme); err != nil {
-		panic(err)
+		return fmt.Sprintf("Object <unknown GVK> %s/%s\nAction: %q\n",
+			obj.GetNamespace(), obj.GetName(), or.Action())
 	}
 
 	actionStr := "Action"
