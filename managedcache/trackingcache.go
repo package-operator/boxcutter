@@ -476,15 +476,8 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep set
 			var errs []error
 
 			for _, gvkToStop := range gvksToStop {
-				obj := &unstructured.Unstructured{}
-				obj.SetGroupVersionKind(gvkToStop)
-
-				if err := c.Cache.RemoveInformer(ctx, obj); err != nil {
-					errs = append(errs, err)
-
-					continue
-				}
-
+				// stopInformer calls c.Cache.RemoveInformer internally and also
+				// cleans up waitingForSync / cacheWaitInFlight / knownInformers state.
 				if err := c.stopInformer(ctx, gvkToStop, nil); err != nil {
 					errs = append(errs, err)
 
