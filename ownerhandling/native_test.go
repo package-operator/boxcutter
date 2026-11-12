@@ -463,3 +463,30 @@ func TestOwnerStrategyNative_RemoveOwnerNotFound(t *testing.T) {
 
 	assert.Equal(t, initialOwnerRefs, finalOwnerRefs)
 }
+
+// TestOwnerStrategyNative_ReferSameObject_MalformedAPIVersion is a regression test for L6:
+// referSameObject previously panicked when an OwnerReference had an unparseable APIVersion
+// (e.g. written by a buggy tool). Now it returns false without panicking.
+func TestOwnerStrategyNative_ReferSameObject_MalformedAPIVersion(t *testing.T) {
+	t.Parallel()
+
+	s := NewNative(testScheme)
+
+	bad := metav1.OwnerReference{
+		APIVersion: "not/valid/format",
+		Kind:       "ConfigMap",
+		Name:       "cm",
+		UID:        types.UID("1234"),
+	}
+	good := metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+		Name:       "cm",
+		UID:        types.UID("1234"),
+	}
+
+	// Must not panic — both directions.
+	assert.NotPanics(t, func() { assert.False(t, s.referSameObject(bad, good)) })
+	assert.NotPanics(t, func() { assert.False(t, s.referSameObject(good, bad)) })
+	assert.NotPanics(t, func() { assert.False(t, s.referSameObject(bad, bad)) })
+}

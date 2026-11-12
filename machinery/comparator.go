@@ -193,7 +193,7 @@ func (d *Comparator) Compare(
 	actualGVK := actualObject.GetObjectKind().GroupVersionKind()
 
 	if desiredGVK != actualGVK {
-		panic("desired and actual must have same GVK")
+		return res, fmt.Errorf("desired GVK %s does not match actual GVK %s", desiredGVK, actualGVK)
 	}
 
 	// Get OpenAPISchema to have the correct merge and field configuration.

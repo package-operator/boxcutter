@@ -156,7 +156,9 @@ func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predi
 func (c *trackingCache) Start(ctx context.Context) error {
 	ctx = logr.NewContext(ctx, c.log)
 
-	cacheErrCh := make(chan error)
+	// Buffer size 1 so the goroutine can send its result even if we have already
+	// returned from ctx.Done(), preventing a goroutine leak.
+	cacheErrCh := make(chan error, 1)
 
 	go func() {
 		cacheErrCh <- c.Cache.Start(ctx)
@@ -184,7 +186,11 @@ func (c *trackingCache) Start(ctx context.Context) error {
 			return err
 
 		case <-ctx.Done():
-			return nil
+			// Drain cacheErrCh: wait for the underlying cache to stop before
+			// returning. This guarantees c.Cache.Start has completed when
+			// trackingCache.Start returns, so callers (including tests) can safely
+			// inspect the mock state after doneWG.Wait().
+			return <-cacheErrCh
 		}
 	}
 }
@@ -476,15 +482,8 @@ func (c *trackingCache) removeOtherInformers(ctx context.Context, gvksToKeep set
 			var errs []error
 
 			for _, gvkToStop := range gvksToStop {
-				obj := &unstructured.Unstructured{}
-				obj.SetGroupVersionKind(gvkToStop)
-
-				if err := c.Cache.RemoveInformer(ctx, obj); err != nil {
-					errs = append(errs, err)
-
-					continue
-				}
-
+				// stopInformer calls c.Cache.RemoveInformer internally and also
+				// cleans up waitingForSync / cacheWaitInFlight / knownInformers state.
 				if err := c.stopInformer(ctx, gvkToStop, nil); err != nil {
 					errs = append(errs, err)
 

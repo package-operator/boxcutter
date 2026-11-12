@@ -407,7 +407,7 @@ func (p *withObjectReconcileOptions) ApplyToPhaseReconcileOptions(opts *PhaseRec
 		opts.ObjectOptions = map[ObjectRef][]ObjectReconcileOption{}
 	}
 
-	opts.ObjectOptions[p.obj] = p.opts
+	opts.ObjectOptions[p.obj] = append(opts.ObjectOptions[p.obj], p.opts...)
 }
 
 // ApplyToRevisionReconcileOptions implements RevisionReconcileOptions.
@@ -434,7 +434,7 @@ func (p *withObjectTeardownOptions) ApplyToPhaseTeardownOptions(opts *PhaseTeard
 		opts.ObjectOptions = map[ObjectRef][]ObjectTeardownOption{}
 	}
 
-	opts.ObjectOptions[p.obj] = p.opts
+	opts.ObjectOptions[p.obj] = append(opts.ObjectOptions[p.obj], p.opts...)
 }
 
 // ApplyToRevisionTeardownOptions implements RevisionTeardownOptions.
@@ -461,7 +461,7 @@ func (p *withPhaseReconcileOptions) ApplyToRevisionReconcileOptions(opts *Revisi
 		opts.PhaseOptions = map[string][]PhaseReconcileOption{}
 	}
 
-	opts.PhaseOptions[p.phaseName] = p.opts
+	opts.PhaseOptions[p.phaseName] = append(opts.PhaseOptions[p.phaseName], p.opts...)
 }
 
 type withPhaseTeardownOptions struct {
@@ -483,7 +483,7 @@ func (p *withPhaseTeardownOptions) ApplyToRevisionTeardownOptions(opts *Revision
 		opts.PhaseOptions = map[string][]PhaseTeardownOption{}
 	}
 
-	opts.PhaseOptions[p.phaseName] = p.opts
+	opts.PhaseOptions[p.phaseName] = append(opts.PhaseOptions[p.phaseName], p.opts...)
 }
 
 // OwnerStrategy interface needed for RevisionEngine.

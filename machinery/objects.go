@@ -117,6 +117,13 @@ func (e *ObjectEngine) Teardown(
 		panic("owner revision must be set and start at 1")
 	}
 
+	// Lookup actual object state on cluster.
+	actualObject := desiredObject.DeepCopyObject().(Object)
+
+	err = e.cache.Get(
+		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
+	)
+
 	// The "orphan" finalizer on the owner object indicates that the Owner
 	// is being deleted and orphaning its dependents. This finalizer is
 	// managed by KCM's gc controller. If we observe it, we are racing with
@@ -128,20 +135,23 @@ func (e *ObjectEngine) Teardown(
 			return true, nil
 		}
 
-		err := e.removeBoxcutterManagedLabelsAndAnnotations(ctx, e.writer, desiredObject)
+		if meta.IsNoMatchError(err) || errors.IsNotFound(err) {
+			// Object is already gone; nothing to clean up.
+			return true, nil
+		}
+
 		if err != nil {
+			return false, fmt.Errorf("getting object before orphan release: %w", err)
+		}
+
+		// Strip boxcutter-managed labels and annotations from the actual
+		// cluster object so it is fully released and not re-adopted.
+		if err := e.removeBoxcutterManagedLabelsAndAnnotations(ctx, e.writer, actualObject); err != nil {
 			return false, err
 		}
 
 		return true, nil
 	}
-
-	// Lookup actual object state on cluster.
-	actualObject := desiredObject.DeepCopyObject().(Object)
-
-	err = e.cache.Get(
-		ctx, client.ObjectKeyFromObject(desiredObject), actualObject,
-	)
 	if meta.IsNoMatchError(err) {
 		// API no longer registered.
 		// Consider the object deleted.
@@ -202,7 +212,14 @@ func (e *ObjectEngine) Teardown(
 	if errors.IsNotFound(err) {
 		return true, nil
 	}
-	// TODO: Catch Precondition errors?
+
+	if errors.IsConflict(err) {
+		// A 409 Conflict from a precondition failure means the object was
+		// replaced between our cache read and the delete call. Re-read on
+		// the next reconcile; this is not an error worth logging.
+		return false, nil
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("deleting object: %w", err)
 	}
@@ -725,19 +742,21 @@ func (e *ObjectEngine) revisionAnnotation() string {
 func (e *ObjectEngine) removeBoxcutterManagedLabelsAndAnnotations(
 	ctx context.Context, w client.Writer, obj Object,
 ) error {
+	// base is an immutable snapshot used as the diff base for MergeFrom.
+	base := obj.DeepCopyObject().(Object)
+	// updated is the mutation target that will be sent as the patch body.
 	updated := obj.DeepCopyObject().(Object)
 
-	annotations := obj.GetAnnotations()
+	annotations := updated.GetAnnotations()
 	delete(annotations, e.revisionAnnotation())
-	obj.SetAnnotations(annotations)
+	updated.SetAnnotations(annotations)
 
 	labels := updated.GetLabels()
 	delete(labels, managedByLabel)
 	delete(labels, boxcutterManagedLabel)
-
 	updated.SetLabels(labels)
 
-	if err := w.Patch(ctx, updated, client.MergeFrom(obj)); err != nil {
+	if err := w.Patch(ctx, updated, client.MergeFrom(base)); err != nil {
 		return fmt.Errorf("patching object labels: %w", err)
 	}
 

@@ -34,8 +34,12 @@ func (fv *FieldValueProbe) probe(obj *unstructured.Unstructured) Result {
 	}
 
 	if !ok {
+		// A missing field is not a definitive failure — the object may not yet
+		// have reached the state where the field is populated. Return Unknown
+		// rather than False so callers can distinguish "not yet present" from
+		// "present but wrong value".
 		return Result{
-			Status:   StatusFalse,
+			Status:   StatusUnknown,
 			Messages: []string{fmt.Sprintf(`missing key: %q`, fv.FieldPath)},
 		}
 	}

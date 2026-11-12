@@ -386,6 +386,27 @@ func TestValidateNamespace(t *testing.T) {
 			},
 			expectedError: &meta.NoKindMatchError{},
 		},
+		{
+			// Regression test for H3: a non-NoMatchError from RESTMapping previously caused
+			// a nil dereference panic because mapping==nil was used without checking err first.
+			name:      "transient REST mapper error does not panic",
+			namespace: "default",
+			obj: &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "v1",
+					"kind":       "ConfigMap",
+					"metadata": map[string]any{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
+			mockSetup: func(restMapper *mockRestMapper) {
+				restMapper.On("RESTMapping", schema.GroupKind{Group: "", Kind: "ConfigMap"}, []string{"v1"}).Return(
+					nil, errors.New("transient mapper error"))
+			},
+			expectedError: errors.New("getting REST mapping for /v1, Kind=ConfigMap: transient mapper error"),
+		},
 	}
 
 	for _, test := range tests {
