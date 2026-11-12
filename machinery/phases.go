@@ -55,8 +55,8 @@ type objectEngine interface {
 	) (objectGone bool, err error)
 }
 
-// PhaseObject represents an object and it's options.
-type PhaseObject struct {
+// phaseObject represents an object and its options.
+type phaseObject struct {
 	Object *unstructured.Unstructured
 	Opts   []types.ObjectReconcileOption
 }
@@ -309,6 +309,8 @@ func (r *phaseResult) InTransition() bool {
 }
 
 // HasProgressed returns true when all objects have been progressed to a newer revision.
+// For an empty phase with no validation error, this returns true vacuously
+// (0 == 0) — the semantics being "there are no objects left to progress".
 func (r *phaseResult) HasProgressed() bool {
 	if r.GetValidationError() != nil {
 		return false
