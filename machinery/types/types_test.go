@@ -501,3 +501,36 @@ func TestNewWithOwnerAndSiblings(t *testing.T) {
 		assert.Len(t, revision.GetTeardownOptions(), 1, "should have owner only")
 	})
 }
+
+// TestRevision_WithReconcileOptions_Appends is a regression test for H5:
+// WithReconcileOptions previously overwrote existing options instead of appending,
+// silently dropping owner and sibling refs on a second call.
+func TestRevision_WithReconcileOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	opt1 := WithCollisionProtection(CollisionProtectionNone)
+	opt2 := WithCollisionProtection(CollisionProtectionPrevent)
+
+	rev := NewRevision("test", 1, nil).
+		WithReconcileOptions(opt1).
+		WithReconcileOptions(opt2)
+
+	opts := rev.GetReconcileOptions()
+	assert.Len(t, opts, 2, "both option sets must be present after two WithReconcileOptions calls")
+}
+
+// TestRevision_WithTeardownOptions_Appends is a regression test for H5:
+// WithTeardownOptions had the same overwrite issue.
+func TestRevision_WithTeardownOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	opt1 := WithObserve{}
+	opt2 := WithObserve{}
+
+	rev := NewRevision("test", 1, nil).
+		WithTeardownOptions(opt1).
+		WithTeardownOptions(opt2)
+
+	opts := rev.GetTeardownOptions()
+	assert.Len(t, opts, 2, "both option sets must be present after two WithTeardownOptions calls")
+}
