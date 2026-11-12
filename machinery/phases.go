@@ -55,8 +55,8 @@ type objectEngine interface {
 	) (objectGone bool, err error)
 }
 
-// phaseObject represents an object and its options.
-type phaseObject struct {
+// PhaseObject represents an object and its options.
+type PhaseObject struct {
 	Object *unstructured.Unstructured
 	Opts   []types.ObjectReconcileOption
 }
