@@ -155,7 +155,7 @@ func validateNamespace(
 		}
 	}
 
-	panic(fmt.Sprintf("unexpected REST Mapping Scope %q", mapping.Scope))
+	return fmt.Errorf("unexpected REST mapping scope %q for %s", mapping.Scope, gvk)
 }
 
 // DryRunValidationError is returned for APIStatus codes indicating an issue with the object.
@@ -217,6 +217,12 @@ func validateDryRun(
 		case "":
 			logr.FromContextOrDiscard(ctx).Info("API status error with empty reason string", "err", apiErr.Status())
 
+			// The kube-apiserver returns an empty Reason when SSA fails to create a
+			// typed patch object due to a schema validation issue (observed on k8s ≥1.26).
+			// This is an internal message with no stability guarantee; if it changes in a
+			// future Kubernetes release this heuristic will stop catching those errors
+			// and they will surface as infrastructure errors instead of validation errors.
+			// Tracked: https://github.com/package-operator/boxcutter/issues — see REVIEW.md F7.
 			if strings.Contains(
 				apiErr.Status().Message,
 				"failed to create typed patch object",
