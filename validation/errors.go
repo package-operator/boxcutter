@@ -47,7 +47,10 @@ func (e ObjectValidationError) stringStructure() any {
 // String returns a human readable report of all error messages
 // and the context the error was encountered in, if available.
 func (e ObjectValidationError) String() string {
-	b, _ := yaml.Marshal(e.stringStructure())
+	b, err := yaml.Marshal(e.stringStructure())
+	if err != nil {
+		return fmt.Sprintf("<error marshaling ObjectValidationError to YAML: %v>", err)
+	}
 
 	return string(b)
 }
@@ -116,7 +119,10 @@ func (e PhaseValidationError) stringStructure() any {
 // String returns a human readable report of all error messages
 // and the context the error was encountered in, if available.
 func (e PhaseValidationError) String() string {
-	b, _ := yaml.Marshal(e.stringStructure())
+	b, err := yaml.Marshal(e.stringStructure())
+	if err != nil {
+		return fmt.Sprintf("<error marshaling PhaseValidationError to YAML: %v>", err)
+	}
 
 	return string(b)
 }
@@ -201,7 +207,10 @@ func (e RevisionValidationError) stringStructure() any {
 // String returns a human readable report of all error messages
 // and the context the error was encountered in, if available.
 func (e RevisionValidationError) String() string {
-	b, _ := yaml.Marshal(e.stringStructure())
+	b, err := yaml.Marshal(e.stringStructure())
+	if err != nil {
+		return fmt.Sprintf("<error marshaling RevisionValidationError to YAML: %v>", err)
+	}
 
 	return string(b)
 }
