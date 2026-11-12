@@ -156,7 +156,9 @@ func (c *trackingCache) Source(handler handler.EventHandler, predicates ...predi
 func (c *trackingCache) Start(ctx context.Context) error {
 	ctx = logr.NewContext(ctx, c.log)
 
-	cacheErrCh := make(chan error)
+	// Buffer size 1 so the goroutine can send its result even if we have already
+	// returned from ctx.Done(), preventing a goroutine leak.
+	cacheErrCh := make(chan error, 1)
 
 	go func() {
 		cacheErrCh <- c.Cache.Start(ctx)
@@ -184,7 +186,11 @@ func (c *trackingCache) Start(ctx context.Context) error {
 			return err
 
 		case <-ctx.Done():
-			return nil
+			// Drain cacheErrCh: wait for the underlying cache to stop before
+			// returning. This guarantees c.Cache.Start has completed when
+			// trackingCache.Start returns, so callers (including tests) can safely
+			// inspect the mock state after doneWG.Wait().
+			return <-cacheErrCh
 		}
 	}
 }
