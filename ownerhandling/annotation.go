@@ -221,7 +221,10 @@ func (s *OwnerStrategyAnnotation) getOwnerReferences(obj metav1.Object) []annota
 
 	var ownerReferences []annotationOwnerRef
 	if err := json.Unmarshal([]byte(annotations[s.annotationKey]), &ownerReferences); err != nil {
-		panic(err)
+		// Annotation data is unreadable (corrupted or written by a different tool).
+		// Return nil so callers treat the object as having no owner references.
+		// Correct ownership will be re-established on the next reconcile.
+		return nil
 	}
 
 	return ownerReferences
@@ -233,9 +236,11 @@ func (s *OwnerStrategyAnnotation) setOwnerReferences(obj metav1.Object, owners [
 		annotations = map[string]string{}
 	}
 
+	// json.Marshal on a []annotationOwnerRef (a struct with only JSON-serialisable
+	// fields) should never fail; the error is handled defensively.
 	j, err := json.Marshal(owners)
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	annotations[s.annotationKey] = string(j)
@@ -386,7 +391,8 @@ func (e *AnnotationEnqueueRequestForOwner) getOwnerReconcileRequest(object metav
 	for _, ownerRef := range ownerReferences {
 		ownerRefGV, err := schema.ParseGroupVersion(ownerRef.APIVersion)
 		if err != nil {
-			return nil
+			// Skip this ref; the remaining ones may still be valid.
+			continue
 		}
 
 		if ownerRefGV.Group != e.ownerGK.Group ||

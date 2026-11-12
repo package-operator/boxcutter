@@ -938,3 +938,63 @@ func TestOwnerStrategyAnnotation_RemoveOwnerNotFound(t *testing.T) {
 
 	assert.Equal(t, initialOwnerRefs, finalOwnerRefs)
 }
+
+// TestOwnerStrategyAnnotation_MalformedAnnotation_DoesNotPanic is a regression test for H4:
+// getOwnerReferences previously panicked when the annotation contained invalid JSON.
+// Any actor with annotation write access could trigger this to crash the controller.
+func TestOwnerStrategyAnnotation_MalformedAnnotation_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	s := NewAnnotation(testScheme, testAnnotationKey)
+	obj := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				testAnnotationKey: `{not valid json`,
+			},
+		},
+	}
+
+	// Must not panic — returns nil, treating object as having no owner references.
+	refs := s.getOwnerReferences(obj)
+	assert.Nil(t, refs)
+
+	// Higher-level methods that call getOwnerReferences must also not panic.
+	_, ok := s.GetController(obj)
+	assert.False(t, ok)
+
+	assert.False(t, s.IsController(&corev1.ConfigMap{}, obj))
+}
+
+// TestAnnotationEnqueueRequestForOwner_BadAPIVersionContinues is a regression test for L5:
+// getOwnerReconcileRequest previously returned nil immediately on a bad APIVersion, dropping
+// all subsequent valid owner references.
+func TestAnnotationEnqueueRequestForOwner_BadAPIVersionContinues(t *testing.T) {
+	t.Parallel()
+
+	s := NewAnnotation(testScheme, testAnnotationKey)
+
+	// Two owner refs: first has an invalid APIVersion (too many slashes), second is valid.
+	obj := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				testAnnotationKey: `[
+					{"apiVersion":"not/valid/format", "kind":"ConfigMap", "name":"bad-owner", "uid":"bad-uid", "controller":true},
+					{"apiVersion":"v1",               "kind":"ConfigMap", "name":"good-owner","uid":"good-uid","controller":true}
+				]`,
+			},
+		},
+	}
+
+	handler := &AnnotationEnqueueRequestForOwner{
+		OwnerType:     &corev1.ConfigMap{},
+		IsController:  true,
+		ownerStrategy: s,
+		ownerGK:       schema.GroupKind{Group: "", Kind: "ConfigMap"},
+	}
+
+	requests := handler.getOwnerReconcileRequest(obj)
+
+	// The valid second ref must still produce a reconcile request.
+	require.Len(t, requests, 1)
+	assert.Equal(t, "good-owner", requests[0].Name)
+}
