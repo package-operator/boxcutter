@@ -1371,6 +1371,33 @@ func TestObjectEngine_Teardown(t *testing.T) {
 			expectedError: "deleting object",
 		},
 		{
+			// Regression for L4: a 409 Conflict from a Delete precondition failure previously
+			// surfaced as an error log. It should be treated as a benign cache-lag condition
+			// and return (gone=false, nil) so the controller re-reads on the next reconcile.
+			name:          "Delete precondition conflict is not an error",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject:  buildObj("testi", "test", withRevision("1"), withManaged),
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(apierrors.NewConflict(schema.GroupResource{}, "testi", errors.New("precondition")))
+			},
+			expectedGone: false,
+		},
+		{
 			name:          "TeardownWriter deletes",
 			revision:      1,
 			desiredObject: buildObj("testi", "test"),

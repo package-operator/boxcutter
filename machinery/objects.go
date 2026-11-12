@@ -212,7 +212,14 @@ func (e *ObjectEngine) Teardown(
 	if errors.IsNotFound(err) {
 		return true, nil
 	}
-	// TODO: Catch Precondition errors?
+
+	if errors.IsConflict(err) {
+		// A 409 Conflict from a precondition failure means the object was
+		// replaced between our cache read and the delete call. Re-read on
+		// the next reconcile; this is not an error worth logging.
+		return false, nil
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("deleting object: %w", err)
 	}
