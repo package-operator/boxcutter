@@ -131,9 +131,13 @@ func validateNamespace(
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if meta.IsNoMatchError(err) {
-		// API does not exist in the cluster.
-		return err
+	if err != nil {
+		if meta.IsNoMatchError(err) {
+			// API does not exist in the cluster.
+			return err
+		}
+
+		return fmt.Errorf("getting REST mapping for %s: %w", gvk, err)
 	}
 
 	switch mapping.Scope {
