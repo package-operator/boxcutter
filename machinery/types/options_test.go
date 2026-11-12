@@ -867,3 +867,70 @@ func (m *mockOwnerStrategy) CopyOwnerReferences(objA, objB metav1.Object) {}
 func (m *mockOwnerStrategy) ReleaseController(obj metav1.Object) {}
 
 func (m *mockOwnerStrategy) RemoveOwner(owner, obj metav1.Object) {}
+
+// TestWithObjectReconcileOptions_Appends is a regression test for M1:
+// applying WithObjectReconcileOptions twice for the same object previously overwrote
+// the first option set, silently dropping it.
+func TestWithObjectReconcileOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},
+	}
+
+	opt1 := WithCollisionProtection(CollisionProtectionNone)
+	opt2 := WithCollisionProtection(CollisionProtectionPrevent)
+
+	var phaseOpts PhaseReconcileOptions
+
+	WithObjectReconcileOptions(obj, opt1).ApplyToPhaseReconcileOptions(&phaseOpts)
+	WithObjectReconcileOptions(obj, opt2).ApplyToPhaseReconcileOptions(&phaseOpts)
+
+	ref := ToObjectRef(obj)
+	assert.Len(t, phaseOpts.ObjectOptions[ref], 2, "both option sets must survive two WithObjectReconcileOptions calls for the same object")
+}
+
+// TestWithPhaseReconcileOptions_Appends is a regression test for M1:
+// applying WithPhaseReconcileOptions twice for the same phase previously overwrote the first set.
+func TestWithPhaseReconcileOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	opt1 := WithCollisionProtection(CollisionProtectionNone)
+	opt2 := WithCollisionProtection(CollisionProtectionPrevent)
+
+	var revOpts RevisionReconcileOptions
+
+	WithPhaseReconcileOptions("my-phase", opt1).ApplyToRevisionReconcileOptions(&revOpts)
+	WithPhaseReconcileOptions("my-phase", opt2).ApplyToRevisionReconcileOptions(&revOpts)
+
+	assert.Len(t, revOpts.PhaseOptions["my-phase"], 2, "both option sets must survive two WithPhaseReconcileOptions calls for the same phase")
+}
+
+// TestWithObjectTeardownOptions_Appends is a regression test for M1 (teardown analog).
+func TestWithObjectTeardownOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	obj := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},
+	}
+
+	var phaseOpts PhaseTeardownOptions
+
+	WithObjectTeardownOptions(obj, WithObserve{}).ApplyToPhaseTeardownOptions(&phaseOpts)
+	WithObjectTeardownOptions(obj, WithObserve{}).ApplyToPhaseTeardownOptions(&phaseOpts)
+
+	ref := ToObjectRef(obj)
+	assert.Len(t, phaseOpts.ObjectOptions[ref], 2, "both option sets must survive two WithObjectTeardownOptions calls for the same object")
+}
+
+// TestWithPhaseTeardownOptions_Appends is a regression test for M1 (phase teardown analog).
+func TestWithPhaseTeardownOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	var revOpts RevisionTeardownOptions
+
+	WithPhaseTeardownOptions("my-phase", WithObserve{}).ApplyToRevisionTeardownOptions(&revOpts)
+	WithPhaseTeardownOptions("my-phase", WithObserve{}).ApplyToRevisionTeardownOptions(&revOpts)
+
+	assert.Len(t, revOpts.PhaseOptions["my-phase"], 2, "both option sets must survive two WithPhaseTeardownOptions calls for the same phase")
+}
