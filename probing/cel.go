@@ -78,8 +78,15 @@ func (p *CELProbe) probe(obj *unstructured.Unstructured) Result {
 		}
 	}
 
-	success := val.Value().(bool)
-	if success {
+	b, ok := val.Value().(bool)
+	if !ok {
+		return Result{
+			Status:   StatusUnknown,
+			Messages: []string{fmt.Sprintf("CEL program returned unexpected type %T, expected bool", val.Value())},
+		}
+	}
+
+	if b {
 		return Result{
 			Status: StatusTrue,
 		}
