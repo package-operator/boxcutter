@@ -507,7 +507,8 @@ func TestWithObjectTeardownOptions(t *testing.T) {
 
 		require.NotNil(t, opts.ObjectOptions)
 		assert.Contains(t, opts.ObjectOptions, objRef)
-		assert.Equal(t, objectOpts, opts.ObjectOptions[objRef])
+		// Empty slice and nil are both valid "no options" representations.
+		assert.Empty(t, opts.ObjectOptions[objRef])
 	})
 
 	t.Run("applies to revision teardown options", func(t *testing.T) {
@@ -555,7 +556,8 @@ func TestWithPhaseTeardownOptions(t *testing.T) {
 
 		require.NotNil(t, opts.PhaseOptions)
 		assert.Contains(t, opts.PhaseOptions, "test-phase")
-		assert.Equal(t, phaseOpts, opts.PhaseOptions["test-phase"])
+		// Empty slice and nil are both valid "no options" representations.
+		assert.Empty(t, opts.PhaseOptions["test-phase"])
 	})
 }
 

@@ -385,7 +385,8 @@ func TestRevision_WithTeardownOptions(t *testing.T) {
 	result := revision.WithTeardownOptions(opts...)
 
 	assert.Equal(t, revision, result, "should return same revision for chaining")
-	assert.Equal(t, opts, revision.GetTeardownOptions())
+	// Empty slice and nil are both valid "no options" representations.
+	assert.Empty(t, revision.GetTeardownOptions())
 }
 
 func TestRevision_GetReconcileOptions(t *testing.T) {
@@ -409,7 +410,8 @@ func TestRevision_GetTeardownOptions(t *testing.T) {
 	revision := NewRevision("test-revision", 1, nil).
 		WithTeardownOptions(opts...)
 
-	assert.Equal(t, opts, revision.GetTeardownOptions())
+	// Empty slice and nil are both valid "no options" representations.
+	assert.Empty(t, revision.GetTeardownOptions())
 }
 
 func TestNewRevisionWithOwner(t *testing.T) {
