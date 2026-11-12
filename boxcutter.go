@@ -207,7 +207,10 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 		return nil, err
 	}
 
-	pval := validation.NewNamespacedPhaseValidator(opts.RestMapper, opts.Writer)
+	if opts.PhaseValidator == nil {
+		opts.PhaseValidator = validation.NewNamespacedPhaseValidator(opts.RestMapper, opts.Writer)
+	}
+
 	rval := validation.NewRevisionValidator()
 
 	comp := machinery.NewComparator(
@@ -218,7 +221,7 @@ func NewRevisionEngine(opts RevisionEngineOptions) (*RevisionEngine, error) {
 		comp, opts.FieldOwner, opts.SystemPrefix,
 		opts.ManagedBy, opts.UnfilteredReader,
 	)
-	pe := machinery.NewPhaseEngine(oe, pval)
+	pe := machinery.NewPhaseEngine(oe, opts.PhaseValidator)
 
 	return machinery.NewRevisionEngine(pe, rval, opts.Writer), nil
 }
