@@ -101,6 +101,7 @@ func TestFieldsEqual(t *testing.T) {
 			messages: []string{`".spec.fieldA" != ".spec.fieldB" expected: {"fk":1} got: {"fk":2}`},
 		},
 		{
+			// A missing field is StatusUnknown — the field may not yet be populated.
 			name: "fieldA missing",
 			obj: &unstructured.Unstructured{
 				Object: map[string]any{
@@ -109,7 +110,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   StatusFalse,
+			status:   StatusUnknown,
 			messages: []string{`".spec.fieldA" missing`},
 		},
 		{
@@ -121,7 +122,7 @@ func TestFieldsEqual(t *testing.T) {
 					},
 				},
 			},
-			status:   StatusFalse,
+			status:   StatusUnknown,
 			messages: []string{`".spec.fieldB" missing`},
 		},
 	}

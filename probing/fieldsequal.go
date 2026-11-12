@@ -28,8 +28,10 @@ func (fe *FieldsEqualProbe) probe(obj *unstructured.Unstructured) Result {
 
 	fieldAVal, ok, err := unstructured.NestedFieldCopy(obj.Object, fieldAPath...)
 	if err != nil || !ok {
+		// A missing or unreadable field is an Unknown state — the field may not
+		// yet have been populated rather than being definitively wrong.
 		return Result{
-			Status:   StatusFalse,
+			Status:   StatusUnknown,
 			Messages: []string{fmt.Sprintf(`"%v" missing`, fe.FieldA)},
 		}
 	}
@@ -37,7 +39,7 @@ func (fe *FieldsEqualProbe) probe(obj *unstructured.Unstructured) Result {
 	fieldBVal, ok, err := unstructured.NestedFieldCopy(obj.Object, fieldBPath...)
 	if err != nil || !ok {
 		return Result{
-			Status:   StatusFalse,
+			Status:   StatusUnknown,
 			Messages: []string{fmt.Sprintf(`"%v" missing`, fe.FieldB)},
 		}
 	}
