@@ -1192,12 +1192,59 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				return []types.ObjectTeardownOption{types.WithOrphan()}
 			},
 			mockSetup: func(
-				_ *cacheMock, writer *testutil.CtrlClient,
-				_ *unstructured.Unstructured, _ ownerMode,
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedGone: true,
+		},
+		{
+			name:          "Orphan, NotFound on Get",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			opts: func() []types.ObjectTeardownOption {
+				return []types.ObjectTeardownOption{types.WithOrphan()}
+			},
+			mockSetup: func(
+				cache *cacheMock, _ *testutil.CtrlClient,
+				_ *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKey{Name: "testi", Namespace: "test"},
+						mock.Anything, mock.Anything).
+					Return(apierrors.NewNotFound(schema.GroupResource{}, ""))
+			},
+			expectedGone: true,
+		},
+		{
+			name:          "Orphan, Get error",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			opts: func() []types.ObjectTeardownOption {
+				return []types.ObjectTeardownOption{types.WithOrphan()}
+			},
+			mockSetup: func(
+				cache *cacheMock, _ *testutil.CtrlClient,
+				_ *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKey{Name: "testi", Namespace: "test"},
+						mock.Anything, mock.Anything).
+					Return(errors.New("cache error"))
+			},
+			expectedError: "getting object before orphan release",
 		},
 		{
 			name:          "NotFound on Get",
@@ -1322,6 +1369,33 @@ func TestObjectEngine_Teardown(t *testing.T) {
 					Return(errors.New("delete failed"))
 			},
 			expectedError: "deleting object",
+		},
+		{
+			// Regression for L4: a 409 Conflict from a Delete precondition failure previously
+			// surfaced as an error log. It should be treated as a benign cache-lag condition
+			// and return (gone=false, nil) so the controller re-reads on the next reconcile.
+			name:          "Delete precondition conflict is not an error",
+			revision:      1,
+			desiredObject: buildObj("testi", "test"),
+			actualObject:  buildObj("testi", "test", withRevision("1"), withManaged),
+			mockSetup: func(
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
+			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
+				writer.
+					On("Delete", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(apierrors.NewConflict(schema.GroupResource{}, "testi", errors.New("precondition")))
+			},
+			expectedGone: false,
 		},
 		{
 			name:          "TeardownWriter deletes",
@@ -1469,9 +1543,18 @@ func TestObjectEngine_Teardown(t *testing.T) {
 				},
 			})},
 			mockSetup: func(
-				_ *cacheMock, writer *testutil.CtrlClient,
-				_ *unstructured.Unstructured, _ ownerMode,
+				cache *cacheMock, writer *testutil.CtrlClient,
+				actualObject *unstructured.Unstructured, _ ownerMode,
 			) {
+				cache.
+					On("Get", mock.Anything,
+						client.ObjectKeyFromObject(actualObject),
+						mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						obj := args.Get(2).(*unstructured.Unstructured)
+						*obj = *actualObject
+					}).
+					Return(nil)
 				writer.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedGone: true,
@@ -1695,6 +1778,87 @@ func TestObjectEngine_IsBoxcutterManaged(t *testing.T) {
 			assert.Equal(t, tt.expected, engine.isBoxcutterManaged(obj))
 		})
 	}
+}
+
+// TestObjectEngine_RemoveBoxcutterManagedLabelsAndAnnotations_PatchBody verifies that
+// the patch actually removes the revision annotation and managed-by labels from the
+// cluster object (regression for H1: annotation was removed from the diff base instead
+// of the patch target, making the patch a no-op).
+func TestObjectEngine_RemoveBoxcutterManagedLabelsAndAnnotations_PatchBody(t *testing.T) {
+	t.Parallel()
+
+	writer := testutil.NewClient()
+	oe := NewObjectEngine(
+		scheme.Scheme,
+		testutil.NewClient(),
+		writer,
+		&comparatorMock{},
+		testFieldOwner,
+		testSystemPrefix,
+		"",
+		nil,
+	)
+
+	// Build an object that looks like it was managed by boxcutter.
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]any{
+				"name":      "test",
+				"namespace": "test",
+				"labels": map[string]any{
+					managedByLabel:        managedByLabelDefaultValue,
+					boxcutterManagedLabel: "true",
+					"keep-me":             "yes",
+				},
+				"annotations": map[string]any{
+					testSystemPrefix + "/revision": "3",
+					"keep-me":                      "yes",
+				},
+			},
+		},
+	}
+
+	var patchedObj *unstructured.Unstructured
+
+	writer.
+		On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			// Capture the object that was sent to the API server.
+			patchedObj = args.Get(1).(*unstructured.Unstructured)
+		}).
+		Return(nil)
+
+	err := oe.removeBoxcutterManagedLabelsAndAnnotations(context.Background(), writer, obj)
+	require.NoError(t, err)
+	writer.AssertCalled(t, "Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	// The patched object must NOT contain the revision annotation.
+	assert.NotContains(t, patchedObj.GetAnnotations(), testSystemPrefix+"/revision",
+		"revision annotation must be removed from patch target")
+
+	// The patched object must NOT contain the managed-by or boxcutter-managed labels.
+	assert.NotContains(t, patchedObj.GetLabels(), managedByLabel,
+		"managed-by label must be removed from patch target")
+	assert.NotContains(t, patchedObj.GetLabels(), boxcutterManagedLabel,
+		"boxcutter-managed label must be removed from patch target")
+
+	// Unrelated labels/annotations must be preserved.
+	assert.Equal(t, "yes", patchedObj.GetLabels()["keep-me"],
+		"unrelated label must be preserved")
+	assert.Equal(t, "yes", patchedObj.GetAnnotations()["keep-me"],
+		"unrelated annotation must be preserved")
+
+	// The original object must NOT have been mutated (the diff base was a separate copy).
+	assert.Equal(t, testSystemPrefix+"/revision", func() string {
+		for k := range obj.GetAnnotations() {
+			if k == testSystemPrefix+"/revision" {
+				return k
+			}
+		}
+		return ""
+	}(), "original object must still have revision annotation (not mutated as diff base)")
 }
 
 func TestObjectEngine_CustomManagedByLabel(t *testing.T) {

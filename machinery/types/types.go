@@ -251,16 +251,16 @@ func (r *revision) GetTeardownOptions() []RevisionTeardownOption {
 	return r.TeardownOptions
 }
 
-// WithReconcileOptions sets RevisionReconcileOptions on this revision.
+// WithReconcileOptions appends RevisionReconcileOptions on this revision.
 func (r *revision) WithReconcileOptions(opts ...RevisionReconcileOption) RevisionBuilder {
-	r.ReconcileOptions = opts
+	r.ReconcileOptions = append(r.ReconcileOptions, opts...)
 
 	return r
 }
 
-// WithTeardownOptions sets RevisionTeardownOption on this revision.
+// WithTeardownOptions appends RevisionTeardownOptions on this revision.
 func (r *revision) WithTeardownOptions(opts ...RevisionTeardownOption) RevisionBuilder {
-	r.TeardownOptions = opts
+	r.TeardownOptions = append(r.TeardownOptions, opts...)
 
 	return r
 }

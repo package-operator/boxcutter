@@ -37,13 +37,15 @@ func Test_FieldValueProbe(t *testing.T) {
 			},
 		},
 		{
-			name: "False result with missing key",
+			// A missing key is StatusUnknown — the field may not yet have been populated
+			// rather than being definitively wrong. This is consistent with ConditionProbe.
+			name: "Unknown result with missing key",
 			probe: FieldValueProbe{
 				FieldPath: "spec.foo",
 				Value:     "test",
 			},
 			expectedResult: Result{
-				Status: StatusFalse,
+				Status: StatusUnknown,
 				Messages: []string{
 					`missing key: "spec.foo"`,
 				},

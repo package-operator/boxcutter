@@ -438,3 +438,22 @@ func TestNewNormalObjectResult_PanicOnCreated(t *testing.T) {
 		)
 	})
 }
+
+// TestObjectResultCollision_String_NilOwner is a regression test for M2:
+// ObjectResultCollision.String() previously called r.conflictingOwner.String()
+// unconditionally, panicking when conflictingOwner was nil (which is valid when
+// no specific conflicting owner is known).
+func TestObjectResultCollision_String_NilOwner(t *testing.T) {
+	t.Parallel()
+
+	result := newObjectResultConflict(
+		resultExampleObj,
+		CompareResult{},
+		nil, // nil conflictingOwner — no specific owner known
+		types.ObjectReconcileOptions{},
+	)
+
+	// Must not panic.
+	assert.NotPanics(t, func() { _ = result.String() })
+	assert.Contains(t, result.String(), "Collision")
+}

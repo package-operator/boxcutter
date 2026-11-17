@@ -112,12 +112,15 @@ func TestTrackingCache_createTeardownInformers(t *testing.T) {
 	err = itc.RemoveInformer(t.Context(), cmObj)
 	require.NoError(t, err)
 
+	// Cancel and wait for tc.Start to return before asserting mock expectations.
+	// tc.Start drains cacheErrCh on ctx.Done(), guaranteeing c.Cache.Start has
+	// been called and returned before doneWG.Wait() unblocks.
+	cancel()
+	doneWG.Wait()
+
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
@@ -190,12 +193,12 @@ func TestTrackingCache_RemoveOtherInformers(t *testing.T) {
 	err = itc.RemoveOtherInformers(t.Context(), sets.Set[schema.GroupVersionKind]{})
 	require.NoError(t, err)
 
+	cancel()
+	doneWG.Wait()
+
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 func TestTrackingCache_WatchFree(t *testing.T) {
@@ -280,12 +283,12 @@ func TestTrackingCache_WatchFree(t *testing.T) {
 	err = itc.Free(t.Context(), user)
 	require.NoError(t, err)
 
+	cancel()
+	doneWG.Wait()
+
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 func TestTrackingCache_handleCacheWatchError(t *testing.T) {
@@ -454,12 +457,12 @@ func TestTrackingCacheWatchErrorHandling_Get(t *testing.T) {
 	reflectorWatchErrorHandlerMock.AssertCalled(
 		t, "ErrorHandler", mock.Anything, mock.Anything, mock.Anything)
 
+	cancel()
+	doneWG.Wait()
+
 	informerMock.AssertExpectations(t)
 	restMapperMock.AssertExpectations(t)
 	cacheMock.AssertExpectations(t)
-
-	cancel()
-	doneWG.Wait()
 }
 
 func TestTrackingCacheWatchErrorHandling_List(t *testing.T) {

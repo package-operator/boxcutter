@@ -16,7 +16,11 @@ var _ Prober = (*ObservedGenerationProbe)(nil)
 
 // Probe executes the probe.
 func (cg *ObservedGenerationProbe) Probe(obj client.Object) Result {
-	unstr := toUnstructured(obj)
+	unstr, err := toUnstructured(obj)
+	if err != nil {
+		return Result{Status: StatusUnknown, Messages: []string{err.Error()}}
+	}
+
 	if observedGeneration, ok, err := unstructured.NestedInt64(
 		unstr.Object, "status", "observedGeneration",
 	); err == nil && ok && observedGeneration != obj.GetGeneration() {

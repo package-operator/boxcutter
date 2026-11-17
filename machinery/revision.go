@@ -87,14 +87,16 @@ func (r *revisionResult) GetValidationError() *validation.RevisionValidationErro
 // if the phase has objects progressed to a new revision or
 // if objects have unresolved conflicts.
 func (r *revisionResult) InTransition() bool {
+	// A revision with a validation error is never "in transition" — it is
+	// invalid and will not proceed. Guard first to match phaseResult.InTransition.
+	if r.validationError != nil {
+		return false
+	}
+
 	for _, p := range r.phasesResults {
 		if p.InTransition() {
 			return true
 		}
-	}
-
-	if r.validationError != nil {
-		return false
 	}
 
 	if len(r.phasesResults) < len(r.phases) {

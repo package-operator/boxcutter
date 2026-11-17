@@ -385,7 +385,8 @@ func TestRevision_WithTeardownOptions(t *testing.T) {
 	result := revision.WithTeardownOptions(opts...)
 
 	assert.Equal(t, revision, result, "should return same revision for chaining")
-	assert.Equal(t, opts, revision.GetTeardownOptions())
+	// Empty slice and nil are both valid "no options" representations.
+	assert.Empty(t, revision.GetTeardownOptions())
 }
 
 func TestRevision_GetReconcileOptions(t *testing.T) {
@@ -409,7 +410,8 @@ func TestRevision_GetTeardownOptions(t *testing.T) {
 	revision := NewRevision("test-revision", 1, nil).
 		WithTeardownOptions(opts...)
 
-	assert.Equal(t, opts, revision.GetTeardownOptions())
+	// Empty slice and nil are both valid "no options" representations.
+	assert.Empty(t, revision.GetTeardownOptions())
 }
 
 func TestNewRevisionWithOwner(t *testing.T) {
@@ -500,4 +502,37 @@ func TestNewWithOwnerAndSiblings(t *testing.T) {
 		assert.Len(t, revision.GetReconcileOptions(), 2, "should have owner + sibling classifier")
 		assert.Len(t, revision.GetTeardownOptions(), 1, "should have owner only")
 	})
+}
+
+// TestRevision_WithReconcileOptions_Appends is a regression test for H5:
+// WithReconcileOptions previously overwrote existing options instead of appending,
+// silently dropping owner and sibling refs on a second call.
+func TestRevision_WithReconcileOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	opt1 := WithCollisionProtection(CollisionProtectionNone)
+	opt2 := WithCollisionProtection(CollisionProtectionPrevent)
+
+	rev := NewRevision("test", 1, nil).
+		WithReconcileOptions(opt1).
+		WithReconcileOptions(opt2)
+
+	opts := rev.GetReconcileOptions()
+	assert.Len(t, opts, 2, "both option sets must be present after two WithReconcileOptions calls")
+}
+
+// TestRevision_WithTeardownOptions_Appends is a regression test for H5:
+// WithTeardownOptions had the same overwrite issue.
+func TestRevision_WithTeardownOptions_Appends(t *testing.T) {
+	t.Parallel()
+
+	opt1 := WithObserve{}
+	opt2 := WithObserve{}
+
+	rev := NewRevision("test", 1, nil).
+		WithTeardownOptions(opt1).
+		WithTeardownOptions(opt2)
+
+	opts := rev.GetTeardownOptions()
+	assert.Len(t, opts, 2, "both option sets must be present after two WithTeardownOptions calls")
 }

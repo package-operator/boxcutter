@@ -151,12 +151,12 @@ func (s *OwnerStrategyNative) ownerRefForCompare(owner metav1.Object) metav1.Own
 func (s *OwnerStrategyNative) referSameObject(a, b metav1.OwnerReference) bool {
 	aGV, err := schema.ParseGroupVersion(a.APIVersion)
 	if err != nil {
-		panic(err)
+		return false
 	}
 
 	bGV, err := schema.ParseGroupVersion(b.APIVersion)
 	if err != nil {
-		panic(err)
+		return false
 	}
 
 	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name && a.UID == b.UID

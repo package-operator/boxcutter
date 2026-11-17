@@ -95,20 +95,26 @@ func UnknownResult(msgs ...string) Result {
 	return Result{Status: StatusUnknown, Messages: msgs}
 }
 
-func toUnstructured(obj client.Object) *unstructured.Unstructured {
+func toUnstructured(obj client.Object) (*unstructured.Unstructured, error) {
 	unstr, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
-		panic(fmt.Sprintf("can't convert to unstructured: %v", err))
+		return nil, fmt.Errorf("converting object to unstructured: %w", err)
 	}
 
-	return &unstructured.Unstructured{Object: unstr}
+	return &unstructured.Unstructured{Object: unstr}, nil
 }
 
 func probeUnstructuredSingleMsg(
 	obj client.Object,
 	probe func(obj *unstructured.Unstructured) Result,
 ) Result {
-	unst := toUnstructured(obj)
+	unst, err := toUnstructured(obj)
+	if err != nil {
+		return Result{
+			Status:   StatusUnknown,
+			Messages: []string{err.Error()},
+		}
+	}
 
 	return probe(unst)
 }
